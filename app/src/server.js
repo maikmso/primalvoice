@@ -11,6 +11,7 @@ const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const ROOM_PASSWORD = process.env.ROOM_PASSWORD;
+const OWNER_NAME = process.env.OWNER_NAME || '';
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || '';
 const ROOM_NAME = process.env.ROOM_NAME || 'galera';
 // Assina os "crachás" de sessão usados nas rotas de administração (canais/cargos).
@@ -82,9 +83,9 @@ app.get('/api/config', (req, res) => {
 });
 
 // Gera um token de acesso à sala, se o nome e a senha da galera baterem.
-// Quem entra com a OWNER_PASSWORD vira (ou continua sendo) o dono do
-// servidor — o dono manda em cargos/canais independente de qual senha usar
-// depois.
+// Quem entra com o usuário+senha do dono (OWNER_NAME + OWNER_PASSWORD) vira
+// (ou continua sendo) o dono do servidor — o dono manda em cargos/canais
+// independente de qual senha usar depois.
 app.post('/api/token', async (req, res) => {
   const { name, password } = req.body || {};
 
@@ -95,17 +96,23 @@ app.post('/api/token', async (req, res) => {
     return res.status(400).json({ error: 'Nome muito longo (máx. 24 caracteres).' });
   }
 
-  const isOwnerLogin = OWNER_PASSWORD && password === OWNER_PASSWORD;
+  const cleanName = name.trim();
+  const isOwnerLogin =
+    OWNER_PASSWORD &&
+    OWNER_NAME &&
+    password === OWNER_PASSWORD &&
+    cleanName.toLowerCase() === OWNER_NAME.toLowerCase();
+
   if (!isOwnerLogin && password !== ROOM_PASSWORD) {
-    return res.status(401).json({ error: 'Senha incorreta.' });
+    return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
   }
 
-  const cleanName = name.trim();
   // Identidade fixa por nome (não aleatória): se a mesma pessoa clicar em
   // "Entrar" de novo ou reconectar, o LiveKit reconhece que é a mesma
   // identidade e derruba a sessão antiga sozinho, em vez de deixar
-  // "fantasmas" acumulando na sala.
-  const identity = cleanName;
+  // "fantasmas" acumulando na sala. No login do dono, a identidade é sempre
+  // normalizada pro OWNER_NAME (não importa a caixa alta/baixa digitada).
+  const identity = isOwnerLogin ? OWNER_NAME : cleanName;
 
   if (isOwnerLogin) {
     store.mutate((state) => {
@@ -115,7 +122,7 @@ app.post('/api/token', async (req, res) => {
 
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
-    name: cleanName,
+    name: identity,
     ttl: '10h',
   });
   at.addGrant({

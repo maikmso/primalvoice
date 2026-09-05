@@ -1091,7 +1091,7 @@ joinForm.addEventListener('submit', async (e) => {
     const { token, identity, sessionToken: st } = await tokenRes.json();
     sessionToken = st;
     myIdentity = identity;
-    myName = name;
+    myName = identity;
 
     lobbyRoom = new Room({ adaptiveStream: true, dynacast: true });
 
@@ -1138,8 +1138,8 @@ joinForm.addEventListener('submit', async (e) => {
 
     await lobbyRoom.connect(livekitUrl, token);
 
-    selfAvatar.textContent = name.charAt(0).toUpperCase();
-    selfName.textContent = name;
+    selfAvatar.textContent = identity.charAt(0).toUpperCase();
+    selfName.textContent = identity;
     addMember(lobbyRoom.localParticipant);
     lobbyRoom.remoteParticipants.forEach((participant) => addMember(participant));
 
