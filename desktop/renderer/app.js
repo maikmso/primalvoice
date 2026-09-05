@@ -21,7 +21,8 @@ const participantCount = document.getElementById('participant-count');
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
 const shareBtn = document.getElementById('share-btn');
-const leaveBtn = document.getElementById('leave-btn');
+const hangupBtn = document.getElementById('hangup-btn');
+const exitAppBtn = document.getElementById('exit-app-btn');
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');
@@ -1207,7 +1208,13 @@ shareBtn.addEventListener('click', async () => {
   }
 });
 
-leaveBtn.addEventListener('click', async () => {
+hangupBtn.addEventListener('click', async () => {
+  if (!voiceRoom) return;
+  await leaveVoiceChannel();
+});
+
+exitAppBtn.addEventListener('click', async () => {
+  if (!confirm('Sair do PrimalVoice? Você volta pra tela de login.')) return;
   if (voiceRoom) await leaveVoiceChannel({ silent: true });
   if (lobbyRoom) await lobbyRoom.disconnect();
   handleFullDisconnect();

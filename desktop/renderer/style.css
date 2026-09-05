@@ -306,7 +306,7 @@ html, body {
   text-overflow: ellipsis;
 }
 .user-panel-controls { display: flex; gap: 2px; }
-.user-panel-controls.voice-disabled .ctrl-icon:not(.leave) {
+.user-panel-controls.voice-disabled .ctrl-icon {
   opacity: 0.35;
   pointer-events: none;
 }
@@ -701,6 +701,18 @@ html, body {
   font-size: 14px;
   cursor: pointer;
 }
+.modal-tab-danger {
+  margin-top: auto;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-tab-danger:hover { background: rgba(237, 66, 69, 0.12); }
 .modal-tab:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
 .modal-tab.active { background: var(--accent-soft); color: var(--text); font-weight: 600; }
 .modal-body {
