@@ -1,0 +1,11 @@
+.env
+livekit-config/livekit.yaml
+caddy/Caddyfile
+caddy_data/
+caddy_config/
+app/node_modules/
+app/state.json
+desktop/node_modules/
+desktop/dist/
+desktop/_installer_parts/
+*.log

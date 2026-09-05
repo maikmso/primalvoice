@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PrimalVoice</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="join-screen" class="screen">
+    <div class="card">
+      <h1>PrimalVoice</h1>
+      <p class="subtitle">Sala de voz e compartilhamento de tela só da galera</p>
+      <form id="join-form">
+        <label>
+          Seu nome
+          <input id="name-input" type="text" maxlength="24" required autocomplete="off" />
+        </label>
+        <label>
+          Senha da sala
+          <input id="password-input" type="password" required autocomplete="off" />
+        </label>
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="join-error" class="error" hidden></p>
+    </div>
+  </div>
+
+  <div id="room-screen" class="screen" hidden>
+    <header class="room-header">
+      <span class="room-title">PrimalVoice</span>
+      <span id="participant-count"></span>
+    </header>
+    <div id="grid" class="grid"></div>
+    <footer class="controls">
+      <button id="mic-btn" class="ctrl" data-on="true" title="Microfone">🎙️</button>
+      <button id="cam-btn" class="ctrl off" data-on="false" title="Câmera">📷</button>
+      <button id="share-btn" class="ctrl off" data-on="false" title="Compartilhar tela">🖥️</button>
+      <button id="leave-btn" class="ctrl leave" title="Sair">Sair</button>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/livekit-client@2.22.1/dist/livekit-client.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
