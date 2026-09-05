@@ -265,6 +265,8 @@ html, body {
 .member-status-badges { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .status-badge { display: flex; color: var(--danger); }
 .status-badge svg { width: 14px; height: 14px; }
+.status-badge.camera-badge,
+.status-badge.screenshare-badge { color: var(--speaking); }
 .member-row .avatar {
   width: 22px;
   height: 22px;

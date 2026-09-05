@@ -134,6 +134,8 @@ let keybinds = { muteSelf: '', deafen: '' };
 
 const joinSound = new Audio('assets/sound-join.wav');
 const leaveSound = new Audio('assets/sound-leave.wav');
+const muteSound = new Audio('assets/sound-mute.wav');
+const unmuteSound = new Audio('assets/sound-unmute.wav');
 function playSound(el) {
   try {
     el.currentTime = 0;
@@ -579,6 +581,14 @@ async function joinVoiceChannel(channelId) {
   vr.on(RoomEvent.TrackUnmuted, (publication, participant) => {
     if (publication.source === Track.Source.Microphone) setVoiceMemberStatus(participant.identity, { muted: false });
   });
+  const handleTrackPublishedChange = (isPublished) => (publication, participant) => {
+    if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: isPublished });
+    else if (publication.source === Track.Source.ScreenShare) setVoiceMemberStatus(participant.identity, { screenShare: isPublished });
+  };
+  vr.on(RoomEvent.TrackPublished, handleTrackPublishedChange(true));
+  vr.on(RoomEvent.TrackUnpublished, handleTrackPublishedChange(false));
+  vr.on(RoomEvent.LocalTrackPublished, handleTrackPublishedChange(true));
+  vr.on(RoomEvent.LocalTrackUnpublished, handleTrackPublishedChange(false));
 
   try {
     await vr.connect(livekitUrl, data.token);
@@ -620,6 +630,7 @@ async function leaveVoiceChannel(opts = {}) {
   const channelId = activeVoiceChannelId;
   broadcastVoicePresence('leave', channelId);
   voicePresence.get(channelId)?.delete(myIdentity);
+  voiceMemberStatus.delete(myIdentity);
 
   try {
     await voiceRoom.disconnect();
@@ -869,7 +880,10 @@ function setDeafened(value, opts = {}) {
     micBtn.classList.add('off');
   }
   if (myIdentity) setVoiceMemberStatus(myIdentity, { deafened: value });
-  if (!opts.silent) broadcastVoiceStatus();
+  if (!opts.silent) {
+    broadcastVoiceStatus();
+    playSound(value ? muteSound : unmuteSound); // local, ninguém mais ouve
+  }
 }
 
 // ---------- lista de membros do servidor ----------
@@ -881,6 +895,10 @@ const MIC_OFF_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 const DEAFEN_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+const CAMERA_BADGE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>';
+const SCREENSHARE_BADGE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
 
 function buildMemberRow(participant, opts = {}) {
   const row = document.createElement('div');
@@ -901,6 +919,20 @@ function buildMemberRow(participant, opts = {}) {
   if (opts.showStatus) {
     const badges = document.createElement('span');
     badges.className = 'member-status-badges';
+
+    const cameraBadge = document.createElement('span');
+    cameraBadge.className = 'status-badge camera-badge';
+    cameraBadge.title = 'Câmera ligada';
+    cameraBadge.innerHTML = CAMERA_BADGE_SVG;
+    cameraBadge.hidden = true;
+    badges.appendChild(cameraBadge);
+
+    const screenShareBadge = document.createElement('span');
+    screenShareBadge.className = 'status-badge screenshare-badge';
+    screenShareBadge.title = 'Compartilhando tela';
+    screenShareBadge.innerHTML = SCREENSHARE_BADGE_SVG;
+    screenShareBadge.hidden = true;
+    badges.appendChild(screenShareBadge);
 
     const micBadge = document.createElement('span');
     micBadge.className = 'status-badge mic-badge';
@@ -924,13 +956,19 @@ function buildMemberRow(participant, opts = {}) {
 }
 
 function ensureVoiceStatus(identity) {
-  if (!voiceMemberStatus.has(identity)) voiceMemberStatus.set(identity, { muted: false, deafened: false });
+  if (!voiceMemberStatus.has(identity)) {
+    voiceMemberStatus.set(identity, { muted: false, deafened: false, camera: false, screenShare: false });
+  }
   return voiceMemberStatus.get(identity);
 }
 
 function applyStatusBadges(row, status) {
+  const cameraBadge = row.querySelector('.status-badge.camera-badge');
+  const screenShareBadge = row.querySelector('.status-badge.screenshare-badge');
   const micBadge = row.querySelector('.status-badge.mic-badge');
   const deafenBadge = row.querySelector('.status-badge.deafen-badge');
+  if (cameraBadge) cameraBadge.hidden = !status.camera;
+  if (screenShareBadge) screenShareBadge.hidden = !status.screenShare;
   if (micBadge) micBadge.hidden = !status.muted;
   if (deafenBadge) deafenBadge.hidden = !status.deafened;
 }
@@ -1277,6 +1315,7 @@ micBtn.addEventListener('click', async () => {
   await voiceRoom.localParticipant.setMicrophoneEnabled(newOn);
   micBtn.dataset.on = String(newOn);
   micBtn.classList.toggle('off', !newOn);
+  playSound(newOn ? unmuteSound : muteSound); // só toca pra quem clicou, não é avisado pros outros
 });
 
 const deafenBtn = document.getElementById('deafen-btn');
