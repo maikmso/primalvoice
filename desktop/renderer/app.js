@@ -1,4 +1,4 @@
-const { Room, RoomEvent } = LivekitClient;
+const { Room, RoomEvent, ConnectionQuality } = LivekitClient;
 
 const settingsScreen = document.getElementById('settings-screen');
 const joinScreen = document.getElementById('join-screen');
@@ -33,6 +33,7 @@ const resizeRight = document.getElementById('resize-right');
 const userPanelControls = document.querySelector('.user-panel-controls');
 const voiceStatusBar = document.getElementById('voice-status-bar');
 const voiceStatusChannel = document.getElementById('voice-status-channel');
+const voiceQualityIcon = document.getElementById('voice-quality-icon');
 const channelHeaderIcon = document.getElementById('channel-header-icon');
 const channelHeaderName = document.getElementById('channel-header-name');
 const textView = document.getElementById('text-view');
@@ -92,6 +93,28 @@ let activeTextChannelId = null;
 let activeVoiceChannelId = null;
 let selectedRoleId = null;
 let isDeafened = false;
+let voiceQualityInterval = null;
+
+// ---------- indicador de qualidade da conexão (barrinhas + ping) ----------
+function setVoiceQuality(quality) {
+  voiceQualityIcon.classList.remove('quality-excellent', 'quality-good', 'quality-poor', 'quality-lost', 'quality-unknown');
+  voiceQualityIcon.classList.add(`quality-${quality}`);
+}
+
+function updateVoiceQualityTooltip() {
+  if (!voiceRoom) return;
+  const rtt = voiceRoom.engine && voiceRoom.engine.client && voiceRoom.engine.client.rtt;
+  voiceQualityIcon.title = typeof rtt === 'number' && rtt > 0 ? `Ping: ${rtt}ms` : 'Qualidade da conexão';
+}
+
+function stopVoiceQualityMonitor() {
+  if (voiceQualityInterval) {
+    clearInterval(voiceQualityInterval);
+    voiceQualityInterval = null;
+  }
+  setVoiceQuality('unknown');
+  voiceQualityIcon.title = 'Qualidade da conexão';
+}
 let joining = false;
 
 const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]
@@ -536,6 +559,9 @@ async function joinVoiceChannel(channelId) {
     const all = [vr.localParticipant, ...vr.remoteParticipants.values()];
     all.forEach((p) => setSpeaking(p.identity, speakingIds.has(p.identity)));
   });
+  vr.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+    if (participant === vr.localParticipant) setVoiceQuality(quality);
+  });
 
   try {
     await vr.connect(livekitUrl, data.token);
@@ -557,6 +583,9 @@ async function joinVoiceChannel(channelId) {
   userPanelControls.classList.remove('voice-disabled');
   voiceStatusChannel.textContent = channel.name;
   voiceStatusBar.hidden = false;
+  setVoiceQuality(ConnectionQuality ? ConnectionQuality.Unknown : 'unknown');
+  updateVoiceQualityTooltip();
+  voiceQualityInterval = setInterval(updateVoiceQualityTooltip, 3000);
 
   if (!voicePresence.has(channelId)) voicePresence.set(channelId, new Map());
   voicePresence.get(channelId).set(myIdentity, myName);
@@ -608,6 +637,7 @@ function resetVoiceControlsUI() {
   setDeafened(false, { silent: true });
   userPanelControls.classList.add('voice-disabled');
   voiceStatusBar.hidden = true;
+  stopVoiceQualityMonitor();
 }
 
 // ---------- chat de texto ----------

@@ -646,8 +646,17 @@ html, body {
   border-radius: 8px;
   padding: 8px 8px 8px 10px;
 }
-.voice-status-icon { display: flex; flex-shrink: 0; color: var(--speaking); }
+.voice-status-icon { display: flex; flex-shrink: 0; cursor: default; }
 .voice-status-icon svg { width: 16px; height: 16px; }
+.voice-status-icon .quality-bar { fill: #57524a; transition: fill 0.2s ease; }
+/* excelente: 3 barrinhas verdes */
+#voice-quality-icon.quality-excellent .quality-bar { fill: var(--speaking); }
+/* boa (mas não ótima): 2 barrinhas laranja */
+#voice-quality-icon.quality-good .quality-bar[data-bar='1'],
+#voice-quality-icon.quality-good .quality-bar[data-bar='2'] { fill: var(--accent-2); }
+/* ruim ou perdendo pacote: só 1 barrinha vermelha */
+#voice-quality-icon.quality-poor .quality-bar[data-bar='1'],
+#voice-quality-icon.quality-lost .quality-bar[data-bar='1'] { fill: var(--danger); }
 .voice-status-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .voice-status-title { font-size: 12px; font-weight: 700; color: var(--speaking); }
 .voice-status-channel {
