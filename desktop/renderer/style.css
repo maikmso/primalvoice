@@ -262,6 +262,9 @@ html, body {
   color: var(--muted);
 }
 .voice-members-list .member-row { padding-left: 28px; }
+.member-status-badges { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.status-badge { display: flex; color: var(--danger); }
+.status-badge svg { width: 14px; height: 14px; }
 .member-row .avatar {
   width: 22px;
   height: 22px;
