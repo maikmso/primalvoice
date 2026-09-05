@@ -278,34 +278,10 @@ html, body {
 
 .user-panel {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 8px;
   background: #211d1a;
 }
-.user-panel .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: white;
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.user-name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.user-panel-controls { display: flex; gap: 2px; }
+.user-panel-controls { display: flex; flex-direction: column; gap: 8px; }
 .user-panel-controls.voice-disabled .ctrl-icon {
   opacity: 0.35;
   pointer-events: none;
@@ -660,6 +636,82 @@ html, body {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* barra verde "Voz conectada", só aparece durante uma chamada de voz */
+.voice-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(43, 182, 115, 0.12);
+  border-radius: 8px;
+  padding: 8px 8px 8px 10px;
+}
+.voice-status-icon { display: flex; flex-shrink: 0; color: var(--speaking); }
+.voice-status-icon svg { width: 16px; height: 16px; }
+.voice-status-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.voice-status-title { font-size: 12px; font-weight: 700; color: var(--speaking); }
+.voice-status-channel {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctrl-icon.voice-hangup-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: white;
+}
+.ctrl-icon.voice-hangup-btn svg { width: 14px; height: 14px; transform: rotate(135deg); }
+.ctrl-icon.voice-hangup-btn:hover { background: #c73437; }
+
+/* câmera / compartilhar tela: botões maiores lado a lado, só fazem
+   sentido durante uma chamada (ficam apagados fora dela, junto com o
+   resto do .user-panel-controls.voice-disabled) */
+.voice-feature-row { display: flex; gap: 6px; }
+.ctrl-icon.feature-btn {
+  flex: 1;
+  width: auto;
+  height: 40px;
+  border-radius: 8px;
+  background: #2f2a26;
+}
+.ctrl-icon.feature-btn:hover { background: #3a332c; }
+
+/* avatar + nome + microfone/fone/config, sempre visível */
+.user-info-row { display: flex; align-items: center; gap: 6px; }
+.user-info-row .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.user-info-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-status {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-info-row .ctrl-icon { flex-shrink: 0; }
 
 /* Modal de configurações (voz/vídeo, atalhos, canais, cargos) */
 .modal-overlay {

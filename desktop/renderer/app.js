@@ -31,6 +31,8 @@ const memberList = document.querySelector('.member-list');
 const resizeLeft = document.getElementById('resize-left');
 const resizeRight = document.getElementById('resize-right');
 const userPanelControls = document.querySelector('.user-panel-controls');
+const voiceStatusBar = document.getElementById('voice-status-bar');
+const voiceStatusChannel = document.getElementById('voice-status-channel');
 const channelHeaderIcon = document.getElementById('channel-header-icon');
 const channelHeaderName = document.getElementById('channel-header-name');
 const textView = document.getElementById('text-view');
@@ -553,6 +555,8 @@ async function joinVoiceChannel(channelId) {
   micBtn.classList.remove('off');
   micBtn.title = 'Microfone';
   userPanelControls.classList.remove('voice-disabled');
+  voiceStatusChannel.textContent = channel.name;
+  voiceStatusBar.hidden = false;
 
   if (!voicePresence.has(channelId)) voicePresence.set(channelId, new Map());
   voicePresence.get(channelId).set(myIdentity, myName);
@@ -583,6 +587,7 @@ async function leaveVoiceChannel(opts = {}) {
   grid.classList.remove('has-expanded');
   resetAudioState();
   resetVoiceControlsUI();
+  playSound(leaveSound);
 
   if (!opts.silent) {
     const fallback = serverState.channels.text.find((c) => c.id === activeTextChannelId) || serverState.channels.text[0];
@@ -602,6 +607,7 @@ function resetVoiceControlsUI() {
   shareBtn.classList.add('off');
   setDeafened(false, { silent: true });
   userPanelControls.classList.add('voice-disabled');
+  voiceStatusBar.hidden = true;
 }
 
 // ---------- chat de texto ----------
