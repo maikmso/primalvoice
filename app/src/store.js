@@ -13,6 +13,13 @@ const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'muteMe
 // fica salvo dentro do state.json, então não pode deixar crescer sem limite.
 const MAX_IMAGE_LEN = 40000;
 
+// Histórico de mensagens de texto, guardado de verdade no servidor — antes
+// as mensagens só viviam na memória de cada app aberto (via canal de dados
+// do LiveKit), então sumiam toda vez que alguém reconectava ou o app
+// reiniciava. Agora ficam salvas aqui e são carregadas ao entrar no canal.
+// Limita quantas mensagens guarda por canal/conversa pra não crescer sem fim.
+const MAX_MESSAGES_PER_CHANNEL = 200;
+
 function defaultState() {
   return {
     ownerIdentity: null,
@@ -24,6 +31,9 @@ function defaultState() {
     memberRoles: {},
     // chave = nome de usuário em minúsculo; identity guarda a grafia original
     users: {},
+    // chave = id do canal de texto, ou "dm:identityA|identityB" (ordenado)
+    // pra conversa privada; valor = array de mensagens, mais recente por último
+    messages: {},
   };
 }
 
@@ -49,6 +59,7 @@ function loadState() {
       roles: Array.isArray(parsed.roles) ? parsed.roles : [],
       memberRoles: parsed.memberRoles && typeof parsed.memberRoles === 'object' ? parsed.memberRoles : {},
       users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
+      messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
     };
   } catch {
     return defaultState();
@@ -166,6 +177,35 @@ function getPublicProfiles() {
   return out;
 }
 
+// --- histórico de mensagens (canais de texto e DMs) ---
+
+function dmKey(identityA, identityB) {
+  return `dm:${[identityA, identityB].sort().join('|')}`;
+}
+
+function getMessages(channelKey) {
+  return state.messages[channelKey] || [];
+}
+
+function addMessage(channelKey, { identity, name, text, attachment }) {
+  const msg = {
+    id: crypto.randomBytes(8).toString('hex'),
+    identity,
+    name: name || identity,
+    text: typeof text === 'string' ? text.slice(0, 2000) : '',
+    ts: Date.now(),
+    attachment: attachment || null,
+  };
+  mutate((s) => {
+    if (!s.messages[channelKey]) s.messages[channelKey] = [];
+    s.messages[channelKey].push(msg);
+    if (s.messages[channelKey].length > MAX_MESSAGES_PER_CHANNEL) {
+      s.messages[channelKey] = s.messages[channelKey].slice(-MAX_MESSAGES_PER_CHANNEL);
+    }
+  });
+  return msg;
+}
+
 module.exports = {
   getState,
   mutate,
@@ -178,4 +218,7 @@ module.exports = {
   updateUserProfile,
   getPublicProfiles,
   MAX_IMAGE_LEN,
+  dmKey,
+  getMessages,
+  addMessage,
 };

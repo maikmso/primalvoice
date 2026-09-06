@@ -21,39 +21,43 @@
   --memberlist-w: 240px;
 }
 
-/* tema "Meia-noite": preto puro (AMOLED) */
+/* tema "Meia-noite": preto puro (AMOLED), mas com uma escada de contraste
+   real entre as áreas (rail < fundo < painel elevado < painel), senão tudo
+   vira uma mancha preta única sem divisória visível */
 :root[data-theme='meianoite'] {
-  --bg: #000000;
-  --panel: #060607;
+  --bg: #08080a;
+  --panel: #18181c;
   --accent: #9198a1;
   --accent-2: #c9ccd2;
   --accent-soft: rgba(145, 152, 161, 0.16);
   --text: #eaeaea;
   --muted: #87898e;
   --tile-bg: #000000;
-  --border: #303236;
-  --hover-strong: #1c1c1f;
-  --surface-deep: #0a0a0b;
-  --surface-raised: #0d0d0f;
+  --border: #3a3d42;
+  --hover-strong: #232327;
+  --surface-deep: #000000;
+  --surface-raised: #101013;
   --quality-dim: #55565c;
   --on-accent: #08090a;
 }
 
-/* tema "Clássico": tons de azul, igual ao visual do Discord */
+/* tema "Clássico": tons de azul de verdade — as superfícies (fundo, painéis,
+   bordas) têm um matiz azul-marinho visível, não só os dois pontos de
+   destaque (ícone do servidor e canal ativo) */
 :root[data-theme='classico'] {
-  --bg: #1e1f22;
-  --panel: #2b2d31;
+  --bg: #1b1e2c;
+  --panel: #272b40;
   --accent: #5865f2;
   --accent-2: #7983f5;
-  --accent-soft: rgba(88, 101, 242, 0.18);
+  --accent-soft: rgba(88, 101, 242, 0.2);
   --text: #e7e9ea;
-  --muted: #96999e;
-  --tile-bg: #121214;
-  --border: #3a3d42;
-  --hover-strong: #35373c;
-  --surface-deep: #17181a;
-  --surface-raised: #232428;
-  --quality-dim: #4e5058;
+  --muted: #9799b8;
+  --tile-bg: #12131d;
+  --border: #383d58;
+  --hover-strong: #313655;
+  --surface-deep: #14151f;
+  --surface-raised: #212437;
+  --quality-dim: #4c5170;
   --on-accent: #ffffff;
 }
 
@@ -255,11 +259,13 @@ html, body {
 .card {
   position: relative;
   background: var(--panel);
+  border: 1px solid var(--border);
   padding: 32px;
   border-radius: 12px;
   width: 100%;
   max-width: 340px;
   text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 .card h1 { margin: 0 0 4px; font-size: 26px; }
@@ -346,6 +352,7 @@ html, body {
   width: 72px;
   flex-shrink: 0;
   background: var(--surface-deep);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -376,6 +383,7 @@ html, body {
   width: var(--sidebar-w, 240px);
   flex-shrink: 0;
   background: var(--panel);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -391,7 +399,7 @@ html, body {
   padding: 0 16px;
   font-weight: 700;
   font-size: 15px;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
 .channel-list { flex: 1; overflow-y: auto; padding: 8px; }
@@ -510,6 +518,7 @@ html, body {
   flex-shrink: 0;
   padding: 8px;
   background: var(--surface-raised);
+  border-top: 1px solid var(--border);
 }
 .user-panel-controls { display: flex; flex-direction: column; gap: 8px; }
 .user-panel-controls.voice-disabled .ctrl-icon {
@@ -561,9 +570,11 @@ html, body {
 .resize-handle .collapse-hint {
   width: 22px;
   height: 22px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--panel);
-  color: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -587,7 +598,7 @@ html, body {
   font-weight: 700;
   font-size: 15px;
   color: var(--text);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
 .channel-header-icon { display: flex; flex-shrink: 0; color: var(--muted); }
@@ -783,6 +794,7 @@ html, body {
   width: var(--memberlist-w, 240px);
   flex-shrink: 0;
   background: var(--panel);
+  border-left: 1px solid var(--border);
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px 8px;
@@ -1272,7 +1284,7 @@ html, body {
 }
 .theme-swatch-escuro { background: linear-gradient(135deg, #1e1f22 55%, #8a8f98 55%); }
 .theme-swatch-meianoite { background: linear-gradient(135deg, #000000 55%, #9198a1 55%); }
-.theme-swatch-classico { background: linear-gradient(135deg, #1e1f22 55%, #5865f2 55%); }
+.theme-swatch-classico { background: linear-gradient(135deg, #1b1e2c 55%, #5865f2 55%); }
 
 /* ---------- conversas diretas (DM) ---------- */
 .dm-list { padding: 2px 0 4px; }
@@ -1540,3 +1552,69 @@ html, body {
 }
 .role-badge.assigned { font-weight: 600; }
 .role-badge:not(.assigned) { opacity: 0.45; border-style: dashed; }
+
+/* ---------- ajuste de foto/banner (crop) ---------- */
+.crop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+.crop-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  width: min(480px, 92vw);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.crop-modal h2 { margin: 0; align-self: flex-start; font-size: 18px; }
+.crop-modal .modal-hint { align-self: flex-start; margin: -8px 0 0; }
+.crop-stage-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: var(--surface-deep);
+  border-radius: 8px;
+}
+.crop-stage {
+  position: relative;
+  overflow: hidden;
+  background: var(--tile-bg);
+  cursor: grab;
+  touch-action: none;
+  /* tamanho de fato (quadrado ou retângulo) é ajustado via JS de acordo
+     com o tipo (avatar redondo vs banner largo) */
+}
+.crop-stage.dragging { cursor: grabbing; }
+.crop-stage.avatar { border-radius: 50%; }
+.crop-stage.banner { border-radius: 8px; }
+.crop-stage img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  max-width: none;
+}
+.crop-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--muted);
+}
+.crop-zoom-row svg { width: 16px; height: 16px; flex-shrink: 0; }
+.crop-zoom-row svg:last-child { width: 20px; height: 20px; }
+.crop-zoom-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.crop-actions { display: flex; justify-content: flex-end; gap: 10px; width: 100%; }

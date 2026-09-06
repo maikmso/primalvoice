@@ -401,6 +401,60 @@ app.post('/api/upload', requireAuth, (req, res) => {
   });
 });
 
+// Histórico de mensagens — guardado de verdade no servidor agora (antes só
+// vivia na memória de cada app aberto e sumia toda vez que alguém
+// reconectava ou o app reiniciava).
+function resolveDisplayName(identity) {
+  const user = store.findUser(identity);
+  return (user && user.displayName) || identity;
+}
+
+app.get('/api/messages/:channelId', requireAuth, (req, res) => {
+  const { channelId } = req.params;
+  const s = store.getState();
+  const exists = s.channels.text.some((c) => c.id === channelId);
+  if (!exists) return res.status(404).json({ error: 'Canal de texto não encontrado.' });
+  res.json({ messages: store.getMessages(channelId) });
+});
+
+app.post('/api/messages/:channelId', requireAuth, (req, res) => {
+  const { channelId } = req.params;
+  const { text, attachment } = req.body || {};
+  const s = store.getState();
+  const exists = s.channels.text.some((c) => c.id === channelId);
+  if (!exists) return res.status(404).json({ error: 'Canal de texto não encontrado.' });
+  if ((!text || !String(text).trim()) && !attachment) {
+    return res.status(400).json({ error: 'Mensagem vazia.' });
+  }
+  const msg = store.addMessage(channelId, {
+    identity: req.identity,
+    name: resolveDisplayName(req.identity),
+    text,
+    attachment,
+  });
+  res.json({ message: msg });
+});
+
+app.get('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
+  const key = store.dmKey(req.identity, req.params.peerIdentity);
+  res.json({ messages: store.getMessages(key) });
+});
+
+app.post('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
+  const { text, attachment } = req.body || {};
+  if ((!text || !String(text).trim()) && !attachment) {
+    return res.status(400).json({ error: 'Mensagem vazia.' });
+  }
+  const key = store.dmKey(req.identity, req.params.peerIdentity);
+  const msg = store.addMessage(key, {
+    identity: req.identity,
+    name: resolveDisplayName(req.identity),
+    text,
+    attachment,
+  });
+  res.json({ message: msg });
+});
+
 app.listen(PORT, () => {
   console.log(`PrimalVoice app rodando na porta ${PORT} (sala: ${ROOM_NAME})`);
 });

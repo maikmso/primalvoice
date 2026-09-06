@@ -117,6 +117,14 @@ const profileIdentityTag = document.getElementById('profile-identity-tag');
 const profileStatusInput = document.getElementById('profile-status-input');
 const profileSaveBtn = document.getElementById('profile-save-btn');
 
+const cropOverlay = document.getElementById('crop-overlay');
+const cropTitle = document.getElementById('crop-title');
+const cropStage = document.getElementById('crop-stage');
+const cropImage = document.getElementById('crop-image');
+const cropZoomInput = document.getElementById('crop-zoom-input');
+const cropCancelBtn = document.getElementById('crop-cancel-btn');
+const cropConfirmBtn = document.getElementById('crop-confirm-btn');
+
 const themeGrid = document.getElementById('theme-grid');
 
 const dmListEl = document.getElementById('dm-list');
@@ -222,6 +230,9 @@ function stopVoiceQualityMonitor() {
 let joining = false;
 
 const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]
+// Canais/DMs cujo histórico já foi carregado do servidor nesta sessão —
+// evita buscar de novo toda vez que a pessoa clica pra trocar de canal.
+const historyLoadedFor = new Set();
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
 const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName }
@@ -233,10 +244,12 @@ let pendingProfileAvatar = null; // enquanto o modal de perfil está aberto
 let pendingProfileBanner = null;
 
 // ---------- conversas diretas (DM) ----------
-// Sem servidor de mensagens privadas de verdade: a mensagem ainda viaja pelo
-// mesmo canal de dados do LiveKit (que todo mundo na sala recebe), só que só
-// é MOSTRADA na conversa privada entre as duas pessoas envolvidas — não é
-// sigilo de ponta a ponta, é privacidade de interface, igual o resto do app.
+// Pra entrega ao vivo, a mensagem ainda viaja pelo mesmo canal de dados do
+// LiveKit (que todo mundo na sala recebe), só que só é MOSTRADA na conversa
+// privada entre as duas pessoas envolvidas — não é sigilo de ponta a ponta,
+// é privacidade de interface. O histórico persistido no servidor, porém,
+// fica guardado numa chave exclusiva das duas pessoas (não vaza pra mais
+// ninguém que entrar na sala depois).
 const dmPeers = new Set(); // identities com quem já trocou DM nessa sessão
 let activeDmPeer = null; // identity da conversa privada aberta, ou null
 
@@ -404,26 +417,169 @@ async function saveProfileToConfig() {
   await window.vortex.setConfig(cfg);
 }
 
-// resize com "cover crop" pra caber num retângulo w x h (quadrado quando w===h,
-// que é o caso do avatar; retangular no caso do banner).
-function resizeImageToDataUrl(file, w, h, quality) {
+// ---------- ajuste de foto/banner (crop interativo) ----------
+// A pessoa escolhe um arquivo, aí abre um editor onde dá pra arrastar a
+// imagem (ver exatamente qual área vai aparecer) e dar zoom, antes de
+// confirmar. Só depois disso a imagem é de fato recortada/comprimida.
+const CROP_SPECS = {
+  avatar: { frameW: 160, frameH: 160, outW: 160, outH: 160, maxBytes: 22000, shape: 'avatar' },
+  banner: { frameW: 420, frameH: 140, outW: 420, outH: 140, maxBytes: 28000, shape: 'banner' },
+};
+
+const cropState = {
+  kind: null,
+  spec: null,
+  naturalW: 0,
+  naturalH: 0,
+  baseScale: 1,
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  dragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  dragOrigX: 0,
+  dragOrigY: 0,
+  resolve: null,
+};
+
+function cropClampOffsets() {
+  const spec = cropState.spec;
+  const scale = cropState.baseScale * cropState.zoom;
+  const dispW = cropState.naturalW * scale;
+  const dispH = cropState.naturalH * scale;
+  const minX = Math.min(0, spec.frameW - dispW);
+  const minY = Math.min(0, spec.frameH - dispH);
+  cropState.offsetX = Math.max(minX, Math.min(0, cropState.offsetX));
+  cropState.offsetY = Math.max(minY, Math.min(0, cropState.offsetY));
+}
+
+function cropApplyTransform() {
+  const scale = cropState.baseScale * cropState.zoom;
+  cropImage.style.width = `${cropState.naturalW * scale}px`;
+  cropImage.style.height = `${cropState.naturalH * scale}px`;
+  cropImage.style.transform = `translate(${cropState.offsetX}px, ${cropState.offsetY}px)`;
+}
+
+function cropSetZoom(newZoom, anchorFrameX, anchorFrameY) {
+  const spec = cropState.spec;
+  const oldScale = cropState.baseScale * cropState.zoom;
+  // ponto da imagem original que está sob o "âncora" (centro do quadro por
+  // padrão), pra manter esse ponto no lugar quando o zoom muda
+  const ax = anchorFrameX ?? spec.frameW / 2;
+  const ay = anchorFrameY ?? spec.frameH / 2;
+  const imgX = (ax - cropState.offsetX) / oldScale;
+  const imgY = (ay - cropState.offsetY) / oldScale;
+  cropState.zoom = newZoom;
+  const newScale = cropState.baseScale * cropState.zoom;
+  cropState.offsetX = ax - imgX * newScale;
+  cropState.offsetY = ay - imgY * newScale;
+  cropClampOffsets();
+  cropApplyTransform();
+}
+
+function openCropper(file, kind) {
   return new Promise((resolve, reject) => {
+    const spec = CROP_SPECS[kind];
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      const scale = Math.max(w / img.width, h / img.height);
-      const dw = img.width * scale;
-      const dh = img.height * scale;
-      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-      URL.revokeObjectURL(img.src);
+      cropState.kind = kind;
+      cropState.spec = spec;
+      cropState.naturalW = img.naturalWidth;
+      cropState.naturalH = img.naturalHeight;
+      cropState.baseScale = Math.max(spec.frameW / img.naturalWidth, spec.frameH / img.naturalHeight);
+      cropState.zoom = 1;
+      cropState.offsetX = (spec.frameW - img.naturalWidth * cropState.baseScale) / 2;
+      cropState.offsetY = (spec.frameH - img.naturalHeight * cropState.baseScale) / 2;
+      cropState.resolve = resolve;
+
+      cropTitle.textContent = kind === 'avatar' ? 'Ajustar foto de perfil' : 'Ajustar banner';
+      cropStage.className = `crop-stage ${spec.shape}`;
+      cropStage.style.width = `${spec.frameW}px`;
+      cropStage.style.height = `${spec.frameH}px`;
+      cropImage.src = objectUrl;
+      cropZoomInput.value = '100';
+      cropApplyTransform();
+      cropOverlay.hidden = false;
     };
-    img.onerror = () => reject(new Error('Não consegui abrir essa imagem.'));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Não consegui abrir essa imagem.'));
+    };
+    img.src = objectUrl;
   });
+}
+
+function closeCropper(result) {
+  cropOverlay.hidden = true;
+  if (cropImage.src) URL.revokeObjectURL(cropImage.src);
+  cropImage.src = '';
+  const resolveFn = cropState.resolve;
+  cropState.resolve = null;
+  if (resolveFn) resolveFn(result);
+}
+
+cropStage.addEventListener('mousedown', (e) => {
+  cropState.dragging = true;
+  cropStage.classList.add('dragging');
+  cropState.dragStartX = e.clientX;
+  cropState.dragStartY = e.clientY;
+  cropState.dragOrigX = cropState.offsetX;
+  cropState.dragOrigY = cropState.offsetY;
+});
+window.addEventListener('mousemove', (e) => {
+  if (!cropState.dragging) return;
+  cropState.offsetX = cropState.dragOrigX + (e.clientX - cropState.dragStartX);
+  cropState.offsetY = cropState.dragOrigY + (e.clientY - cropState.dragStartY);
+  cropClampOffsets();
+  cropApplyTransform();
+});
+window.addEventListener('mouseup', () => {
+  if (!cropState.dragging) return;
+  cropState.dragging = false;
+  cropStage.classList.remove('dragging');
+});
+cropZoomInput.addEventListener('input', () => {
+  cropSetZoom(Number(cropZoomInput.value) / 100);
+});
+cropCancelBtn.addEventListener('click', () => closeCropper(null));
+cropOverlay.addEventListener('click', (e) => {
+  if (e.target === cropOverlay) closeCropper(null);
+});
+cropConfirmBtn.addEventListener('click', () => {
+  const spec = cropState.spec;
+  const scale = cropState.baseScale * cropState.zoom;
+  const canvas = document.createElement('canvas');
+  canvas.width = spec.outW;
+  canvas.height = spec.outH;
+  const ctx = canvas.getContext('2d');
+  const srcX = -cropState.offsetX / scale;
+  const srcY = -cropState.offsetY / scale;
+  const srcW = spec.frameW / scale;
+  const srcH = spec.frameH / scale;
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, spec.outW, spec.outH);
+    const dataUrl = canvasToBudgetedDataUrl(canvas, spec.maxBytes);
+    closeCropper(dataUrl);
+  };
+  img.src = cropImage.src;
+});
+
+// Busca a melhor qualidade WebP que caiba no orçamento de bytes — WebP dá
+// bem mais qualidade por byte que JPEG, então a foto fica bem mais nítida
+// pro mesmo tamanho de arquivo (importante porque o perfil viaja inteiro
+// numa mensagem de dados do LiveKit, que tem limite de tamanho).
+function canvasToBudgetedDataUrl(canvas, maxBytes) {
+  const qualities = [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.4, 0.3];
+  let last = canvas.toDataURL('image/webp', qualities[qualities.length - 1]);
+  for (const q of qualities) {
+    const attempt = canvas.toDataURL('image/webp', q);
+    last = attempt;
+    if (attempt.length <= maxBytes) return attempt;
+  }
+  return last;
 }
 
 profileAvatarChangeBtn.addEventListener('click', () => profileAvatarInput.click());
@@ -432,12 +588,8 @@ profileAvatarInput.addEventListener('change', async () => {
   profileAvatarInput.value = '';
   if (!file) return;
   try {
-    let dataUrl = await resizeImageToDataUrl(file, 96, 96, 0.6);
-    if (dataUrl.length > 15000) dataUrl = await resizeImageToDataUrl(file, 72, 72, 0.45);
-    if (dataUrl.length > 15000) {
-      alert('Essa imagem ficou grande demais mesmo comprimida. Tenta uma foto mais simples.');
-      return;
-    }
+    const dataUrl = await openCropper(file, 'avatar');
+    if (!dataUrl) return;
     pendingProfileAvatar = dataUrl;
     profileAvatarPreview.style.backgroundImage = `url(${dataUrl})`;
     profileAvatarPreview.classList.add('has-avatar');
@@ -457,12 +609,8 @@ profileBannerInput.addEventListener('change', async () => {
   profileBannerInput.value = '';
   if (!file) return;
   try {
-    let dataUrl = await resizeImageToDataUrl(file, 300, 100, 0.6);
-    if (dataUrl.length > 20000) dataUrl = await resizeImageToDataUrl(file, 240, 80, 0.45);
-    if (dataUrl.length > 20000) {
-      alert('Essa imagem ficou grande demais mesmo comprimida. Tenta uma foto mais simples.');
-      return;
-    }
+    const dataUrl = await openCropper(file, 'banner');
+    if (!dataUrl) return;
     pendingProfileBanner = dataUrl;
     profileBannerPreview.style.backgroundImage = `url(${dataUrl})`;
     profileBannerPreview.classList.add('has-banner');
@@ -486,22 +634,25 @@ profileSaveBtn.addEventListener('click', async () => {
   await saveProfileToConfig();
   applyProfileEverywhere(myIdentity);
   broadcastProfile();
+  closeSettingsModal();
   // Salva no servidor também — assim o perfil segue a conta pra qualquer
   // outro PC/dispositivo em que a pessoa entrar depois, não só o de agora.
-  try {
-    await apiFetch('/api/profile', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        avatar: myAvatarDataUrl,
-        banner: myBannerDataUrl,
-        status: myStatusText,
-        displayName: myDisplayName,
-      }),
-    });
-  } catch (err) {
-    alert(err.message || 'Não consegui salvar o perfil no servidor (ficou salvo só neste PC por enquanto).');
-  }
-  closeSettingsModal();
+  // Roda em segundo plano e SEM alert() de propósito: se der ruim (rede
+  // caiu, servidor fora do ar), o perfil já está salvo neste PC e já
+  // apareceu certinho pros outros aqui na sala — travar o app inteiro com
+  // um alerta por causa de um problema de rede é pior que só avisar no
+  // console e deixar a pessoa seguir usando.
+  apiFetch('/api/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      avatar: myAvatarDataUrl,
+      banner: myBannerDataUrl,
+      status: myStatusText,
+      displayName: myDisplayName,
+    }),
+  }).catch((err) => {
+    console.warn('Não consegui salvar o perfil no servidor (ficou salvo só neste PC por enquanto):', err);
+  });
 });
 
 function openProfilePane() {
@@ -892,14 +1043,17 @@ function switchTextChannel(channelId) {
   renderChannelLists();
   renderDmList();
   renderChatForActiveChannel();
+  ensureChannelHistoryLoaded(channelId);
 }
 
 // ---------- conversas diretas (DM) ----------
-// Não é privado de verdade no sentido criptográfico: a mensagem ainda viaja
-// pro canal de dados compartilhado da sala (igual chat/perfil/status), só que
-// só é exibida na conversa privada entre as duas pessoas — a "privacidade" é
-// só na hora de mostrar na tela, não tem outro jeito sem um servidor próprio
-// guardando isso, e o PrimalVoice não tem banco de dados.
+// Não é privado de verdade no sentido criptográfico: pra entrega ao vivo, a
+// mensagem ainda viaja pelo canal de dados compartilhado da sala (igual
+// chat/perfil/status), só que só é exibida na conversa privada entre as duas
+// pessoas — a "privacidade" é só na hora de mostrar na tela. O histórico em
+// si (pra sobreviver a reconexões) fica guardado no servidor numa chave só
+// dessas duas pessoas (store.dmKey), então pelo menos não vaza pra mais
+// ninguém que entrar na sala depois.
 function switchToDm(peerIdentity) {
   if (!peerIdentity) return;
   dmPeers.add(peerIdentity);
@@ -912,6 +1066,7 @@ function switchToDm(peerIdentity) {
   renderChannelLists();
   renderDmList();
   renderChatForActiveChannel();
+  ensureChannelHistoryLoaded(activeTextChannelId);
 }
 
 function renderDmHeader() {
@@ -1199,6 +1354,57 @@ function pushChatMessage(channelId, msg) {
   if (channelId === activeTextChannelId) appendChatMessageEl(msg);
 }
 
+// Busca o histórico salvo no servidor pra esse canal/DM (uma vez só por
+// sessão) e coloca ANTES das mensagens que já chegaram ao vivo nesta
+// sessão — assim a conversa não some mais quando reconecta ou reabre o
+// app, e nunca duplica mensagem já recebida ao vivo.
+async function ensureChannelHistoryLoaded(channelId) {
+  if (!channelId || historyLoadedFor.has(channelId)) return;
+  historyLoadedFor.add(channelId);
+  try {
+    let messages;
+    if (isDmChannelId(channelId)) {
+      const data = await apiFetch(`/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages`);
+      messages = data.messages;
+    } else {
+      const data = await apiFetch(`/api/messages/${encodeURIComponent(channelId)}`);
+      messages = data.messages;
+    }
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    const existing = chatHistoryByChannel.get(channelId) || [];
+    const seenIds = new Set(existing.map((m) => m.id).filter(Boolean));
+    const fromServer = messages
+      .filter((m) => !seenIds.has(m.id))
+      .map((m) => ({
+        id: m.id,
+        name: m.identity === myIdentity ? (myDisplayName || myName) : m.name,
+        text: m.text,
+        ts: m.ts,
+        isSelf: m.identity === myIdentity,
+        identity: m.identity,
+        attachment: m.attachment || null,
+      }));
+    chatHistoryByChannel.set(channelId, [...fromServer, ...existing]);
+    if (channelId === activeTextChannelId) renderChatForActiveChannel();
+  } catch (err) {
+    historyLoadedFor.delete(channelId); // tenta de novo na próxima troca de canal
+    console.warn('Não consegui carregar o histórico desse canal:', err);
+  }
+}
+
+// Manda a mensagem pro servidor guardar (em segundo plano, sem travar o
+// envio nem mostrar alerta se falhar — a entrega ao vivo pros outros já
+// aconteceu pelo canal de dados do LiveKit; isso aqui é só a parte que
+// garante que a conversa continua lá quando alguém reconectar depois).
+function persistChatMessage(channelId, { text, attachment }) {
+  const path = isDmChannelId(channelId)
+    ? `/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages`
+    : `/api/messages/${encodeURIComponent(channelId)}`;
+  apiFetch(path, { method: 'POST', body: JSON.stringify({ text, attachment: attachment || null }) }).catch((err) => {
+    console.warn('Não consegui salvar a mensagem no servidor:', err);
+  });
+}
+
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
@@ -1211,11 +1417,13 @@ chatForm.addEventListener('submit', (e) => {
     const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
     pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
+    persistChatMessage(activeTextChannelId, { text });
     return;
   }
   const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
   pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity });
+  persistChatMessage(activeTextChannelId, { text });
 });
 
 // ---------- anexos no chat (imagem/vídeo) ----------
@@ -1257,11 +1465,13 @@ chatAttachmentInput.addEventListener('change', async () => {
       const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment };
       lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
       pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+      persistChatMessage(activeTextChannelId, { text, attachment });
       return;
     }
     const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts, attachment };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
     pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+    persistChatMessage(activeTextChannelId, { text, attachment });
   } catch (err) {
     alert(err.message || 'Não consegui enviar o arquivo.');
   } finally {
