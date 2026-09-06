@@ -26,6 +26,7 @@ const exitAppBtn = document.getElementById('exit-app-btn');
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');
+const selfNameBtn = document.getElementById('self-name-btn');
 const channelSidebar = document.querySelector('.channel-sidebar');
 const memberList = document.querySelector('.member-list');
 const resizeLeft = document.getElementById('resize-left');
@@ -62,6 +63,26 @@ const rolesListEl = document.getElementById('roles-list');
 const createRoleBtn = document.getElementById('create-role-btn');
 const roleEditorEl = document.getElementById('role-editor');
 const rolesMembersListEl = document.getElementById('roles-members-list');
+
+const profileAvatarPreview = document.getElementById('profile-avatar-preview');
+const profileAvatarChangeBtn = document.getElementById('profile-avatar-change-btn');
+const profileAvatarRemoveBtn = document.getElementById('profile-avatar-remove-btn');
+const profileAvatarInput = document.getElementById('profile-avatar-input');
+const profileStatusInput = document.getElementById('profile-status-input');
+const profileSaveBtn = document.getElementById('profile-save-btn');
+
+const keybindMuteClearBtn = document.getElementById('keybind-mute-clear-btn');
+const keybindDeafenClearBtn = document.getElementById('keybind-deafen-clear-btn');
+
+const chatAttachmentBtn = document.getElementById('chat-attachment-btn');
+const chatAttachmentInput = document.getElementById('chat-attachment-input');
+
+const sharepickOverlay = document.getElementById('sharepick-overlay');
+const sharepickGrid = document.getElementById('sharepick-grid');
+const sharepickTabs = document.querySelectorAll('.sharepick-tab');
+const sharepickAudioCheckbox = document.getElementById('sharepick-audio-checkbox');
+const sharepickCancelBtn = document.getElementById('sharepick-cancel-btn');
+const sharepickConfirmBtn = document.getElementById('sharepick-confirm-btn');
 
 const HASH_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>';
@@ -120,6 +141,10 @@ let joining = false;
 const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
+const memberProfiles = new Map(); // identity -> { avatar, status }
+let myAvatarDataUrl = '';
+let myStatusText = '';
+let pendingProfileAvatar = null; // enquanto o modal de perfil está aberto
 
 const chatEncoder = new TextEncoder();
 const chatDecoder = new TextDecoder();
@@ -190,6 +215,121 @@ function broadcastVoiceStatus() {
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
 }
 
+// ---------- perfil (foto + status) ----------
+// Não tem servidor de perfil de verdade: cada um guarda a própria foto/status
+// salvos no config.json local, e avisa os outros pelo canal de dados sempre
+// que muda ou quando alguém novo entra (igual ao voice-status).
+function broadcastProfile() {
+  if (!lobbyRoom) return;
+  const payload = { type: 'profile-update', identity: myIdentity, avatar: myAvatarDataUrl, status: myStatusText };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+}
+
+function applyAvatarToEl(el, identity) {
+  if (!el) return;
+  const avatar = identity === myIdentity ? myAvatarDataUrl : memberProfiles.get(identity)?.avatar;
+  if (avatar) {
+    el.style.backgroundImage = `url(${avatar})`;
+    el.classList.add('has-avatar');
+  } else {
+    el.style.backgroundImage = '';
+    el.classList.remove('has-avatar');
+  }
+}
+
+function applyProfileEverywhere(identity) {
+  document.querySelectorAll(`.member-row[data-identity="${cssEscape(identity)}"] .avatar`).forEach((el) => applyAvatarToEl(el, identity));
+  const tile = document.getElementById(tileId(identity));
+  if (tile) applyAvatarToEl(tile.querySelector('.initial'), identity);
+  if (identity === myIdentity) applyAvatarToEl(selfAvatar, identity);
+}
+
+function cssEscape(value) {
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
+function loadProfileFromConfig(cfg) {
+  const p = cfg.profile || {};
+  myAvatarDataUrl = p.avatar || '';
+  myStatusText = p.status || '';
+}
+
+async function saveProfileToConfig() {
+  const cfg = (await window.vortex.getConfig()) || {};
+  cfg.profile = { avatar: myAvatarDataUrl, status: myStatusText };
+  await window.vortex.setConfig(cfg);
+}
+
+function resizeImageToDataUrl(file, size, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error('Não consegui abrir essa imagem.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+profileAvatarChangeBtn.addEventListener('click', () => profileAvatarInput.click());
+profileAvatarInput.addEventListener('change', async () => {
+  const file = profileAvatarInput.files[0];
+  profileAvatarInput.value = '';
+  if (!file) return;
+  try {
+    let dataUrl = await resizeImageToDataUrl(file, 96, 0.6);
+    if (dataUrl.length > 15000) dataUrl = await resizeImageToDataUrl(file, 72, 0.45);
+    if (dataUrl.length > 15000) {
+      alert('Essa imagem ficou grande demais mesmo comprimida. Tenta uma foto mais simples.');
+      return;
+    }
+    pendingProfileAvatar = dataUrl;
+    profileAvatarPreview.style.backgroundImage = `url(${dataUrl})`;
+    profileAvatarPreview.classList.add('has-avatar');
+  } catch (err) {
+    alert(err.message || 'Não consegui usar essa imagem.');
+  }
+});
+profileAvatarRemoveBtn.addEventListener('click', () => {
+  pendingProfileAvatar = '';
+  profileAvatarPreview.style.backgroundImage = '';
+  profileAvatarPreview.classList.remove('has-avatar');
+});
+profileSaveBtn.addEventListener('click', async () => {
+  if (pendingProfileAvatar !== null) myAvatarDataUrl = pendingProfileAvatar;
+  myStatusText = profileStatusInput.value.trim().slice(0, 60);
+  pendingProfileAvatar = null;
+  await saveProfileToConfig();
+  applyProfileEverywhere(myIdentity);
+  broadcastProfile();
+  closeSettingsModal();
+});
+
+function openProfilePane() {
+  pendingProfileAvatar = null;
+  profileStatusInput.value = myStatusText;
+  if (myAvatarDataUrl) {
+    profileAvatarPreview.style.backgroundImage = `url(${myAvatarDataUrl})`;
+    profileAvatarPreview.classList.add('has-avatar');
+  } else {
+    profileAvatarPreview.style.backgroundImage = '';
+    profileAvatarPreview.classList.remove('has-avatar');
+    profileAvatarPreview.textContent = (myName || '?').charAt(0).toUpperCase();
+  }
+}
+
+selfAvatar.addEventListener('click', () => openSettingsModal('profile'));
+selfNameBtn.addEventListener('click', () => openSettingsModal('profile'));
+
 function renderPermissionGates() {
   addTextChannelBtn.hidden = !myPermissions.manageChannels;
   addVoiceChannelBtn.hidden = !myPermissions.manageChannels;
@@ -233,6 +373,7 @@ async function loadPrefsFromConfig(cfg) {
 async function init() {
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
+  loadProfileFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
     showJoin();
@@ -543,11 +684,11 @@ async function joinVoiceChannel(channelId) {
     },
     videoCaptureDefaults: {
       deviceId: devicePrefs.cameraId || undefined,
-      resolution: { width: 1280, height: 720, frameRate: 30 },
+      resolution: { width: 1920, height: 1080, frameRate: 30 },
     },
     publishDefaults: {
-      screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
-      videoEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
+      screenShareEncoding: { maxBitrate: 6_000_000, maxFramerate: 30 },
+      videoEncoding: { maxBitrate: 4_000_000, maxFramerate: 30 },
       audioPreset: { maxBitrate: 64_000 },
       dtx: true,
       red: true,
@@ -679,7 +820,7 @@ function renderChatForActiveChannel() {
   history.forEach((msg) => appendChatMessageEl(msg));
 }
 
-function appendChatMessageEl({ name, text, isSelf }) {
+function appendChatMessageEl({ name, text, isSelf, identity, attachment }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
@@ -689,6 +830,7 @@ function appendChatMessageEl({ name, text, isSelf }) {
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
   avatar.textContent = (name || '?').charAt(0).toUpperCase();
+  if (identity) applyAvatarToEl(avatar, identity);
   row.appendChild(avatar);
 
   const body = document.createElement('div');
@@ -706,10 +848,30 @@ function appendChatMessageEl({ name, text, isSelf }) {
   meta.appendChild(time);
   body.appendChild(meta);
 
-  const textEl = document.createElement('div');
-  textEl.className = 'text';
-  textEl.textContent = text;
-  body.appendChild(textEl);
+  if (text) {
+    const textEl = document.createElement('div');
+    textEl.className = 'text';
+    textEl.textContent = text;
+    body.appendChild(textEl);
+  }
+
+  if (attachment && attachment.url) {
+    const wrap = document.createElement('div');
+    wrap.className = 'attachment';
+    const src = `${serverUrl}${attachment.url}`;
+    if (attachment.type === 'video') {
+      const video = document.createElement('video');
+      video.src = src;
+      video.controls = true;
+      wrap.appendChild(video);
+    } else {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = attachment.name || 'imagem';
+      wrap.appendChild(img);
+    }
+    body.appendChild(wrap);
+  }
 
   row.appendChild(body);
   chatMessages.appendChild(row);
@@ -732,7 +894,51 @@ chatForm.addEventListener('submit', (e) => {
   const ts = Date.now();
   const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-  pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true });
+  pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity });
+});
+
+// ---------- anexos no chat (imagem/vídeo) ----------
+// O arquivo em si vai por HTTP normal pro servidor (não pelo canal de dados
+// do LiveKit, que não aguenta arquivo grande); só a URL viaja na mensagem.
+async function uploadChatAttachment(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const headers = {};
+  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+  const res = await fetch(`${serverUrl}/api/upload`, { method: 'POST', headers, body: formData });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Erro ao enviar arquivo.');
+  return data; // { url, type, name }
+}
+
+chatAttachmentBtn.addEventListener('click', () => {
+  if (!lobbyRoom || !activeTextChannelId) return;
+  chatAttachmentInput.click();
+});
+
+chatAttachmentInput.addEventListener('change', async () => {
+  const file = chatAttachmentInput.files[0];
+  chatAttachmentInput.value = '';
+  if (!file || !lobbyRoom || !activeTextChannelId) return;
+  if (file.size > 25 * 1024 * 1024) {
+    alert('Arquivo muito grande (máx. 25MB).');
+    return;
+  }
+
+  chatAttachmentBtn.disabled = true;
+  try {
+    const attachment = await uploadChatAttachment(file);
+    const text = chatInput.value.trim();
+    chatInput.value = '';
+    const ts = Date.now();
+    const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts, attachment };
+    lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+    pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+  } catch (err) {
+    alert(err.message || 'Não consegui enviar o arquivo.');
+  } finally {
+    chatAttachmentBtn.disabled = false;
+  }
 });
 
 // ---------- grade de vídeo/tela ----------
@@ -752,6 +958,7 @@ function ensureTile(participant) {
     const initial = document.createElement('span');
     initial.className = 'initial';
     initial.textContent = (participant.name || participant.identity).charAt(0).toUpperCase();
+    applyAvatarToEl(initial, participant.identity);
     tile.appendChild(initial);
 
     const label = document.createElement('div');
@@ -909,6 +1116,7 @@ function buildMemberRow(participant, opts = {}) {
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
   avatar.textContent = (participant.name || participant.identity).charAt(0).toUpperCase();
+  applyAvatarToEl(avatar, participant.identity);
   row.appendChild(avatar);
 
   const name = document.createElement('span');
@@ -924,28 +1132,24 @@ function buildMemberRow(participant, opts = {}) {
     cameraBadge.className = 'status-badge camera-badge';
     cameraBadge.title = 'Câmera ligada';
     cameraBadge.innerHTML = CAMERA_BADGE_SVG;
-    cameraBadge.hidden = true;
     badges.appendChild(cameraBadge);
 
     const screenShareBadge = document.createElement('span');
     screenShareBadge.className = 'status-badge screenshare-badge';
     screenShareBadge.title = 'Compartilhando tela';
     screenShareBadge.innerHTML = SCREENSHARE_BADGE_SVG;
-    screenShareBadge.hidden = true;
     badges.appendChild(screenShareBadge);
 
     const micBadge = document.createElement('span');
     micBadge.className = 'status-badge mic-badge';
     micBadge.title = 'Microfone mudo';
     micBadge.innerHTML = MIC_OFF_BADGE_SVG;
-    micBadge.hidden = true;
     badges.appendChild(micBadge);
 
     const deafenBadge = document.createElement('span');
     deafenBadge.className = 'status-badge deafen-badge';
     deafenBadge.title = 'Ensurdecido';
     deafenBadge.innerHTML = DEAFEN_BADGE_SVG;
-    deafenBadge.hidden = true;
     badges.appendChild(deafenBadge);
 
     row.appendChild(badges);
@@ -967,10 +1171,10 @@ function applyStatusBadges(row, status) {
   const screenShareBadge = row.querySelector('.status-badge.screenshare-badge');
   const micBadge = row.querySelector('.status-badge.mic-badge');
   const deafenBadge = row.querySelector('.status-badge.deafen-badge');
-  if (cameraBadge) cameraBadge.hidden = !status.camera;
-  if (screenShareBadge) screenShareBadge.hidden = !status.screenShare;
-  if (micBadge) micBadge.hidden = !status.muted;
-  if (deafenBadge) deafenBadge.hidden = !status.deafened;
+  if (cameraBadge) cameraBadge.classList.toggle('badge-on', !!status.camera);
+  if (screenShareBadge) screenShareBadge.classList.toggle('badge-on', !!status.screenShare);
+  if (micBadge) micBadge.classList.toggle('badge-on', !!status.muted);
+  if (deafenBadge) deafenBadge.classList.toggle('badge-on', !!status.deafened);
 }
 
 function setVoiceMemberStatus(identity, patch) {
@@ -1238,6 +1442,7 @@ joinForm.addEventListener('submit', async (e) => {
     lobbyRoom.on(RoomEvent.ParticipantConnected, (participant) => {
       addMember(participant);
       updateParticipantCount();
+      broadcastProfile();
       if (activeVoiceChannelId) {
         broadcastVoicePresence('join', activeVoiceChannelId);
         broadcastVoiceStatus();
@@ -1267,6 +1472,8 @@ joinForm.addEventListener('submit', async (e) => {
           text: msg.text,
           ts: msg.ts,
           isSelf: false,
+          identity: participant?.identity,
+          attachment: msg.attachment || null,
         });
       } else if (msg.type === 'voice-presence') {
         if (!voicePresence.has(msg.channelId)) voicePresence.set(msg.channelId, new Map());
@@ -1279,6 +1486,9 @@ joinForm.addEventListener('submit', async (e) => {
         renderChannelLists();
       } else if (msg.type === 'voice-status') {
         setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
+      } else if (msg.type === 'profile-update') {
+        memberProfiles.set(msg.identity, { avatar: msg.avatar || '', status: msg.status || '' });
+        applyProfileEverywhere(msg.identity);
       } else if (msg.type === 'state-changed') {
         fetchServerState().catch(() => {});
       }
@@ -1288,8 +1498,10 @@ joinForm.addEventListener('submit', async (e) => {
 
     selfAvatar.textContent = identity.charAt(0).toUpperCase();
     selfName.textContent = identity;
+    applyAvatarToEl(selfAvatar, identity);
     addMember(lobbyRoom.localParticipant);
     lobbyRoom.remoteParticipants.forEach((participant) => addMember(participant));
+    broadcastProfile();
 
     await fetchServerState();
     chatHistoryByChannel.clear();
@@ -1340,19 +1552,137 @@ camBtn.addEventListener('click', async () => {
   }
 });
 
+// ---------- escolher o que compartilhar (tela/janela + com ou sem áudio) ----------
+let sharepickResolve = null;
+let sharepickSelectedId = null;
+let sharepickSources = [];
+let sharepickKind = 'screen';
+
+function stopScreenShareUI() {
+  shareBtn.dataset.on = 'false';
+  shareBtn.classList.add('off');
+  if (!voiceRoom) return;
+  const tile = document.getElementById(tileId(voiceRoom.localParticipant.identity));
+  tile?.querySelectorAll('video').forEach((el) => el.remove());
+  if (tile && !tile.querySelector('video')) tile.classList.remove('has-video');
+}
+
+function renderSharepickGrid() {
+  sharepickGrid.innerHTML = '';
+  const list = sharepickSources.filter((s) => s.kind === sharepickKind);
+  if (list.length === 0) {
+    sharepickGrid.innerHTML = '<p class="sharepick-empty">Nada encontrado aqui.</p>';
+    return;
+  }
+  list.forEach((source) => {
+    const item = document.createElement('div');
+    item.className = 'sharepick-item';
+    item.classList.toggle('selected', source.id === sharepickSelectedId);
+
+    const thumb = document.createElement('img');
+    thumb.className = 'sharepick-thumb';
+    thumb.src = source.thumbnail || '';
+    item.appendChild(thumb);
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'sharepick-name';
+    if (source.appIcon) {
+      const icon = document.createElement('img');
+      icon.src = source.appIcon;
+      nameRow.appendChild(icon);
+    }
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = source.name;
+    nameRow.appendChild(nameSpan);
+    item.appendChild(nameRow);
+
+    item.addEventListener('click', () => {
+      sharepickSelectedId = source.id;
+      sharepickConfirmBtn.disabled = false;
+      renderSharepickGrid();
+    });
+
+    sharepickGrid.appendChild(item);
+  });
+}
+
+sharepickTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    sharepickTabs.forEach((t) => t.classList.toggle('active', t === tab));
+    sharepickKind = tab.dataset.kind;
+    renderSharepickGrid();
+  });
+});
+
+function closeSharepickModal(result) {
+  sharepickOverlay.hidden = true;
+  if (sharepickResolve) {
+    sharepickResolve(result);
+    sharepickResolve = null;
+  }
+}
+
+sharepickCancelBtn.addEventListener('click', () => closeSharepickModal(null));
+sharepickOverlay.addEventListener('click', (e) => {
+  if (e.target === sharepickOverlay) closeSharepickModal(null);
+});
+sharepickConfirmBtn.addEventListener('click', () => {
+  if (!sharepickSelectedId) return;
+  closeSharepickModal({ sourceId: sharepickSelectedId, withAudio: sharepickAudioCheckbox.checked });
+});
+
+async function openScreenShareModal() {
+  sharepickSelectedId = null;
+  sharepickKind = 'screen';
+  sharepickAudioCheckbox.checked = false;
+  sharepickConfirmBtn.disabled = true;
+  sharepickTabs.forEach((t) => t.classList.toggle('active', t.dataset.kind === 'screen'));
+  sharepickGrid.innerHTML = '<p class="sharepick-empty">Carregando...</p>';
+  sharepickOverlay.hidden = false;
+
+  try {
+    sharepickSources = await window.vortex.listScreenShareSources();
+  } catch {
+    sharepickSources = [];
+  }
+  renderSharepickGrid();
+
+  return new Promise((resolve) => {
+    sharepickResolve = resolve;
+  });
+}
+
 shareBtn.addEventListener('click', async () => {
   if (!voiceRoom) return;
-  const newOn = shareBtn.dataset.on !== 'true';
-  const publication = await voiceRoom.localParticipant.setScreenShareEnabled(newOn);
-  shareBtn.dataset.on = String(newOn);
-  shareBtn.classList.toggle('off', !newOn);
 
-  if (newOn && publication && publication.track) {
+  if (shareBtn.dataset.on === 'true') {
+    await voiceRoom.localParticipant.setScreenShareEnabled(false);
+    stopScreenShareUI();
+    return;
+  }
+
+  const choice = await openScreenShareModal();
+  if (!choice) return;
+
+  await window.vortex.chooseScreenShareSource(choice);
+  let publication;
+  try {
+    publication = await voiceRoom.localParticipant.setScreenShareEnabled(true, {
+      audio: choice.withAudio,
+      resolution: { width: 1920, height: 1080, frameRate: 30 },
+      contentHint: 'detail',
+    });
+  } catch (err) {
+    alert('Não consegui compartilhar a tela.');
+    return;
+  }
+
+  shareBtn.dataset.on = 'true';
+  shareBtn.classList.remove('off');
+  if (publication && publication.track) {
     attachTrack(publication.track, voiceRoom.localParticipant);
-  } else if (!newOn) {
-    const tile = document.getElementById(tileId(voiceRoom.localParticipant.identity));
-    tile?.querySelectorAll('video').forEach((el) => el.remove());
-    if (tile && !tile.querySelector('video')) tile.classList.remove('has-video');
+    const mst = publication.track.mediaStreamTrack;
+    if (mst) mst.onended = () => stopScreenShareUI();
   }
 });
 
@@ -1407,6 +1737,15 @@ function startRecordingKeybind(button, action) {
 
 keybindMuteBtn.addEventListener('click', () => startRecordingKeybind(keybindMuteBtn, 'muteSelf'));
 keybindDeafenBtn.addEventListener('click', () => startRecordingKeybind(keybindDeafenBtn, 'deafen'));
+
+async function clearKeybind(button, action) {
+  await window.vortex.setShortcut(action, null);
+  keybinds[action] = '';
+  button.textContent = 'Definir atalho';
+  saveDevicePrefs();
+}
+keybindMuteClearBtn.addEventListener('click', () => clearKeybind(keybindMuteBtn, 'muteSelf'));
+keybindDeafenClearBtn.addEventListener('click', () => clearKeybind(keybindDeafenBtn, 'deafen'));
 
 window.vortex.onShortcut((action) => {
   if (action === 'muteSelf') {
@@ -1501,6 +1840,7 @@ modalTabs.forEach((btn) => btn.addEventListener('click', () => switchModalTab(bt
 function openSettingsModal(defaultTab) {
   settingsModalOverlay.hidden = false;
   populateDeviceSelects();
+  openProfilePane();
   if (myPermissions.manageChannels) renderManageChannels();
   if (myPermissions.manageRoles) renderRolesTab();
   switchModalTab(defaultTab || 'voice');

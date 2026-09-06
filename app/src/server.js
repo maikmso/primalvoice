@@ -1,8 +1,10 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const { AccessToken, RoomServiceClient } = require('livekit-server-sdk');
 const store = require('./store');
 
@@ -37,6 +39,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Upload de imagens/vídeos do chat de texto. Fica salvo no disco do próprio
+// servidor — atenção: no plano gratuito do Render o disco é temporário
+// (some quando o serviço reinicia ou "dorme" por muito tempo), então trate
+// isso como um espaço de conversa do momento, não um arquivo permanente.
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').slice(0, 10).replace(/[^a-zA-Z0-9.]/g, '');
+      cb(null, `${crypto.randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\/|^video\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Só é permitido enviar imagens ou vídeos.'));
+  },
+});
 
 // --- "Crachá" de sessão (não é login de verdade, só prova quem é quem nas
 // rotas de administração depois do /api/token). Formato: base64(identity).assinatura
@@ -283,6 +308,22 @@ app.post('/api/moderation/kick', requireAuth, requirePermission('kickMembers'), 
     console.error('Erro ao expulsar participante:', err);
     res.status(500).json({ error: 'Não consegui expulsar essa pessoa (talvez ela já tenha saído).' });
   }
+});
+
+// Recebe uma imagem/vídeo do chat de texto e devolve a URL pra ser mandada
+// como mensagem (o arquivo em si não passa pelo canal de dados do LiveKit,
+// só a URL — assim não trava com arquivos grandes).
+app.post('/api/upload', requireAuth, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      const msg =
+        err.code === 'LIMIT_FILE_SIZE' ? 'Arquivo muito grande (máx. 25MB).' : err.message || 'Erro ao enviar arquivo.';
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    const type = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+    res.json({ url: `/uploads/${req.file.filename}`, type, name: req.file.originalname });
+  });
 });
 
 app.listen(PORT, () => {

@@ -85,6 +85,12 @@ function createTray() {
   tray.on('click', () => mainWindow.show());
 }
 
+// Guarda a escolha feita no seletor próprio do app (tela/janela + com ou sem
+// áudio) entre o clique em "Compartilhar" e o getDisplayMedia() que o
+// LiveKit dispara logo em seguida — é assim que o Electron sabe qual fonte
+// usar, já que ele mesmo não tem UI de escolha quando useSystemPicker:false.
+let pendingScreenShareChoice = null;
+
 app.whenReady().then(async () => {
   // Autoriza pedidos de câmera/mic/tela sem o Electron bloquear silenciosamente.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
@@ -95,14 +101,18 @@ app.whenReady().then(async () => {
   });
 
   // Necessário pro getDisplayMedia() (compartilhar tela) funcionar no Electron.
-  // useSystemPicker mostra o seletor nativo do Windows (escolher janela/tela).
+  // useSystemPicker:false porque temos nosso próprio seletor (tela/janela +
+  // com/sem áudio do sistema) na tela de "Compartilhar tela" do app.
   session.defaultSession.setDisplayMediaRequestHandler(
     (_request, callback) => {
       desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
-        callback({ video: sources[0], audio: 'loopback' });
+        const choice = pendingScreenShareChoice;
+        pendingScreenShareChoice = null;
+        const chosen = (choice && sources.find((s) => s.id === choice.sourceId)) || sources[0];
+        callback({ video: chosen, audio: choice && choice.withAudio ? 'loopback' : undefined });
       });
     },
-    { useSystemPicker: true }
+    { useSystemPicker: false }
   );
 
   await startLocalServer();
@@ -155,6 +165,33 @@ function registerShortcut(action, accelerator) {
 }
 
 ipcMain.handle('shortcuts:set', (_event, { action, accelerator }) => registerShortcut(action, accelerator));
+
+// Lista telas e janelas disponíveis pra compartilhar, com miniatura, pro
+// seletor próprio do app (estilo Discord: escolher tela 1, tela 2, janela X...).
+ipcMain.handle('screenshare:list-sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 320, height: 180 },
+    fetchWindowIcons: true,
+  });
+  let screenCount = 0;
+  return sources.map((s) => {
+    const isScreen = s.id.startsWith('screen:');
+    if (isScreen) screenCount += 1;
+    return {
+      id: s.id,
+      kind: isScreen ? 'screen' : 'window',
+      name: isScreen ? `Tela ${screenCount}` : s.name,
+      thumbnail: s.thumbnail && !s.thumbnail.isEmpty() ? s.thumbnail.toDataURL() : '',
+      appIcon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : '',
+    };
+  });
+});
+
+ipcMain.handle('screenshare:choose', (_event, choice) => {
+  pendingScreenShareChoice = choice && choice.sourceId ? choice : null;
+  return true;
+});
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();

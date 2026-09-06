@@ -106,8 +106,8 @@
           </div>
 
           <div class="user-info-row">
-            <span class="avatar" id="self-avatar"></span>
-            <div class="user-info-text">
+            <button type="button" class="avatar avatar-btn" id="self-avatar" title="Editar perfil"></button>
+            <div class="user-info-text user-info-clickable" id="self-name-btn" title="Editar perfil">
               <span class="user-name" id="self-name"></span>
               <span class="user-status">Online</span>
             </div>
@@ -136,6 +136,10 @@
       <div id="text-view" class="text-view">
         <div id="chat-messages" class="chat-messages"></div>
         <form id="chat-form" class="chat-form">
+          <button type="button" id="chat-attachment-btn" class="chat-attachment-btn" title="Enviar imagem ou vídeo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </button>
+          <input type="file" id="chat-attachment-input" accept="image/*,video/*" hidden />
           <input id="chat-input" type="text" placeholder="Conversar em #geral" maxlength="500" autocomplete="off" />
         </form>
       </div>
@@ -159,6 +163,7 @@
     <div class="modal">
       <nav class="modal-tabs">
         <button class="modal-tab active" data-tab="voice">Voz e Vídeo</button>
+        <button class="modal-tab" data-tab="profile">Perfil</button>
         <button class="modal-tab" data-tab="keybinds">Atalhos</button>
         <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
         <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
@@ -179,16 +184,41 @@
           <p class="modal-hint">Cancelamento de eco e redução de ruído já ficam ligados automaticamente, e o vídeo/tela usam a maior qualidade que o LiveKit permite.</p>
         </section>
 
+        <section class="modal-pane" data-pane="profile">
+          <h2>Seu perfil</h2>
+          <div class="profile-avatar-row">
+            <span class="avatar profile-avatar-preview" id="profile-avatar-preview"></span>
+            <div class="profile-avatar-buttons">
+              <button type="button" class="secondary-btn" id="profile-avatar-change-btn">Alterar foto</button>
+              <button type="button" class="keybind-clear-btn" id="profile-avatar-remove-btn">Remover foto</button>
+              <input type="file" id="profile-avatar-input" accept="image/*" hidden />
+            </div>
+          </div>
+          <label class="modal-field profile-status-field">Status
+            <input type="text" id="profile-status-input" maxlength="60" placeholder="Ex: jogando, ausente, etc." />
+          </label>
+          <div class="profile-actions">
+            <button type="button" class="secondary-btn" id="profile-save-btn">Salvar</button>
+          </div>
+          <p class="modal-hint">Sua foto e status aparecem pros outros só enquanto você estiver conectado, e ficam salvos aqui no seu PC.</p>
+        </section>
+
         <section class="modal-pane" data-pane="keybinds">
           <h2>Atalhos de teclado</h2>
           <p class="modal-hint">Funcionam mesmo com o PrimalVoice minimizado. Clique em "Definir" e aperte a combinação que quiser.</p>
           <div class="keybind-row">
             <span>Silenciar meu microfone</span>
-            <button class="keybind-btn" id="keybind-mute-btn" data-action="muteSelf">Definir atalho</button>
+            <div class="keybind-actions">
+              <button class="keybind-btn" id="keybind-mute-btn" data-action="muteSelf">Definir atalho</button>
+              <button type="button" class="keybind-clear-btn" id="keybind-mute-clear-btn" title="Remover atalho">Limpar</button>
+            </div>
           </div>
           <div class="keybind-row">
             <span>Ensurdecer (parar de ouvir todo mundo)</span>
-            <button class="keybind-btn" id="keybind-deafen-btn" data-action="deafen">Definir atalho</button>
+            <div class="keybind-actions">
+              <button class="keybind-btn" id="keybind-deafen-btn" data-action="deafen">Definir atalho</button>
+              <button type="button" class="keybind-clear-btn" id="keybind-deafen-clear-btn" title="Remover atalho">Limpar</button>
+            </div>
           </div>
         </section>
 
@@ -220,6 +250,30 @@
         </section>
       </div>
       <button id="settings-modal-close" class="modal-close-btn" title="Fechar">✕</button>
+    </div>
+  </div>
+
+  <div id="sharepick-overlay" class="sharepick-overlay" hidden>
+    <div class="sharepick-modal">
+      <div class="sharepick-header">
+        <h2>O que você quer compartilhar?</h2>
+        <p>Escolha uma tela, janela ou jogo aberto.</p>
+      </div>
+      <div class="sharepick-tabs">
+        <button type="button" class="sharepick-tab active" data-kind="screen">Telas</button>
+        <button type="button" class="sharepick-tab" data-kind="window">Janelas e apps</button>
+      </div>
+      <div class="sharepick-grid" id="sharepick-grid"></div>
+      <div class="sharepick-footer">
+        <label class="sharepick-audio-toggle">
+          <input type="checkbox" id="sharepick-audio-checkbox" />
+          Compartilhar áudio do computador
+        </label>
+        <div class="sharepick-actions">
+          <button type="button" class="keybind-clear-btn" id="sharepick-cancel-btn">Cancelar</button>
+          <button type="button" class="secondary-btn" id="sharepick-confirm-btn" disabled>Compartilhar</button>
+        </div>
+      </div>
     </div>
   </div>
 
