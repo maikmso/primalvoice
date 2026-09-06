@@ -2652,4 +2652,25 @@ updateBannerDismiss.addEventListener('click', () => {
   updateBanner.hidden = true;
 });
 
-init();
+function hideBootSplash() {
+  const splash = document.getElementById('boot-splash');
+  if (!splash) return;
+  splash.classList.add('boot-splash-hide');
+  setTimeout(() => {
+    splash.hidden = true;
+  }, 450);
+}
+
+// tela de abertura (igual Discord) fica visível pelo menos um tempinho,
+// mesmo que o app carregue rapidinho, pra dar tempo de ver a animação
+(async () => {
+  const startedAt = Date.now();
+  const MIN_SPLASH_MS = 900;
+  try {
+    await init();
+  } finally {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < MIN_SPLASH_MS) await new Promise((r) => setTimeout(r, MIN_SPLASH_MS - elapsed));
+    hideBootSplash();
+  }
+})();

@@ -143,6 +143,105 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
+/* tela de abertura do PrimalVoice (igual aquela do Discord quando abre
+   pela primeira vez no dia) — logo com uma respirada, faíscas piscando
+   ao redor e uma gradezinha de pontos por baixo, tudo bem sutil */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  transition: opacity 0.4s ease;
+}
+.boot-splash.boot-splash-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-splash-card {
+  position: relative;
+  width: 220px;
+  height: 260px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, var(--panel), var(--surface-deep));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  overflow: hidden;
+}
+.boot-splash-logo {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  animation: boot-logo-bounce 1.6s ease-in-out infinite;
+  position: relative;
+  z-index: 2;
+}
+.boot-splash-text {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  animation: boot-text-pulse 1.6s ease-in-out infinite;
+  position: relative;
+  z-index: 2;
+}
+@keyframes boot-logo-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.05); }
+}
+@keyframes boot-text-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.boot-splash-sparkles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.boot-splash-sparkles span {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  opacity: 0;
+  animation: boot-sparkle 2.2s ease-in-out infinite;
+}
+.boot-splash-sparkles span:nth-child(1) { top: 28%; left: 26%; animation-delay: 0s; }
+.boot-splash-sparkles span:nth-child(2) { top: 22%; left: 68%; animation-delay: 0.4s; }
+.boot-splash-sparkles span:nth-child(3) { top: 40%; left: 78%; animation-delay: 0.9s; }
+.boot-splash-sparkles span:nth-child(4) { top: 46%; left: 18%; animation-delay: 1.3s; }
+.boot-splash-sparkles span:nth-child(5) { top: 18%; left: 46%; animation-delay: 1.7s; }
+@keyframes boot-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.boot-splash-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -20px;
+  height: 90px;
+  background-image: radial-gradient(var(--border) 1.4px, transparent 1.4px);
+  background-size: 14px 14px;
+  opacity: 0.6;
+  -webkit-mask-image: linear-gradient(to top, black, transparent);
+  mask-image: linear-gradient(to top, black, transparent);
+  animation: boot-grid-drift 6s linear infinite;
+  z-index: 1;
+}
+@keyframes boot-grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: -140px -140px; }
+}
+
 [hidden] { display: none !important; }
 
 #settings-screen,
