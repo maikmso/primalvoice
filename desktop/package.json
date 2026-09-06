@@ -1,6 +1,6 @@
 {
   "name": "vortex-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "PrimalVoice - app de voz e compartilhamento de tela para a galera",
   "author": "PrimalVoice",
@@ -10,6 +10,7 @@
     "dist:win": "electron-builder --win --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "express": "^4.19.2"
   },
   "devDependencies": {
@@ -28,10 +29,21 @@
       "buildResources": "build",
       "output": "dist"
     },
-    "publish": null,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "maikmso",
+        "repo": "primalvoice"
+      }
+    ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.png"
     },
@@ -39,7 +51,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   }
 }

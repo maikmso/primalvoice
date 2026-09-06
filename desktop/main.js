@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, session, desktopCapturer, ipcMain, nativ
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let tray;
@@ -119,6 +120,11 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
 
+  // Primeira checagem alguns segundos após abrir (não trava a inicialização),
+  // depois confere de novo a cada 30 minutos enquanto o app estiver aberto.
+  setTimeout(checkForUpdates, 5000);
+  setInterval(checkForUpdates, 30 * 60 * 1000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else mainWindow.show();
@@ -195,4 +201,39 @@ ipcMain.handle('screenshare:choose', (_event, choice) => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+});
+
+// Atualização automática, igual ao Discord: o app confere sozinho se tem uma
+// versão nova publicada como Release no GitHub, baixa em segundo plano e
+// avisa a pessoa (banner "Nova atualização disponível") pra reiniciar quando
+// quiser. Só funciona no instalador empacotado (app.isPackaged) — em
+// desenvolvimento não existe update pra checar.
+function sendUpdateStatus(status, extra = {}) {
+  if (mainWindow) mainWindow.webContents.send('update-status', { status, ...extra });
+}
+
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('checking-for-update', () => sendUpdateStatus('checking'));
+autoUpdater.on('update-available', (info) => sendUpdateStatus('available', { version: info.version }));
+autoUpdater.on('update-not-available', () => sendUpdateStatus('not-available'));
+autoUpdater.on('download-progress', (progress) => sendUpdateStatus('downloading', { percent: Math.round(progress.percent) }));
+autoUpdater.on('update-downloaded', (info) => sendUpdateStatus('downloaded', { version: info.version }));
+autoUpdater.on('error', (err) => sendUpdateStatus('error', { message: err?.message || String(err) }));
+
+function checkForUpdates() {
+  if (!app.isPackaged) return; // sem update em modo desenvolvimento
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[primalvoice] erro ao checar atualização:', err);
+  });
+}
+
+ipcMain.handle('update:check', () => {
+  checkForUpdates();
+  return true;
+});
+
+ipcMain.handle('update:install', () => {
+  autoUpdater.quitAndInstall();
 });

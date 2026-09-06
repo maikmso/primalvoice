@@ -2123,4 +2123,44 @@ function renderRoleMembers() {
   });
 }
 
+// Atualização automática (igual Discord): o processo principal confere
+// sozinho se tem versão nova no GitHub, baixa em segundo plano, e aqui a
+// gente só mostra o banner e reage ao clique de "Reiniciar e instalar".
+const updateBanner = document.getElementById('update-banner');
+const updateBannerText = document.getElementById('update-banner-text');
+const updateBannerBtn = document.getElementById('update-banner-btn');
+const updateBannerDismiss = document.getElementById('update-banner-dismiss');
+let updateReadyToInstall = false;
+
+function showUpdateBanner(text, { showButton = false } = {}) {
+  updateBannerText.textContent = text;
+  updateBannerBtn.hidden = !showButton;
+  updateBanner.hidden = false;
+}
+
+if (window.vortex && window.vortex.onUpdateStatus) {
+  window.vortex.onUpdateStatus(({ status, version, percent, message }) => {
+    if (status === 'available') {
+      showUpdateBanner(`Baixando atualização (v${version})...`);
+    } else if (status === 'downloading') {
+      showUpdateBanner(`Baixando atualização... ${percent || 0}%`);
+    } else if (status === 'downloaded') {
+      updateReadyToInstall = true;
+      showUpdateBanner(`Nova atualização disponível (v${version})`, { showButton: true });
+    } else if (status === 'error') {
+      console.warn('[primalvoice] erro ao atualizar:', message);
+    }
+    // 'checking' e 'not-available' não precisam de UI — o app já fica quieto.
+  });
+}
+
+updateBannerBtn.addEventListener('click', () => {
+  if (!updateReadyToInstall) return;
+  window.vortex.installUpdate();
+});
+
+updateBannerDismiss.addEventListener('click', () => {
+  updateBanner.hidden = true;
+});
+
 init();

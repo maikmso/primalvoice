@@ -15,4 +15,13 @@ contextBridge.exposeInMainWorld('vortex', {
   // Avisa o processo principal qual fonte (e se com áudio) usar na próxima
   // chamada de getDisplayMedia — precisa ser chamado bem antes.
   chooseScreenShareSource: (choice) => ipcRenderer.invoke('screenshare:choose', choice),
+  // Atualização automática (igual Discord): checar manualmente, instalar a
+  // que já foi baixada, e escutar o status (checando/disponível/baixando/pronta/erro).
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('update-status', listener);
+    return () => ipcRenderer.removeListener('update-status', listener);
+  },
 });
