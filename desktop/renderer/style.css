@@ -791,8 +791,10 @@ html, body {
 .member-list.no-transition { transition: none; }
 .member-list.collapsed { padding: 16px 0; }
 .member-list.collapsed > * { visibility: hidden; }
-.member-list-header {
-  padding: 0 8px 8px;
+/* lista agrupada por cargo/online/offline, igual Discord */
+.member-section { margin-bottom: 16px; }
+.member-section-header {
+  padding: 0 8px 4px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -804,6 +806,35 @@ html, body {
   font-size: 14px;
 }
 .member-list .member-row { font-size: 14px; color: var(--text); }
+.member-list .member-row:hover,
+.member-list .offline-member-row:hover {
+  background: var(--hover-strong);
+  cursor: pointer;
+}
+.offline-member-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--muted);
+  opacity: 0.5;
+}
+.offline-member-row .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--tile-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  filter: grayscale(1);
+}
 
 .member-name {
   flex: 1;
@@ -898,10 +929,10 @@ html, body {
 }
 .ctrl-icon svg { width: 18px; height: 18px; }
 .ctrl-icon:hover { background: var(--hover-strong); color: var(--text); }
-/* efeito de "mexida" ao passar o mouse (igual Discord) e ao clicar
-   (mic/fone mudam de estado com uma animaçãozinha em vez de só trocar cor) */
-.ctrl-icon:hover { animation: icon-kick 0.35s ease; }
-.ctrl-icon.icon-kick { animation: icon-kick 0.35s ease; }
+/* efeito de "mexida" ao passar o mouse (igual Discord) e ao clicar — só o
+   ÍCONE de dentro se mexe (gira/balança), o quadrado do botão fica parado */
+.ctrl-icon:hover svg { animation: icon-kick 0.35s ease; }
+.ctrl-icon svg.icon-kick { animation: icon-kick 0.35s ease; }
 @keyframes icon-kick {
   0% { transform: scale(1) rotate(0deg); }
   30% { transform: scale(1.22) rotate(-10deg); }
@@ -929,11 +960,13 @@ html, body {
   padding: 8px 8px 8px 10px;
 }
 .voice-status-icon { display: flex; flex-shrink: 0; cursor: default; position: relative; }
+/* position:fixed (não absolute) de propósito — a barra de voz fica dentro
+   de um painel com overflow:hidden (pro redimensionar/recolher funcionar),
+   que cortava o topo do balão quando ele tentava "escapar" pra cima. Com
+   fixed + coordenadas calculadas no JS (mouseenter), ele sempre aparece
+   por cima de tudo, sem ser cortado. */
 .voice-quality-tooltip {
-  position: absolute;
-  bottom: calc(100% + 9px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
   background: var(--surface-raised);
   color: var(--text);
   border: 1px solid var(--border);
@@ -947,7 +980,7 @@ html, body {
   pointer-events: none;
   transition: opacity 0.12s ease;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-  z-index: 50;
+  z-index: 3000;
 }
 .voice-quality-tooltip::after {
   content: '';
@@ -958,7 +991,7 @@ html, body {
   border: 5px solid transparent;
   border-top-color: var(--surface-raised);
 }
-.voice-status-icon:hover .voice-quality-tooltip { opacity: 1; visibility: visible; }
+.voice-quality-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
 .voice-status-icon svg { width: 16px; height: 16px; }
 .voice-status-icon .quality-bar { fill: var(--quality-dim); transition: fill 0.2s ease; }
 /* excelente: 3 barrinhas verdes */

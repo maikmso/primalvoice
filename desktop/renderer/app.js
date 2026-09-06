@@ -41,7 +41,7 @@ joinModeToggle.addEventListener('click', () => {
 });
 
 const grid = document.getElementById('grid');
-const participantCount = document.getElementById('participant-count');
+const memberSidebarGroups = document.getElementById('member-sidebar-groups');
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
 const shareBtn = document.getElementById('share-btn');
@@ -61,6 +61,20 @@ const voiceStatusChannel = document.getElementById('voice-status-channel');
 const voiceStatusTitle = document.getElementById('voice-status-title');
 const voiceQualityTooltip = document.getElementById('voice-quality-tooltip');
 const voiceQualityIcon = document.getElementById('voice-quality-icon');
+
+// posiciona o balão do ping em coordenadas fixas da tela (calculadas na
+// hora), em vez de depender de "escapar" do painel — o painel da barra
+// lateral tem overflow:hidden e cortava o topo do balão
+voiceQualityIcon.addEventListener('mouseenter', () => {
+  const rect = voiceQualityIcon.getBoundingClientRect();
+  voiceQualityTooltip.style.left = `${rect.left + rect.width / 2}px`;
+  voiceQualityTooltip.style.top = `${rect.top - 9}px`;
+  voiceQualityTooltip.style.transform = 'translate(-50%, -100%)';
+  voiceQualityTooltip.classList.add('tooltip-visible');
+});
+voiceQualityIcon.addEventListener('mouseleave', () => {
+  voiceQualityTooltip.classList.remove('tooltip-visible');
+});
 const channelHeaderIcon = document.getElementById('channel-header-icon');
 const channelHeaderName = document.getElementById('channel-header-name');
 const textView = document.getElementById('text-view');
@@ -160,11 +174,12 @@ let isDeafened = false;
 let micMutedBeforeDeafen = false;
 
 function animateIconKick(el) {
-  if (!el) return;
-  el.classList.remove('icon-kick');
-  void el.offsetWidth; // força reflow pra poder reiniciar a animação
-  el.classList.add('icon-kick');
-  el.addEventListener('animationend', () => el.classList.remove('icon-kick'), { once: true });
+  const svg = el?.querySelector('svg');
+  if (!svg) return;
+  svg.classList.remove('icon-kick');
+  void svg.offsetWidth; // força reflow pra poder reiniciar a animação
+  svg.classList.add('icon-kick');
+  svg.addEventListener('animationend', () => svg.classList.remove('icon-kick'), { once: true });
 }
 let amISpeaking = false;
 
@@ -862,6 +877,8 @@ function renderChannelLists() {
     wrap.appendChild(membersEl);
     voiceChannelsList.appendChild(wrap);
   });
+
+  renderMemberSidebar();
 }
 
 function switchTextChannel(channelId) {
@@ -1529,9 +1546,89 @@ function clearMembers() {
   memberListItems.innerHTML = '';
 }
 
-function updateParticipantCount() {
-  if (!lobbyRoom) return;
-  participantCount.textContent = String(lobbyRoom.numParticipants + 1);
+// linha (só visual) pra quem não está online agora — clicável, mostra o
+// perfil salvo, mas sem os badges de câmera/mic/etc. que só existem em
+// chamada de voz
+function buildOfflineMemberRow(identity) {
+  const row = document.createElement('div');
+  row.className = 'offline-member-row';
+  row.dataset.identity = identity;
+  row.dataset.name = displayNameFor(identity);
+
+  const avatar = document.createElement('span');
+  avatar.className = 'avatar';
+  avatar.textContent = displayNameFor(identity).charAt(0).toUpperCase();
+  applyAvatarToEl(avatar, identity);
+  row.appendChild(avatar);
+
+  const name = document.createElement('span');
+  name.className = 'member-name';
+  name.textContent = displayNameFor(identity);
+  row.appendChild(name);
+
+  return row;
+}
+
+// lista de membros à direita, agrupada por cargo (maior cargo primeiro),
+// com quem não tem cargo em "Online" e quem não está conectado agora em
+// "Offline" — igual o Discord
+function renderMemberSidebar() {
+  if (!memberSidebarGroups) return;
+  const onlineIdentities = new Set(
+    Array.from(memberListItems.querySelectorAll('.member-row')).map((el) => el.dataset.identity)
+  );
+
+  const allKnown = new Set(Object.keys(serverState.profiles || {}));
+  onlineIdentities.forEach((id) => allKnown.add(id));
+  if (serverState.ownerIdentity) allKnown.add(serverState.ownerIdentity);
+
+  const roleGroups = [];
+  const roleGroupById = new Map();
+  (serverState.roles || []).forEach((role) => {
+    const group = { role, identities: [] };
+    roleGroups.push(group);
+    roleGroupById.set(role.id, group);
+  });
+  const onlineNoRole = [];
+
+  allKnown.forEach((identity) => {
+    if (!onlineIdentities.has(identity)) return;
+    const assigned = serverState.memberRoles[identity] || [];
+    const topRoleId = assigned.find((rid) => roleGroupById.has(rid));
+    if (topRoleId) roleGroupById.get(topRoleId).identities.push(identity);
+    else onlineNoRole.push(identity);
+  });
+
+  const offline = Array.from(allKnown).filter((id) => !onlineIdentities.has(id));
+
+  const byName = (a, b) => displayNameFor(a).localeCompare(displayNameFor(b));
+
+  memberSidebarGroups.innerHTML = '';
+
+  const addSection = (label, color, identities, opts = {}) => {
+    if (identities.length === 0) return;
+    const section = document.createElement('div');
+    section.className = 'member-section';
+
+    const header = document.createElement('div');
+    header.className = 'member-section-header';
+    if (color) header.style.color = color;
+    header.textContent = `${label} — ${identities.length}`;
+    section.appendChild(header);
+
+    identities.sort(byName).forEach((identity) => {
+      const row = opts.offline
+        ? buildOfflineMemberRow(identity)
+        : buildMemberRow({ identity, name: displayNameFor(identity) }, { showStatus: true });
+      section.appendChild(row);
+    });
+
+    memberSidebarGroups.appendChild(section);
+  };
+
+  roleGroups.forEach(({ role, identities }) => addSection(role.name, role.color, identities));
+  addSection('Online', null, onlineNoRole);
+  addSection('Offline', null, offline, { offline: true });
 }
 
 function setSpeaking(identity, isSpeaking) {
@@ -1795,6 +1892,25 @@ memberListItems.addEventListener('click', (e) => {
   openProfileCard(e.clientX, e.clientY, row.dataset.identity);
 });
 
+// a lista visual agrupada (por cargo/online/offline) é um espelho da lista
+// interna acima — repete os mesmos eventos pra abrir perfil/menu funcionar
+// nela também
+memberSidebarGroups.addEventListener('contextmenu', (e) => {
+  const row = e.target.closest('.member-row');
+  if (!row || !row.dataset.identity) return;
+  e.preventDefault();
+  openContextMenu(e.clientX, e.clientY, participantFromRow(row));
+});
+
+memberSidebarGroups.addEventListener('click', (e) => {
+  const onlineRow = e.target.closest('.member-row');
+  const offlineRow = e.target.closest('.offline-member-row');
+  const identity = onlineRow?.dataset.identity || offlineRow?.dataset.identity;
+  if (!identity) return;
+  e.stopPropagation();
+  openProfileCard(e.clientX, e.clientY, identity);
+});
+
 voiceChannelsList.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.member-row');
   if (!row || !row.dataset.identity) return;
@@ -1893,7 +2009,7 @@ joinForm.addEventListener('submit', async (e) => {
 
     lobbyRoom.on(RoomEvent.ParticipantConnected, (participant) => {
       addMember(participant);
-      updateParticipantCount();
+      renderMemberSidebar();
       broadcastProfile();
       if (activeVoiceChannelId) {
         broadcastVoicePresence('join', activeVoiceChannelId);
@@ -1902,7 +2018,7 @@ joinForm.addEventListener('submit', async (e) => {
     });
     lobbyRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeMember(participant);
-      updateParticipantCount();
+      renderMemberSidebar();
       voicePresence.forEach((map) => map.delete(participant.identity));
       renderChannelLists();
     });
@@ -1981,7 +2097,7 @@ joinForm.addEventListener('submit', async (e) => {
 
     joinScreen.hidden = true;
     roomScreen.hidden = false;
-    updateParticipantCount();
+    renderMemberSidebar();
   } catch (err) {
     joinError.textContent = err.message || 'Erro ao entrar na sala.';
     joinError.hidden = false;
