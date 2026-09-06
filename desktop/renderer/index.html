@@ -38,15 +38,24 @@
       <p class="subtitle">Sala de voz e compartilhamento de tela só da galera</p>
       <form id="join-form">
         <label>
-          Seu nome
+          Nome de usuário
           <input id="name-input" type="text" maxlength="24" required autocomplete="off" />
         </label>
-        <label>
-          Senha da sala
+        <label id="join-password-label">
+          Sua senha
           <input id="password-input" type="password" required autocomplete="off" />
         </label>
-        <button type="submit">Entrar</button>
+        <label id="join-password-confirm-label" hidden>
+          Confirmar senha
+          <input id="password-confirm-input" type="password" autocomplete="off" />
+        </label>
+        <label id="join-room-password-label" hidden>
+          Senha de convite da sala
+          <input id="room-password-input" type="password" autocomplete="off" />
+        </label>
+        <button type="submit" id="join-submit-btn">Entrar</button>
       </form>
+      <button type="button" id="join-mode-toggle" class="link-btn">Ainda não tem conta? Criar conta</button>
       <p id="join-error" class="error" hidden></p>
     </div>
   </div>
@@ -180,6 +189,7 @@
         <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
         <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
         <button id="exit-app-btn" class="modal-tab-danger" title="Voltar pra tela de login">Sair do PrimalVoice</button>
+        <div class="modal-version" id="modal-version"></div>
       </nav>
       <div class="modal-body">
         <section class="modal-pane active" data-pane="voice">

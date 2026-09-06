@@ -107,10 +107,42 @@ app.get('/api/config', (req, res) => {
   res.json({ livekitUrl: LIVEKIT_URL });
 });
 
-// Gera um token de acesso à sala, se o nome e a senha da galera baterem.
-// Quem entra com o usuário+senha do dono (OWNER_NAME + OWNER_PASSWORD) vira
-// (ou continua sendo) o dono do servidor — o dono manda em cargos/canais
-// independente de qual senha usar depois.
+// Cria uma conta nova (usuário + senha própria), exigindo a senha de convite
+// da sala (ROOM_PASSWORD) — assim só quem já tem o convite consegue criar
+// conta, mas depois de criada a pessoa entra sempre com a própria senha.
+app.post('/api/register', async (req, res) => {
+  const { name, password, roomPassword } = req.body || {};
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json({ error: 'Informe um nome de usuário.' });
+  }
+  const cleanName = name.trim();
+  if (cleanName.length > 24) {
+    return res.status(400).json({ error: 'Nome muito longo (máx. 24 caracteres).' });
+  }
+  if (!password || typeof password !== 'string' || password.length < 4) {
+    return res.status(400).json({ error: 'A senha precisa ter pelo menos 4 caracteres.' });
+  }
+  if (roomPassword !== ROOM_PASSWORD) {
+    return res.status(401).json({ error: 'Senha de convite da sala incorreta.' });
+  }
+  if (OWNER_NAME && cleanName.toLowerCase() === OWNER_NAME.toLowerCase()) {
+    return res.status(400).json({ error: 'Esse nome já é reservado pro dono do servidor.' });
+  }
+  if (store.findUser(cleanName)) {
+    return res.status(409).json({ error: 'Esse nome de usuário já existe. Escolha outro ou faça login.' });
+  }
+
+  store.createUser(cleanName, password);
+  await issueTokenAndRespond(cleanName, res);
+});
+
+// Gera um token de acesso à sala, se usuário e senha baterem. Quem entra com
+// o usuário+senha do dono (OWNER_NAME + OWNER_PASSWORD) vira (ou continua
+// sendo) o dono do servidor — o dono manda em cargos/canais independente de
+// qual senha usar depois. Pra todo mundo, é login de conta de verdade agora
+// (senha própria verificada contra o hash salvo), não mais uma senha
+// compartilhada da sala.
 app.post('/api/token', async (req, res) => {
   const { name, password } = req.body || {};
 
@@ -128,23 +160,33 @@ app.post('/api/token', async (req, res) => {
     password === OWNER_PASSWORD &&
     cleanName.toLowerCase() === OWNER_NAME.toLowerCase();
 
-  if (!isOwnerLogin && password !== ROOM_PASSWORD) {
-    return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
-  }
-
-  // Identidade fixa por nome (não aleatória): se a mesma pessoa clicar em
-  // "Entrar" de novo ou reconectar, o LiveKit reconhece que é a mesma
-  // identidade e derruba a sessão antiga sozinho, em vez de deixar
-  // "fantasmas" acumulando na sala. No login do dono, a identidade é sempre
-  // normalizada pro OWNER_NAME (não importa a caixa alta/baixa digitada).
-  const identity = isOwnerLogin ? OWNER_NAME : cleanName;
-
   if (isOwnerLogin) {
     store.mutate((state) => {
-      state.ownerIdentity = identity;
+      state.ownerIdentity = OWNER_NAME;
     });
+    // O dono também ganha um registro de perfil (foto/banner/nome/status),
+    // só que sem senha própria — o login do dono sempre passa pelo
+    // OWNER_PASSWORD do .env, nunca pela senha guardada aqui.
+    if (!store.findUser(OWNER_NAME)) store.createUser(OWNER_NAME, crypto.randomBytes(24).toString('hex'));
+    return issueTokenAndRespond(OWNER_NAME, res);
   }
 
+  const user = store.findUser(cleanName);
+  if (!user) {
+    return res.status(401).json({ error: 'Usuário não encontrado. Crie uma conta primeiro.' });
+  }
+  if (!store.verifyUserPassword(cleanName, password)) {
+    return res.status(401).json({ error: 'Senha incorreta.' });
+  }
+
+  await issueTokenAndRespond(user.identity, res);
+});
+
+// Identidade fixa por nome (não aleatória): se a mesma pessoa clicar em
+// "Entrar" de novo ou reconectar, o LiveKit reconhece que é a mesma
+// identidade e derruba a sessão antiga sozinho, em vez de deixar "fantasmas"
+// acumulando na sala.
+async function issueTokenAndRespond(identity, res) {
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     name: identity,
@@ -164,7 +206,7 @@ app.post('/api/token', async (req, res) => {
     console.error('Erro ao gerar token:', err);
     res.status(500).json({ error: 'Erro interno ao gerar o token.' });
   }
-});
+}
 
 // Token pra entrar num canal de voz específico. Cada canal de voz vira uma
 // sala LiveKit separada de verdade (não só uma etiqueta visual) — assim
@@ -193,7 +235,9 @@ app.post('/api/voice-token', requireAuth, async (req, res) => {
   }
 });
 
-// Estado do servidor: canais, cargos, quem tem qual cargo e minhas permissões
+// Estado do servidor: canais, cargos, quem tem qual cargo, minhas permissões
+// e o perfil (foto/banner/nome/status) de todo mundo que já tem conta — assim
+// dá pra ver o perfil de alguém mesmo que a pessoa não esteja online agora.
 app.get('/api/state', requireAuth, (req, res) => {
   const s = store.getState();
   res.json({
@@ -203,6 +247,37 @@ app.get('/api/state', requireAuth, (req, res) => {
     ownerIdentity: s.ownerIdentity,
     myIdentity: req.identity,
     myPermissions: store.getPermissions(req.identity),
+    profiles: store.getPublicProfiles(),
+  });
+});
+
+// Perfil salvo no servidor (segue a conta entre PCs/dispositivos).
+app.get('/api/profile', requireAuth, (req, res) => {
+  const user = store.findUser(req.identity);
+  if (!user) return res.status(404).json({ error: 'Conta não encontrada.' });
+  res.json({
+    displayName: user.displayName || '',
+    avatar: user.avatar || '',
+    banner: user.banner || '',
+    status: user.status || '',
+  });
+});
+
+app.patch('/api/profile', requireAuth, (req, res) => {
+  const { displayName, status, avatar, banner } = req.body || {};
+  if (typeof avatar === 'string' && avatar.length > store.MAX_IMAGE_LEN) {
+    return res.status(400).json({ error: 'Foto de perfil grande demais.' });
+  }
+  if (typeof banner === 'string' && banner.length > store.MAX_IMAGE_LEN) {
+    return res.status(400).json({ error: 'Banner grande demais.' });
+  }
+  const updated = store.updateUserProfile(req.identity, { displayName, status, avatar, banner });
+  if (!updated) return res.status(404).json({ error: 'Conta não encontrada (o dono do servidor não guarda perfil aqui).' });
+  res.json({
+    displayName: updated.displayName || '',
+    avatar: updated.avatar || '',
+    banner: updated.banner || '',
+    status: updated.status || '',
   });
 });
 

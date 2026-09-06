@@ -896,6 +896,7 @@ html, body {
   cursor: pointer;
 }
 .modal-tab-danger:hover { background: rgba(237, 66, 69, 0.12); }
+.modal-version { text-align: left; padding: 6px 10px 0; font-size: 11px; color: var(--muted); user-select: text; }
 .modal-tab:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
 .modal-tab.active { background: var(--accent-soft); color: var(--text); font-weight: 600; }
 .modal-body {

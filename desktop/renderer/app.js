@@ -13,8 +13,32 @@ const gearBtn = document.getElementById('gear-btn');
 const joinForm = document.getElementById('join-form');
 const nameInput = document.getElementById('name-input');
 const passwordInput = document.getElementById('password-input');
+const passwordConfirmInput = document.getElementById('password-confirm-input');
+const roomPasswordInput = document.getElementById('room-password-input');
+const joinPasswordLabel = document.getElementById('join-password-label');
+const joinPasswordConfirmLabel = document.getElementById('join-password-confirm-label');
+const joinRoomPasswordLabel = document.getElementById('join-room-password-label');
+const joinModeToggle = document.getElementById('join-mode-toggle');
 const joinError = document.getElementById('join-error');
 const joinSubmitBtn = joinForm.querySelector('button[type="submit"]');
+
+// ---------- login x criar conta ----------
+let joinMode = 'login'; // 'login' | 'register'
+function applyJoinMode() {
+  const isRegister = joinMode === 'register';
+  joinPasswordConfirmLabel.hidden = !isRegister;
+  joinRoomPasswordLabel.hidden = !isRegister;
+  passwordConfirmInput.required = isRegister;
+  roomPasswordInput.required = isRegister;
+  joinPasswordLabel.firstChild.textContent = isRegister ? 'Crie uma senha' : 'Sua senha';
+  joinSubmitBtn.textContent = isRegister ? 'Criar conta' : 'Entrar';
+  joinModeToggle.textContent = isRegister ? 'Já tem conta? Entrar' : 'Ainda não tem conta? Criar conta';
+  joinError.hidden = true;
+}
+joinModeToggle.addEventListener('click', () => {
+  joinMode = joinMode === 'login' ? 'register' : 'login';
+  applyJoinMode();
+});
 
 const grid = document.getElementById('grid');
 const participantCount = document.getElementById('participant-count');
@@ -126,6 +150,22 @@ let activeTextChannelId = null;
 let activeVoiceChannelId = null;
 let selectedRoleId = null;
 let isDeafened = false;
+let amISpeaking = false;
+
+// ---------- indicador de voz no ícone da barra de tarefas (igual Discord) ----------
+// Prioridade quando mais de uma coisa é verdade ao mesmo tempo: ensurdecido
+// > mudo > falando > só conectado parado. Sem voiceRoom, tira o indicador.
+function updateVoiceOverlay() {
+  if (!window.vortex?.setVoiceOverlay) return;
+  let status = 'none';
+  if (voiceRoom) {
+    if (isDeafened) status = 'deafened';
+    else if (micBtn.dataset.on !== 'true') status = 'muted';
+    else if (amISpeaking) status = 'speaking';
+    else status = 'idle';
+  }
+  window.vortex.setVoiceOverlay(status);
+}
 let voiceQualityInterval = null;
 
 // ---------- indicador de qualidade da conexão (barrinhas + ping) ----------
@@ -225,6 +265,24 @@ async function fetchServerState() {
   const data = await apiFetch('/api/state');
   serverState = data;
   myPermissions = data.myPermissions || {};
+
+  // Perfil (foto/banner/nome/status) agora é uma conta de verdade guardada
+  // no servidor — segue a pessoa entre PCs/dispositivos. Isso inclui gente
+  // que não está online agora (diferente do broadcast, que só chega pra
+  // quem já está na sala no momento).
+  const profiles = data.profiles || {};
+  for (const [identity, profile] of Object.entries(profiles)) {
+    if (identity === myIdentity) {
+      myAvatarDataUrl = profile.avatar || '';
+      myBannerDataUrl = profile.banner || '';
+      myStatusText = profile.status || '';
+      myDisplayName = profile.displayName || '';
+    } else {
+      memberProfiles.set(identity, profile);
+    }
+    applyProfileEverywhere(identity);
+  }
+
   renderChannelLists();
   renderPermissionGates();
 }
@@ -397,6 +455,21 @@ profileSaveBtn.addEventListener('click', async () => {
   await saveProfileToConfig();
   applyProfileEverywhere(myIdentity);
   broadcastProfile();
+  // Salva no servidor também — assim o perfil segue a conta pra qualquer
+  // outro PC/dispositivo em que a pessoa entrar depois, não só o de agora.
+  try {
+    await apiFetch('/api/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        avatar: myAvatarDataUrl,
+        banner: myBannerDataUrl,
+        status: myStatusText,
+        displayName: myDisplayName,
+      }),
+    });
+  } catch (err) {
+    alert(err.message || 'Não consegui salvar o perfil no servidor (ficou salvo só neste PC por enquanto).');
+  }
   closeSettingsModal();
 });
 
@@ -492,6 +565,13 @@ async function loadPrefsFromConfig(cfg) {
 }
 
 async function init() {
+  const modalVersionEl = document.getElementById('modal-version');
+  if (modalVersionEl && window.vortex?.getAppVersion) {
+    window.vortex.getAppVersion().then((v) => {
+      modalVersionEl.textContent = `PrimalVoice v${v}`;
+    });
+  }
+
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
   loadProfileFromConfig(cfg);
@@ -889,6 +969,8 @@ async function joinVoiceChannel(channelId) {
     const speakingIds = new Set(speakers.map((p) => p.identity));
     const all = [vr.localParticipant, ...vr.remoteParticipants.values()];
     all.forEach((p) => setSpeaking(p.identity, speakingIds.has(p.identity)));
+    amISpeaking = speakingIds.has(vr.localParticipant.identity);
+    updateVoiceOverlay();
   });
   vr.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
     if (participant === vr.localParticipant) setVoiceQuality(quality);
@@ -947,6 +1029,8 @@ async function joinVoiceChannel(channelId) {
   showVoiceView();
   renderChannelLists();
   playSound(joinSound);
+  amISpeaking = false;
+  updateVoiceOverlay();
 }
 
 async function leaveVoiceChannel(opts = {}) {
@@ -963,6 +1047,8 @@ async function leaveVoiceChannel(opts = {}) {
   }
   voiceRoom = null;
   activeVoiceChannelId = null;
+  amISpeaking = false;
+  updateVoiceOverlay();
 
   grid.innerHTML = '';
   grid.classList.remove('has-expanded');
@@ -1288,6 +1374,7 @@ function setDeafened(value, opts = {}) {
     broadcastVoiceStatus();
     playSound(value ? muteSound : unmuteSound); // local, ninguém mais ouve
   }
+  updateVoiceOverlay();
 }
 
 // ---------- lista de membros do servidor ----------
@@ -1695,6 +1782,8 @@ function handleFullDisconnect() {
     }
     voiceRoom = null;
   }
+  amISpeaking = false;
+  updateVoiceOverlay();
   grid.innerHTML = '';
   grid.classList.remove('has-expanded');
   clearMembers();
@@ -1706,7 +1795,8 @@ function handleFullDisconnect() {
   activeTextChannelId = null;
   joining = false;
   joinSubmitBtn.disabled = false;
-  joinSubmitBtn.textContent = 'Entrar';
+  joinMode = 'login';
+  applyJoinMode();
   joinScreen.hidden = false;
   roomScreen.hidden = true;
   closeSettingsModal();
@@ -1718,21 +1808,31 @@ joinForm.addEventListener('submit', async (e) => {
   joining = true;
   joinError.hidden = true;
   joinSubmitBtn.disabled = true;
-  joinSubmitBtn.textContent = 'Entrando...';
+  joinSubmitBtn.textContent = joinMode === 'register' ? 'Criando conta...' : 'Entrando...';
 
   const name = nameInput.value.trim();
   const password = passwordInput.value;
 
   try {
+    if (joinMode === 'register' && password !== passwordConfirmInput.value) {
+      throw new Error('As senhas não são iguais.');
+    }
+
     const configRes = await fetch(`${serverUrl}/api/config`);
     if (!configRes.ok) throw new Error('Não foi possível falar com o servidor.');
     const configData = await configRes.json();
     livekitUrl = configData.livekitUrl;
 
-    const tokenRes = await fetch(`${serverUrl}/api/token`, {
+    const endpoint = joinMode === 'register' ? '/api/register' : '/api/token';
+    const body =
+      joinMode === 'register'
+        ? { name, password, roomPassword: roomPasswordInput.value }
+        : { name, password };
+
+    const tokenRes = await fetch(`${serverUrl}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, password }),
+      body: JSON.stringify(body),
     });
 
     if (!tokenRes.ok) {
@@ -1843,7 +1943,7 @@ joinForm.addEventListener('submit', async (e) => {
     joinError.hidden = false;
     joining = false;
     joinSubmitBtn.disabled = false;
-    joinSubmitBtn.textContent = 'Entrar';
+    joinSubmitBtn.textContent = joinMode === 'register' ? 'Criar conta' : 'Entrar';
   }
 });
 
@@ -1854,6 +1954,7 @@ micBtn.addEventListener('click', async () => {
   micBtn.dataset.on = String(newOn);
   micBtn.classList.toggle('off', !newOn);
   playSound(newOn ? unmuteSound : muteSound); // só toca pra quem clicou, não é avisado pros outros
+  updateVoiceOverlay();
 });
 
 const deafenBtn = document.getElementById('deafen-btn');

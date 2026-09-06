@@ -1,6 +1,6 @@
 {
   "name": "vortex-desktop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "PrimalVoice - app de voz e compartilhamento de tela para a galera",
   "author": "PrimalVoice",
@@ -23,7 +23,9 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "build/icon.png",
+      "build/overlay/**/*"
     ],
     "directories": {
       "buildResources": "build",

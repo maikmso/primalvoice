@@ -8,6 +8,23 @@ let mainWindow;
 let tray;
 let localPort = 0;
 
+// Só deixa um PrimalVoice aberto por vez — abrir de novo (ex: clicou 2x no
+// atalho sem perceber que já tinha um aberto) só foca a janela existente em
+// vez de subir um segundo processo inteiro do Chromium do zero (isso sozinho
+// evita gastar o dobro de RAM/CPU à toa).
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  return;
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
 const configPath = path.join(app.getPath('userData'), 'config.json');
 const iconPath = path.join(__dirname, 'build', 'icon.png');
 
@@ -48,11 +65,26 @@ function createWindow() {
     title: 'PrimalVoice',
     icon: iconPath,
     autoHideMenuBar: true,
+    // Preenche com a cor do tema escuro em vez de branco — evita o "flash"
+    // de tela branca antes da página carregar.
+    backgroundColor: '#1e1f22',
+    // Só mostra a janela quando o conteúdo já está pronto pra desenhar —
+    // sem isso o Chromium mostra uma janela vazia por uma fração de
+    // segundo, o que passa a sensação de estar mais lento do que é.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // O chat é rápido e informal, não é editor de texto — desliga o
+      // corretor ortográfico do Chromium, que fica de olho em toda tecla
+      // digitada e consome memória/CPU à toa.
+      spellcheck: false,
     },
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
   mainWindow.loadURL(`http://127.0.0.1:${localPort}/index.html`);
@@ -236,4 +268,35 @@ ipcMain.handle('update:check', () => {
 
 ipcMain.handle('update:install', () => {
   autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('app:getVersion', () => app.getVersion());
+
+// ---------- indicador de voz no ícone da barra de tarefas (igual Discord) ----------
+// Windows só: mostra uma bolinha cinza quando está num canal de voz parado,
+// verde quando está falando, e um aviso vermelho quando o próprio microfone
+// ou o "ensurdecer" está ativado — dá pra ver o status sem precisar voltar
+// pro app.
+const overlayDir = path.join(__dirname, 'build', 'overlay');
+const voiceOverlayIcons = {
+  idle: nativeImage.createFromPath(path.join(overlayDir, 'overlay-idle.png')),
+  speaking: nativeImage.createFromPath(path.join(overlayDir, 'overlay-speaking.png')),
+  muted: nativeImage.createFromPath(path.join(overlayDir, 'overlay-muted.png')),
+  deafened: nativeImage.createFromPath(path.join(overlayDir, 'overlay-deafened.png')),
+};
+const voiceOverlayDescriptions = {
+  idle: 'Conectado à voz',
+  speaking: 'Falando',
+  muted: 'Microfone mudo',
+  deafened: 'Ensurdecido',
+};
+
+ipcMain.handle('voiceOverlay:set', (_event, status) => {
+  if (!mainWindow || typeof mainWindow.setOverlayIcon !== 'function') return;
+  const icon = voiceOverlayIcons[status];
+  if (!icon || icon.isEmpty()) {
+    mainWindow.setOverlayIcon(null, '');
+  } else {
+    mainWindow.setOverlayIcon(icon, voiceOverlayDescriptions[status] || '');
+  }
 });

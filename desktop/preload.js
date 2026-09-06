@@ -24,4 +24,8 @@ contextBridge.exposeInMainWorld('vortex', {
     ipcRenderer.on('update-status', listener);
     return () => ipcRenderer.removeListener('update-status', listener);
   },
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  // status: 'none' | 'idle' | 'speaking' | 'muted' | 'deafened' — mostra uma
+  // bolinha no ícone da barra de tarefas (só no Windows) igual o Discord.
+  setVoiceOverlay: (status) => ipcRenderer.invoke('voiceOverlay:set', status),
 });
