@@ -718,9 +718,15 @@ async function joinVoiceChannel(channelId) {
   });
   vr.on(RoomEvent.TrackMuted, (publication, participant) => {
     if (publication.source === Track.Source.Microphone) setVoiceMemberStatus(participant.identity, { muted: true });
+    // A câmera, a partir da 2ª vez que é ligada/desligada, não é republicada —
+    // o LiveKit só muta/desmuta a mesma publicação (evita renegociar a
+    // conexão). Por isso o símbolo da câmera precisa escutar mute/unmute
+    // também, e não só published/unpublished.
+    else if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: false });
   });
   vr.on(RoomEvent.TrackUnmuted, (publication, participant) => {
     if (publication.source === Track.Source.Microphone) setVoiceMemberStatus(participant.identity, { muted: false });
+    else if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: true });
   });
   const handleTrackPublishedChange = (isPublished) => (publication, participant) => {
     if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: isPublished });
