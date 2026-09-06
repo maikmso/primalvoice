@@ -73,7 +73,24 @@ html, body {
   user-select: none;
 }
 
-.screen { height: 100%; }
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Faixa que substitui a barra de título nativa do Windows (sem isso a
+   janela fica sem jeito de arrastar, já que tiramos o "frame" nativo lá no
+   main.js) — igual o Discord, sem ícone/nome do app escritos, só espaço
+   arrastável. Os botõezinhos de minimizar/maximizar/fechar continuam
+   aparecendo por cima (desenhados pelo próprio Windows via
+   `titleBarOverlay`), encostados no canto direito. */
+#app-titlebar {
+  flex: 0 0 36px;
+  -webkit-app-region: drag;
+  background: var(--bg);
+}
+
+.screen { flex: 1 1 auto; height: auto; min-height: 0; }
 
 .update-banner {
   position: fixed;
@@ -764,11 +781,22 @@ html, body {
   gap: 10px;
   align-items: flex-start;
 }
+.chat-message .avatar,
+.chat-message .author {
+  cursor: pointer;
+}
 .chat-message .avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
   background: var(--accent);
+  /* sem isso, o "background" acima (que é atalho pra background-image/
+     size/position/etc de uma vez) apaga o cover/center que .has-avatar
+     define lá em cima no arquivo — a foto até carregava, só que do
+     tamanho original dela e cortada no cantinho de cima, o que na prática
+     parecia "sem foto nenhuma" */
+  background-size: cover;
+  background-position: center;
   color: white;
   font-weight: 700;
   font-size: 13px;
@@ -995,6 +1023,11 @@ html, body {
   height: 32px;
   border-radius: 50%;
   background: var(--tile-bg);
+  /* mesmo motivo do .chat-message .avatar logo acima — sem isso a foto de
+     quem tá offline ficaria cortada/errada assim que a pessoa colocasse
+     uma foto de perfil */
+  background-size: cover;
+  background-position: center;
   color: var(--text);
   font-size: 14px;
   font-weight: 700;
@@ -1219,6 +1252,8 @@ html, body {
   height: 32px;
   border-radius: 50%;
   background: var(--accent);
+  background-size: cover;
+  background-position: center;
   color: white;
   font-weight: 700;
   font-size: 14px;
@@ -1471,6 +1506,8 @@ html, body {
   height: 24px;
   border-radius: 50%;
   background: var(--tile-bg);
+  background-size: cover;
+  background-position: center;
   color: var(--text);
   font-size: 11px;
   font-weight: 700;

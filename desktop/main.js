@@ -65,6 +65,19 @@ function createWindow() {
     title: 'PrimalVoice',
     icon: iconPath,
     autoHideMenuBar: true,
+    // Sem a barra de título nativa (ícone + "PrimalVoice" + os 3 botões
+    // padrão do Windows) — igual o Discord, que não mostra nome/logo lá em
+    // cima. `titleBarOverlay` mantém só os botõezinhos de minimizar/
+    // maximizar/fechar desenhados pelo próprio Windows (sem eles some
+    // qualquer jeito de fechar a janela), encostados no canto direito;
+    // o resto da faixa de cima vira nossa (ver #app-titlebar no HTML/CSS).
+    frame: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#1e1f22',
+      symbolColor: '#c8ccd1',
+      height: 36,
+    },
     // Preenche com a cor do tema escuro em vez de branco — evita o "flash"
     // de tela branca antes da página carregar.
     backgroundColor: '#1e1f22',

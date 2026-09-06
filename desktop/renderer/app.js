@@ -1835,9 +1835,9 @@ chatForm.addEventListener('submit', (e) => {
     persistChatMessage(activeTextChannelId, { text });
     return;
   }
-  const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts };
+  const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-  pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity });
+  pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
   persistChatMessage(activeTextChannelId, { text });
 });
 
@@ -1883,9 +1883,9 @@ chatAttachmentInput.addEventListener('change', async () => {
       persistChatMessage(activeTextChannelId, { text, attachment });
       return;
     }
-    const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts, attachment };
+    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-    pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+    pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
     persistChatMessage(activeTextChannelId, { text, attachment });
   } catch (err) {
     alert(err.message || 'Não consegui enviar o arquivo.');
@@ -2297,9 +2297,15 @@ function renderMemberSidebar() {
       // showStatus fica de fora aqui: essa lista é "quem tá online", não "quem
       // tá em chamada de voz" — os ícones de mic/fone mudo só fazem sentido
       // na listinha de dentro do canal de voz (essa sim passa showStatus).
+      // A seção "Offline" junta gente de qualquer cargo (não é dividida por
+      // cargo como as de cima), então o "color" dela é sempre null — mas
+      // isso não pode apagar a cor do NOME de cada um, que segue sendo a do
+      // próprio cargo da pessoa (igual Discord: offline fica com a lista
+      // toda meio apagada, mas o nome mantém a cor do cargo).
+      const rowColor = opts.offline ? topRoleColorFor(identity) : color;
       const row = opts.offline
-        ? buildOfflineMemberRow(identity, { roleColor: color })
-        : buildMemberRow({ identity, name: displayNameFor(identity) }, { roleColor: color });
+        ? buildOfflineMemberRow(identity, { roleColor: rowColor })
+        : buildMemberRow({ identity, name: displayNameFor(identity) }, { roleColor: rowColor });
       section.appendChild(row);
     });
 
@@ -2422,7 +2428,7 @@ function openProfileCard(x, y, identity) {
 
   const tagEl = document.createElement('div');
   tagEl.className = 'profile-card-tag';
-  tagEl.textContent = `usuário padrão: ${identity}`;
+  tagEl.textContent = identity;
   body.appendChild(tagEl);
 
   if (profile.status) {
@@ -2647,6 +2653,17 @@ voiceChannelsList.addEventListener('contextmenu', (e) => {
 voiceChannelsList.addEventListener('click', (e) => {
   const row = e.target.closest('.member-row');
   if (!row || !row.dataset.identity) return;
+  e.stopPropagation();
+  openProfileCard(e.clientX, e.clientY, row.dataset.identity);
+});
+
+// mesma coisa nas mensagens do chat de texto — clicar na foto ou no nome de
+// quem mandou abre o cartão de perfil, igual em qualquer outro lugar do app
+// (clicar no TEXTO da mensagem não abre nada, só na foto/nome, igual Discord)
+chatMessages.addEventListener('click', (e) => {
+  const clickable = e.target.closest('.avatar, .author');
+  const row = e.target.closest('.chat-message');
+  if (!clickable || !row || !row.dataset.identity) return;
   e.stopPropagation();
   openProfileCard(e.clientX, e.clientY, row.dataset.identity);
 });
