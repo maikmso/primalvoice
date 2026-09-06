@@ -1,11 +1,34 @@
 // Estado persistido do servidor (canais, cargos, quem tem qual cargo, dono,
-// contas de usuário e perfil). Guardado em disco como JSON simples — é pouca
-// coisa e poucas pessoas usando, não precisa de banco de dados de verdade.
+// contas de usuário, perfil e histórico de mensagens).
+//
+// Guardado num banco Redis de verdade (Upstash) quando UPSTASH_REDIS_REST_URL
+// e UPSTASH_REDIS_REST_TOKEN estão configurados — assim os dados sobrevivem
+// a reinícios/"sono" do servidor (no plano gratuito do Render, por exemplo,
+// o disco local é temporário e some quando o serviço reinicia). Sem essas
+// variáveis configuradas, cai de volta pro arquivo local de sempre (útil
+// rodando local/sem Upstash configurado ainda) — só que aí some no restart,
+// como sempre foi.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const STATE_PATH = path.join(__dirname, '..', 'state.json');
+const REDIS_KEY = 'primalvoice:state';
+
+let redis = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  const { Redis } = require('@upstash/redis');
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  console.log('Persistência: usando Upstash Redis (dados sobrevivem a reinícios do servidor).');
+} else {
+  console.log(
+    'Persistência: UPSTASH_REDIS_REST_URL/TOKEN não configurados — usando arquivo local ' +
+      '(atenção: some se o disco do servidor for temporário, como no plano gratuito do Render).'
+  );
+}
 
 const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'muteMembers', 'deafenMembers'];
 
@@ -45,35 +68,73 @@ function sanitizePermissions(input) {
   return perms;
 }
 
-function loadState() {
+function normalizeState(parsed) {
+  const base = defaultState();
+  if (!parsed || typeof parsed !== 'object') return base;
+  return {
+    ownerIdentity: parsed.ownerIdentity ?? base.ownerIdentity,
+    channels: {
+      text: Array.isArray(parsed.channels?.text) ? parsed.channels.text : base.channels.text,
+      voice: Array.isArray(parsed.channels?.voice) ? parsed.channels.voice : base.channels.voice,
+    },
+    roles: Array.isArray(parsed.roles) ? parsed.roles : [],
+    memberRoles: parsed.memberRoles && typeof parsed.memberRoles === 'object' ? parsed.memberRoles : {},
+    users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
+    messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
+  };
+}
+
+function loadStateFromDisk() {
   try {
     const raw = fs.readFileSync(STATE_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    const base = defaultState();
-    return {
-      ownerIdentity: parsed.ownerIdentity ?? base.ownerIdentity,
-      channels: {
-        text: Array.isArray(parsed.channels?.text) ? parsed.channels.text : base.channels.text,
-        voice: Array.isArray(parsed.channels?.voice) ? parsed.channels.voice : base.channels.voice,
-      },
-      roles: Array.isArray(parsed.roles) ? parsed.roles : [],
-      memberRoles: parsed.memberRoles && typeof parsed.memberRoles === 'object' ? parsed.memberRoles : {},
-      users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
-      messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
-    };
+    return normalizeState(JSON.parse(raw));
   } catch {
     return defaultState();
   }
 }
 
-let state = loadState();
+// Estado em memória — todas as leituras (getState/getPermissions/etc) usam
+// isso direto, sem esperar rede nenhuma; só a gravação (persist) é que fala
+// com o Redis, e faz isso em segundo plano.
+let state = loadStateFromDisk();
+
+// Carrega o estado de verdade do Redis (quando configurado) antes do
+// servidor aceitar requisições. Chamado uma vez, no início do server.js.
+async function init() {
+  if (!redis) return;
+  try {
+    const raw = await redis.get(REDIS_KEY);
+    if (raw) {
+      // o cliente do Upstash às vezes já devolve o objeto parseado, às vezes
+      // a string crua, dependendo da versão — aceita os dois
+      state = normalizeState(typeof raw === 'string' ? JSON.parse(raw) : raw);
+      console.log('Estado carregado do Redis.');
+    } else {
+      console.log('Redis vazio ainda (primeira vez) — começando com estado padrão.');
+    }
+  } catch (err) {
+    console.error('Não consegui carregar o estado do Redis, usando o arquivo local por enquanto:', err.message);
+  }
+}
 
 function persist() {
-  // escreve em arquivo temporário e renomeia por cima — evita corromper o
-  // state.json se o processo morrer no meio de uma escrita
-  const tmp = STATE_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-  fs.renameSync(tmp, STATE_PATH);
+  // guarda local sempre (rápido, síncrono, serve de cache) — escreve em
+  // arquivo temporário e renomeia por cima pra não corromper o state.json
+  // se o processo morrer no meio de uma escrita
+  try {
+    const tmp = STATE_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+    fs.renameSync(tmp, STATE_PATH);
+  } catch (err) {
+    console.error('Não consegui escrever o state.json local:', err.message);
+  }
+  // e manda pro Redis em segundo plano (é isso que sobrevive de verdade a
+  // reinícios do servidor) — não trava a resposta da rota por causa disso
+  if (redis) {
+    redis.set(REDIS_KEY, JSON.stringify(state)).catch((err) => {
+      console.error('Não consegui salvar o estado no Redis:', err.message);
+    });
+  }
 }
 
 function getState() {
@@ -207,6 +268,7 @@ function addMessage(channelKey, { identity, name, text, attachment }) {
 }
 
 module.exports = {
+  init,
   getState,
   mutate,
   getPermissions,

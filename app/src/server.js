@@ -455,6 +455,11 @@ app.post('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
   res.json({ message: msg });
 });
 
-app.listen(PORT, () => {
-  console.log(`PrimalVoice app rodando na porta ${PORT} (sala: ${ROOM_NAME})`);
+// Carrega o estado salvo (do Redis, quando configurado) antes de aceitar
+// qualquer requisição — assim ninguém entra e vê a sala "zerada" enquanto o
+// carregamento ainda está em andamento.
+store.init().then(() => {
+  app.listen(PORT, () => {
+    console.log(`PrimalVoice app rodando na porta ${PORT} (sala: ${ROOM_NAME})`);
+  });
 });
