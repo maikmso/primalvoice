@@ -1,5 +1,34 @@
 :root {
   color-scheme: dark;
+  /* tema padrão "Escuro": preto com cinza, igual a logo do PrimalVoice */
+  --bg: #1e1f22;
+  --panel: #2b2d31;
+  --accent: #8a8f98;
+  --accent-2: #c3c6cc;
+  --accent-soft: rgba(138, 143, 152, 0.18);
+  --text: #e7e9ea;
+  --muted: #96999e;
+  --danger: #ed4245;
+  --tile-bg: #121214;
+  --speaking: #2bb673;
+  --sidebar-w: 240px;
+  --memberlist-w: 240px;
+}
+
+/* tema "Meia-noite": preto puro (AMOLED) */
+:root[data-theme='meianoite'] {
+  --bg: #000000;
+  --panel: #060607;
+  --accent: #9198a1;
+  --accent-2: #c9ccd2;
+  --accent-soft: rgba(145, 152, 161, 0.16);
+  --text: #eaeaea;
+  --muted: #87898e;
+  --tile-bg: #000000;
+}
+
+/* tema "Clássico": a paleta laranja original do PrimalVoice */
+:root[data-theme='classico'] {
   --bg: #1c1a19;
   --panel: #26221f;
   --accent: #ff5e3a;
@@ -7,11 +36,7 @@
   --accent-soft: rgba(255, 94, 58, 0.16);
   --text: #ede6e1;
   --muted: #9c928a;
-  --danger: #ed4245;
   --tile-bg: #100e0d;
-  --speaking: #2bb673;
-  --sidebar-w: 240px;
-  --memberlist-w: 240px;
 }
 
 * { box-sizing: border-box; }
@@ -948,22 +973,37 @@ html, body {
 }
 .keybind-clear-btn:hover { border-color: var(--danger); color: var(--danger); }
 
-/* ---------- perfil (foto + status) ---------- */
-.profile-avatar-row { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+/* ---------- perfil (banner + foto + nome de exibição + status) ---------- */
+.profile-banner-preview {
+  position: relative;
+  height: 100px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent-soft), rgba(255, 255, 255, 0.03));
+  background-size: cover;
+  background-position: center;
+  margin-bottom: 44px;
+}
+.profile-banner-preview.has-banner { background-color: var(--tile-bg); }
 .profile-avatar-preview {
-  width: 88px;
-  height: 88px;
+  position: absolute;
+  left: 20px;
+  bottom: -34px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
-  background: var(--accent);
+  border: 4px solid var(--panel);
+  background-color: var(--accent);
   color: white;
   font-weight: 700;
-  font-size: 32px;
+  font-size: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.profile-avatar-buttons { display: flex; flex-direction: column; gap: 8px; }
+.profile-banner-buttons { display: flex; gap: 8px; margin-bottom: 10px; padding-left: 112px; }
+.profile-avatar-buttons { display: flex; gap: 8px; margin-bottom: 20px; }
+.modal-hint-tight { margin-top: -8px; margin-bottom: 16px; }
 .profile-status-field textarea,
 .profile-status-field input {
   background: var(--bg);
@@ -976,6 +1016,95 @@ html, body {
   font-family: inherit;
 }
 .profile-actions { margin-top: 20px; display: flex; gap: 10px; }
+
+/* ---------- aparência (grade de temas) ---------- */
+.theme-grid { display: flex; gap: 14px; flex-wrap: wrap; }
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  width: 96px;
+}
+.theme-option:hover { background: rgba(255, 255, 255, 0.04); }
+.theme-option.active { border-color: var(--accent); color: var(--text); font-weight: 600; }
+.theme-swatch {
+  width: 64px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: block;
+}
+.theme-swatch-escuro { background: linear-gradient(135deg, #1e1f22 55%, #8a8f98 55%); }
+.theme-swatch-meianoite { background: linear-gradient(135deg, #000000 55%, #9198a1 55%); }
+.theme-swatch-classico { background: linear-gradient(135deg, #1c1a19 55%, #ff5e3a 55%); }
+
+/* ---------- conversas diretas (DM) ---------- */
+.dm-list { padding: 2px 0 4px; }
+.dm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  margin-bottom: 2px;
+}
+.dm-row:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+.dm-row.active { background: var(--accent-soft); color: var(--text); border-left-color: var(--accent); }
+.dm-row .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--tile-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dm-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- cartão de perfil (clique com botão esquerdo no nome) ---------- */
+.profile-card { width: 260px; min-width: 260px; padding: 0; overflow: hidden; }
+.profile-card-banner {
+  height: 70px;
+  background: linear-gradient(135deg, var(--accent-soft), rgba(255, 255, 255, 0.03));
+  background-size: cover;
+  background-position: center;
+}
+.profile-card-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid var(--panel);
+  background-color: var(--accent);
+  color: white;
+  font-weight: 700;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -34px 0 0 16px;
+}
+.profile-card-body { padding: 12px 16px 4px; }
+.profile-card-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.profile-card-tag { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.profile-card-status { font-size: 13px; color: var(--text); margin-top: 10px; padding-top: 10px; border-top: 1px solid #3a332c; }
+.profile-card-actions { padding: 12px 16px 16px; }
+.profile-card-actions .secondary-btn { width: 100%; }
 
 /* ---------- selecionar o que compartilhar na tela ---------- */
 .sharepick-overlay {

@@ -71,6 +71,11 @@
 
       <div class="channel-list">
         <div class="channel-category-row">
+          <span class="channel-category">Conversas diretas</span>
+        </div>
+        <div id="dm-list" class="dm-list"></div>
+
+        <div class="channel-category-row">
           <span class="channel-category">Canais de texto</span>
           <button class="channel-add-btn" id="add-text-channel-btn" title="Criar canal de texto" hidden>+</button>
         </div>
@@ -170,6 +175,7 @@
       <nav class="modal-tabs">
         <button class="modal-tab active" data-tab="voice">Voz e Vídeo</button>
         <button class="modal-tab" data-tab="profile">Perfil</button>
+        <button class="modal-tab" data-tab="appearance">Aparência</button>
         <button class="modal-tab" data-tab="keybinds">Atalhos</button>
         <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
         <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
@@ -192,21 +198,52 @@
 
         <section class="modal-pane" data-pane="profile">
           <h2>Seu perfil</h2>
-          <div class="profile-avatar-row">
+
+          <div class="profile-banner-preview" id="profile-banner-preview">
             <span class="avatar profile-avatar-preview" id="profile-avatar-preview"></span>
-            <div class="profile-avatar-buttons">
-              <button type="button" class="secondary-btn" id="profile-avatar-change-btn">Alterar foto</button>
-              <button type="button" class="keybind-clear-btn" id="profile-avatar-remove-btn">Remover foto</button>
-              <input type="file" id="profile-avatar-input" accept="image/*" hidden />
-            </div>
           </div>
+          <div class="profile-banner-buttons">
+            <button type="button" class="secondary-btn" id="profile-banner-change-btn">Alterar banner</button>
+            <button type="button" class="keybind-clear-btn" id="profile-banner-remove-btn">Remover banner</button>
+            <input type="file" id="profile-banner-input" accept="image/*" hidden />
+          </div>
+          <div class="profile-avatar-buttons">
+            <button type="button" class="secondary-btn" id="profile-avatar-change-btn">Alterar foto</button>
+            <button type="button" class="keybind-clear-btn" id="profile-avatar-remove-btn">Remover foto</button>
+            <input type="file" id="profile-avatar-input" accept="image/*" hidden />
+          </div>
+
+          <label class="modal-field">Nome de exibição
+            <input type="text" id="profile-displayname-input" maxlength="32" placeholder="Como quer aparecer pros outros" />
+          </label>
+          <p class="modal-hint modal-hint-tight">Seu usuário padrão continua sendo <strong id="profile-identity-tag"></strong> — esse nome de exibição é só o que aparece pros outros, igual um apelido.</p>
+
           <label class="modal-field profile-status-field">Status
             <input type="text" id="profile-status-input" maxlength="60" placeholder="Ex: jogando, ausente, etc." />
           </label>
           <div class="profile-actions">
             <button type="button" class="secondary-btn" id="profile-save-btn">Salvar</button>
           </div>
-          <p class="modal-hint">Sua foto e status aparecem pros outros só enquanto você estiver conectado, e ficam salvos aqui no seu PC.</p>
+          <p class="modal-hint">Sua foto, banner, nome e status aparecem pros outros só enquanto você estiver conectado, e ficam salvos aqui no seu PC.</p>
+        </section>
+
+        <section class="modal-pane" data-pane="appearance">
+          <h2>Aparência</h2>
+          <p class="modal-hint">Só muda como o PrimalVoice aparece pra você — cada pessoa escolhe o tema dela.</p>
+          <div class="theme-grid" id="theme-grid">
+            <button type="button" class="theme-option" data-theme="escuro">
+              <span class="theme-swatch theme-swatch-escuro"></span>
+              Escuro
+            </button>
+            <button type="button" class="theme-option" data-theme="meianoite">
+              <span class="theme-swatch theme-swatch-meianoite"></span>
+              Meia-noite
+            </button>
+            <button type="button" class="theme-option" data-theme="classico">
+              <span class="theme-swatch theme-swatch-classico"></span>
+              Clássico
+            </button>
+          </div>
         </section>
 
         <section class="modal-pane" data-pane="keybinds">

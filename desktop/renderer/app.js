@@ -68,8 +68,18 @@ const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileAvatarChangeBtn = document.getElementById('profile-avatar-change-btn');
 const profileAvatarRemoveBtn = document.getElementById('profile-avatar-remove-btn');
 const profileAvatarInput = document.getElementById('profile-avatar-input');
+const profileBannerPreview = document.getElementById('profile-banner-preview');
+const profileBannerChangeBtn = document.getElementById('profile-banner-change-btn');
+const profileBannerRemoveBtn = document.getElementById('profile-banner-remove-btn');
+const profileBannerInput = document.getElementById('profile-banner-input');
+const profileDisplaynameInput = document.getElementById('profile-displayname-input');
+const profileIdentityTag = document.getElementById('profile-identity-tag');
 const profileStatusInput = document.getElementById('profile-status-input');
 const profileSaveBtn = document.getElementById('profile-save-btn');
+
+const themeGrid = document.getElementById('theme-grid');
+
+const dmListEl = document.getElementById('dm-list');
 
 const keybindMuteClearBtn = document.getElementById('keybind-mute-clear-btn');
 const keybindDeafenClearBtn = document.getElementById('keybind-deafen-clear-btn');
@@ -88,6 +98,8 @@ const HASH_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>';
 const VOICE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+const DM_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
 
 const PERMISSION_LABELS = {
   manageChannels: 'Gerenciar canais (criar/apagar)',
@@ -141,10 +153,35 @@ let joining = false;
 const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
-const memberProfiles = new Map(); // identity -> { avatar, status }
+const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName }
 let myAvatarDataUrl = '';
+let myBannerDataUrl = '';
 let myStatusText = '';
+let myDisplayName = '';
 let pendingProfileAvatar = null; // enquanto o modal de perfil está aberto
+let pendingProfileBanner = null;
+
+// ---------- conversas diretas (DM) ----------
+// Sem servidor de mensagens privadas de verdade: a mensagem ainda viaja pelo
+// mesmo canal de dados do LiveKit (que todo mundo na sala recebe), só que só
+// é MOSTRADA na conversa privada entre as duas pessoas envolvidas — não é
+// sigilo de ponta a ponta, é privacidade de interface, igual o resto do app.
+const dmPeers = new Set(); // identities com quem já trocou DM nessa sessão
+let activeDmPeer = null; // identity da conversa privada aberta, ou null
+
+function dmChannelKey(identity) {
+  return `dm:${identity}`;
+}
+function isDmChannelId(id) {
+  return typeof id === 'string' && id.startsWith('dm:');
+}
+function dmPeerFromChannelId(id) {
+  return id.slice(3);
+}
+function displayNameFor(identity) {
+  if (identity === myIdentity) return myDisplayName || myName || identity;
+  return memberProfiles.get(identity)?.displayName || identity;
+}
 
 const chatEncoder = new TextEncoder();
 const chatDecoder = new TextDecoder();
@@ -221,7 +258,14 @@ function broadcastVoiceStatus() {
 // que muda ou quando alguém novo entra (igual ao voice-status).
 function broadcastProfile() {
   if (!lobbyRoom) return;
-  const payload = { type: 'profile-update', identity: myIdentity, avatar: myAvatarDataUrl, status: myStatusText };
+  const payload = {
+    type: 'profile-update',
+    identity: myIdentity,
+    avatar: myAvatarDataUrl,
+    banner: myBannerDataUrl,
+    status: myStatusText,
+    displayName: myDisplayName,
+  };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
 }
 
@@ -239,9 +283,18 @@ function applyAvatarToEl(el, identity) {
 
 function applyProfileEverywhere(identity) {
   document.querySelectorAll(`.member-row[data-identity="${cssEscape(identity)}"] .avatar`).forEach((el) => applyAvatarToEl(el, identity));
+  document.querySelectorAll(`.member-row[data-identity="${cssEscape(identity)}"] .member-name`).forEach((el) => {
+    el.textContent = displayNameFor(identity);
+  });
   const tile = document.getElementById(tileId(identity));
-  if (tile) applyAvatarToEl(tile.querySelector('.initial'), identity);
+  if (tile) {
+    applyAvatarToEl(tile.querySelector('.initial'), identity);
+    const label = tile.querySelector('.label');
+    if (label) label.textContent = displayNameFor(identity);
+  }
   if (identity === myIdentity) applyAvatarToEl(selfAvatar, identity);
+  if (identity === activeDmPeer) renderDmHeader();
+  renderDmList();
 }
 
 function cssEscape(value) {
@@ -251,27 +304,31 @@ function cssEscape(value) {
 function loadProfileFromConfig(cfg) {
   const p = cfg.profile || {};
   myAvatarDataUrl = p.avatar || '';
+  myBannerDataUrl = p.banner || '';
   myStatusText = p.status || '';
+  myDisplayName = p.displayName || '';
 }
 
 async function saveProfileToConfig() {
   const cfg = (await window.vortex.getConfig()) || {};
-  cfg.profile = { avatar: myAvatarDataUrl, status: myStatusText };
+  cfg.profile = { avatar: myAvatarDataUrl, banner: myBannerDataUrl, status: myStatusText, displayName: myDisplayName };
   await window.vortex.setConfig(cfg);
 }
 
-function resizeImageToDataUrl(file, size, quality) {
+// resize com "cover crop" pra caber num retângulo w x h (quadrado quando w===h,
+// que é o caso do avatar; retangular no caso do banner).
+function resizeImageToDataUrl(file, w, h, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
-      const scale = Math.max(size / img.width, size / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      const scale = Math.max(w / img.width, h / img.height);
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
       resolve(canvas.toDataURL('image/jpeg', quality));
       URL.revokeObjectURL(img.src);
     };
@@ -286,8 +343,8 @@ profileAvatarInput.addEventListener('change', async () => {
   profileAvatarInput.value = '';
   if (!file) return;
   try {
-    let dataUrl = await resizeImageToDataUrl(file, 96, 0.6);
-    if (dataUrl.length > 15000) dataUrl = await resizeImageToDataUrl(file, 72, 0.45);
+    let dataUrl = await resizeImageToDataUrl(file, 96, 96, 0.6);
+    if (dataUrl.length > 15000) dataUrl = await resizeImageToDataUrl(file, 72, 72, 0.45);
     if (dataUrl.length > 15000) {
       alert('Essa imagem ficou grande demais mesmo comprimida. Tenta uma foto mais simples.');
       return;
@@ -304,10 +361,39 @@ profileAvatarRemoveBtn.addEventListener('click', () => {
   profileAvatarPreview.style.backgroundImage = '';
   profileAvatarPreview.classList.remove('has-avatar');
 });
+
+profileBannerChangeBtn.addEventListener('click', () => profileBannerInput.click());
+profileBannerInput.addEventListener('change', async () => {
+  const file = profileBannerInput.files[0];
+  profileBannerInput.value = '';
+  if (!file) return;
+  try {
+    let dataUrl = await resizeImageToDataUrl(file, 300, 100, 0.6);
+    if (dataUrl.length > 20000) dataUrl = await resizeImageToDataUrl(file, 240, 80, 0.45);
+    if (dataUrl.length > 20000) {
+      alert('Essa imagem ficou grande demais mesmo comprimida. Tenta uma foto mais simples.');
+      return;
+    }
+    pendingProfileBanner = dataUrl;
+    profileBannerPreview.style.backgroundImage = `url(${dataUrl})`;
+    profileBannerPreview.classList.add('has-banner');
+  } catch (err) {
+    alert(err.message || 'Não consegui usar essa imagem.');
+  }
+});
+profileBannerRemoveBtn.addEventListener('click', () => {
+  pendingProfileBanner = '';
+  profileBannerPreview.style.backgroundImage = '';
+  profileBannerPreview.classList.remove('has-banner');
+});
+
 profileSaveBtn.addEventListener('click', async () => {
   if (pendingProfileAvatar !== null) myAvatarDataUrl = pendingProfileAvatar;
+  if (pendingProfileBanner !== null) myBannerDataUrl = pendingProfileBanner;
   myStatusText = profileStatusInput.value.trim().slice(0, 60);
+  myDisplayName = profileDisplaynameInput.value.trim().slice(0, 32);
   pendingProfileAvatar = null;
+  pendingProfileBanner = null;
   await saveProfileToConfig();
   applyProfileEverywhere(myIdentity);
   broadcastProfile();
@@ -316,7 +402,10 @@ profileSaveBtn.addEventListener('click', async () => {
 
 function openProfilePane() {
   pendingProfileAvatar = null;
+  pendingProfileBanner = null;
   profileStatusInput.value = myStatusText;
+  profileDisplaynameInput.value = myDisplayName;
+  profileIdentityTag.textContent = myIdentity;
   if (myAvatarDataUrl) {
     profileAvatarPreview.style.backgroundImage = `url(${myAvatarDataUrl})`;
     profileAvatarPreview.classList.add('has-avatar');
@@ -325,10 +414,42 @@ function openProfilePane() {
     profileAvatarPreview.classList.remove('has-avatar');
     profileAvatarPreview.textContent = (myName || '?').charAt(0).toUpperCase();
   }
+  if (myBannerDataUrl) {
+    profileBannerPreview.style.backgroundImage = `url(${myBannerDataUrl})`;
+    profileBannerPreview.classList.add('has-banner');
+  } else {
+    profileBannerPreview.style.backgroundImage = '';
+    profileBannerPreview.classList.remove('has-banner');
+  }
 }
 
 selfAvatar.addEventListener('click', () => openSettingsModal('profile'));
 selfNameBtn.addEventListener('click', () => openSettingsModal('profile'));
+
+// ---------- aparência (tema) ----------
+function applyTheme(theme) {
+  if (theme && theme !== 'escuro') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  document.querySelectorAll('.theme-option').forEach((btn) => {
+    btn.classList.toggle('active', (btn.dataset.theme || 'escuro') === (theme || 'escuro'));
+  });
+}
+
+async function loadThemeFromConfig(cfg) {
+  applyTheme(cfg.theme || 'escuro');
+}
+
+if (themeGrid) {
+  themeGrid.querySelectorAll('.theme-option').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const theme = btn.dataset.theme || 'escuro';
+      applyTheme(theme);
+      const cfg = (await window.vortex.getConfig()) || {};
+      cfg.theme = theme;
+      await window.vortex.setConfig(cfg);
+    });
+  });
+}
 
 function renderPermissionGates() {
   addTextChannelBtn.hidden = !myPermissions.manageChannels;
@@ -374,6 +495,7 @@ async function init() {
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
   loadProfileFromConfig(cfg);
+  await loadThemeFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
     showJoin();
@@ -648,13 +770,68 @@ function renderChannelLists() {
 
 function switchTextChannel(channelId) {
   activeTextChannelId = channelId;
+  activeDmPeer = null;
   const channel = serverState.channels.text.find((c) => c.id === channelId);
   channelHeaderIcon.innerHTML = HASH_ICON_SVG;
   channelHeaderName.textContent = channel ? channel.name : '';
   chatInput.placeholder = `Conversar em #${channel ? channel.name : ''}`;
   showTextView();
   renderChannelLists();
+  renderDmList();
   renderChatForActiveChannel();
+}
+
+// ---------- conversas diretas (DM) ----------
+// Não é privado de verdade no sentido criptográfico: a mensagem ainda viaja
+// pro canal de dados compartilhado da sala (igual chat/perfil/status), só que
+// só é exibida na conversa privada entre as duas pessoas — a "privacidade" é
+// só na hora de mostrar na tela, não tem outro jeito sem um servidor próprio
+// guardando isso, e o PrimalVoice não tem banco de dados.
+function switchToDm(peerIdentity) {
+  if (!peerIdentity) return;
+  dmPeers.add(peerIdentity);
+  activeDmPeer = peerIdentity;
+  activeTextChannelId = dmChannelKey(peerIdentity);
+  channelHeaderIcon.innerHTML = DM_ICON_SVG;
+  channelHeaderName.textContent = displayNameFor(peerIdentity);
+  chatInput.placeholder = `Conversar com @${displayNameFor(peerIdentity)}`;
+  showTextView();
+  renderChannelLists();
+  renderDmList();
+  renderChatForActiveChannel();
+}
+
+function renderDmHeader() {
+  if (!activeDmPeer) return;
+  channelHeaderName.textContent = displayNameFor(activeDmPeer);
+  chatInput.placeholder = `Conversar com @${displayNameFor(activeDmPeer)}`;
+}
+
+function renderDmList() {
+  if (!dmListEl) return;
+  dmListEl.innerHTML = '';
+  Array.from(dmPeers)
+    .sort((a, b) => displayNameFor(a).localeCompare(displayNameFor(b)))
+    .forEach((identity) => {
+      const row = document.createElement('div');
+      row.className = 'dm-row';
+      row.classList.toggle('active', identity === activeDmPeer && activeTextChannelId === dmChannelKey(identity));
+      row.dataset.identity = identity;
+
+      const avatar = document.createElement('span');
+      avatar.className = 'avatar';
+      avatar.textContent = displayNameFor(identity).charAt(0).toUpperCase();
+      applyAvatarToEl(avatar, identity);
+      row.appendChild(avatar);
+
+      const name = document.createElement('span');
+      name.className = 'dm-row-name';
+      name.textContent = displayNameFor(identity);
+      row.appendChild(name);
+
+      row.addEventListener('click', () => switchToDm(identity));
+      dmListEl.appendChild(row);
+    });
 }
 
 async function joinVoiceChannel(channelId) {
@@ -898,6 +1075,13 @@ chatForm.addEventListener('submit', (e) => {
   chatInput.value = '';
 
   const ts = Date.now();
+  if (isDmChannelId(activeTextChannelId)) {
+    const to = dmPeerFromChannelId(activeTextChannelId);
+    const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts };
+    lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+    pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
+    return;
+  }
   const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
   pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity });
@@ -937,6 +1121,13 @@ chatAttachmentInput.addEventListener('change', async () => {
     const text = chatInput.value.trim();
     chatInput.value = '';
     const ts = Date.now();
+    if (isDmChannelId(activeTextChannelId)) {
+      const to = dmPeerFromChannelId(activeTextChannelId);
+      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment };
+      lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+      pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+      return;
+    }
     const payload = { type: 'chat', channelId: activeTextChannelId, name: myName, text, ts, attachment };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
     pushChatMessage(activeTextChannelId, { name: myName, text, ts, isSelf: true, identity: myIdentity, attachment });
@@ -963,13 +1154,13 @@ function ensureTile(participant) {
 
     const initial = document.createElement('span');
     initial.className = 'initial';
-    initial.textContent = (participant.name || participant.identity).charAt(0).toUpperCase();
+    initial.textContent = displayNameFor(participant.identity).charAt(0).toUpperCase();
     applyAvatarToEl(initial, participant.identity);
     tile.appendChild(initial);
 
     const label = document.createElement('div');
     label.className = 'label';
-    label.textContent = participant.name || participant.identity;
+    label.textContent = displayNameFor(participant.identity);
     tile.appendChild(label);
 
     const expandHint = document.createElement('div');
@@ -1121,13 +1312,13 @@ function buildMemberRow(participant, opts = {}) {
 
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
-  avatar.textContent = (participant.name || participant.identity).charAt(0).toUpperCase();
+  avatar.textContent = displayNameFor(participant.identity).charAt(0).toUpperCase();
   applyAvatarToEl(avatar, participant.identity);
   row.appendChild(avatar);
 
   const name = document.createElement('span');
   name.className = 'member-name';
-  name.textContent = participant.name || participant.identity;
+  name.textContent = displayNameFor(participant.identity);
   row.appendChild(name);
 
   if (opts.showStatus) {
@@ -1270,11 +1461,92 @@ function participantFromRow(el) {
   return { identity: el.dataset.identity, name: el.dataset.name };
 }
 
+function positionContextMenu(x, y, menu) {
+  const rect = menu.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight) top = window.innerHeight - rect.height - 8;
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+}
+
+// ---------- cartão de perfil (clique com botão esquerdo) ----------
+function openProfileCard(x, y, identity) {
+  closeContextMenu();
+  if (!identity) return;
+  const isSelf = identity === myIdentity;
+  const profile = isSelf
+    ? { avatar: myAvatarDataUrl, banner: myBannerDataUrl, status: myStatusText }
+    : memberProfiles.get(identity) || {};
+
+  const card = document.createElement('div');
+  card.className = 'context-menu profile-card';
+  card.addEventListener('click', (e) => e.stopPropagation());
+
+  const banner = document.createElement('div');
+  banner.className = 'profile-card-banner';
+  if (profile.banner) banner.style.backgroundImage = `url(${profile.banner})`;
+  card.appendChild(banner);
+
+  const avatar = document.createElement('span');
+  avatar.className = 'avatar profile-card-avatar';
+  avatar.textContent = displayNameFor(identity).charAt(0).toUpperCase();
+  applyAvatarToEl(avatar, identity);
+  card.appendChild(avatar);
+
+  const body = document.createElement('div');
+  body.className = 'profile-card-body';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'profile-card-name';
+  nameEl.textContent = displayNameFor(identity);
+  body.appendChild(nameEl);
+
+  const tagEl = document.createElement('div');
+  tagEl.className = 'profile-card-tag';
+  tagEl.textContent = `usuário padrão: ${identity}`;
+  body.appendChild(tagEl);
+
+  if (profile.status) {
+    const statusEl = document.createElement('div');
+    statusEl.className = 'profile-card-status';
+    statusEl.textContent = profile.status;
+    body.appendChild(statusEl);
+  }
+
+  card.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.className = 'profile-card-actions';
+  const actionBtn = document.createElement('button');
+  actionBtn.type = 'button';
+  actionBtn.className = 'secondary-btn';
+  if (isSelf) {
+    actionBtn.textContent = 'Editar perfil';
+    actionBtn.addEventListener('click', () => {
+      closeContextMenu();
+      openSettingsModal('profile');
+    });
+  } else {
+    actionBtn.textContent = 'Conversar';
+    actionBtn.addEventListener('click', () => {
+      closeContextMenu();
+      switchToDm(identity);
+    });
+  }
+  actions.appendChild(actionBtn);
+  card.appendChild(actions);
+
+  document.body.appendChild(card);
+  contextMenuEl = card;
+  positionContextMenu(x, y, card);
+}
+
 function openContextMenu(x, y, participant, opts = {}) {
   closeContextMenu();
   const identity = participant.identity;
   if (!identity) return;
-  if (identity === myIdentity) return;
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
@@ -1284,6 +1556,29 @@ function openContextMenu(x, y, participant, opts = {}) {
   header.className = 'context-menu-header';
   header.textContent = participant.name || identity;
   menu.appendChild(header);
+
+  // No seu próprio nome não faz sentido silenciar/expulsar você mesmo —
+  // mostra um menu bem mais simples, só com editar perfil (igual clicar no
+  // seu avatar/nome lá embaixo).
+  if (identity === myIdentity) {
+    const profileItem = document.createElement('div');
+    profileItem.className = 'context-menu-item';
+    const profileLabel = document.createElement('span');
+    profileLabel.className = 'label';
+    profileLabel.textContent = 'Editar perfil';
+    profileItem.appendChild(profileLabel);
+    profileItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      openSettingsModal('profile');
+    });
+    menu.appendChild(profileItem);
+
+    document.body.appendChild(menu);
+    contextMenuEl = menu;
+    positionContextMenu(x, y, menu);
+    return;
+  }
 
   const volumeWrap = document.createElement('div');
   volumeWrap.className = 'context-menu-volume';
@@ -1352,14 +1647,7 @@ function openContextMenu(x, y, participant, opts = {}) {
 
   document.body.appendChild(menu);
   contextMenuEl = menu;
-
-  const rect = menu.getBoundingClientRect();
-  let left = x;
-  let top = y;
-  if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 8;
-  if (top + rect.height > window.innerHeight) top = window.innerHeight - rect.height - 8;
-  menu.style.left = `${Math.max(8, left)}px`;
-  menu.style.top = `${Math.max(8, top)}px`;
+  positionContextMenu(x, y, menu);
 }
 
 memberListItems.addEventListener('contextmenu', (e) => {
@@ -1369,11 +1657,25 @@ memberListItems.addEventListener('contextmenu', (e) => {
   openContextMenu(e.clientX, e.clientY, participantFromRow(row));
 });
 
+memberListItems.addEventListener('click', (e) => {
+  const row = e.target.closest('.member-row');
+  if (!row || !row.dataset.identity) return;
+  e.stopPropagation();
+  openProfileCard(e.clientX, e.clientY, row.dataset.identity);
+});
+
 voiceChannelsList.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.member-row');
   if (!row || !row.dataset.identity) return;
   e.preventDefault();
   openContextMenu(e.clientX, e.clientY, participantFromRow(row));
+});
+
+voiceChannelsList.addEventListener('click', (e) => {
+  const row = e.target.closest('.member-row');
+  if (!row || !row.dataset.identity) return;
+  e.stopPropagation();
+  openProfileCard(e.clientX, e.clientY, row.dataset.identity);
 });
 
 grid.addEventListener('contextmenu', (e) => {
@@ -1493,10 +1795,28 @@ joinForm.addEventListener('submit', async (e) => {
       } else if (msg.type === 'voice-status') {
         setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
       } else if (msg.type === 'profile-update') {
-        memberProfiles.set(msg.identity, { avatar: msg.avatar || '', status: msg.status || '' });
+        memberProfiles.set(msg.identity, {
+          avatar: msg.avatar || '',
+          banner: msg.banner || '',
+          status: msg.status || '',
+          displayName: msg.displayName || '',
+        });
         applyProfileEverywhere(msg.identity);
       } else if (msg.type === 'state-changed') {
         fetchServerState().catch(() => {});
+      } else if (msg.type === 'dm') {
+        const peer = msg.from === myIdentity ? msg.to : msg.from;
+        if (!peer) return;
+        dmPeers.add(peer);
+        renderDmList();
+        pushChatMessage(dmChannelKey(peer), {
+          name: msg.from === myIdentity ? (myDisplayName || myName) : (msg.name || displayNameFor(peer)),
+          text: msg.text,
+          ts: msg.ts,
+          isSelf: msg.from === myIdentity,
+          identity: msg.from,
+          attachment: msg.attachment || null,
+        });
       }
     });
 
