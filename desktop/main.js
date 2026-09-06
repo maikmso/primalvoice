@@ -274,31 +274,15 @@ ipcMain.handle('update:install', () => {
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
 
-// ---------- indicador de voz no ícone da barra de tarefas (igual Discord) ----------
-// Windows só: mostra uma bolinha cinza quando está num canal de voz parado,
-// verde quando está falando, e um aviso vermelho quando o próprio microfone
-// ou o "ensurdecer" está ativado — dá pra ver o status sem precisar voltar
-// pro app.
-const overlayDir = path.join(__dirname, 'build', 'overlay');
-const voiceOverlayIcons = {
-  idle: nativeImage.createFromPath(path.join(overlayDir, 'overlay-idle.png')),
-  speaking: nativeImage.createFromPath(path.join(overlayDir, 'overlay-speaking.png')),
-  muted: nativeImage.createFromPath(path.join(overlayDir, 'overlay-muted.png')),
-  deafened: nativeImage.createFromPath(path.join(overlayDir, 'overlay-deafened.png')),
-};
-const voiceOverlayDescriptions = {
-  idle: 'Conectado à voz',
-  speaking: 'Falando',
-  muted: 'Microfone mudo',
-  deafened: 'Ensurdecido',
-};
-
-ipcMain.handle('voiceOverlay:set', (_event, status) => {
+// ---------- indicador de voz no ícone da barra de tarefas (desativado) ----------
+// Tinha uma bolinha (cinza/verde/vermelha) sobreposta ao ícone do app na
+// barra de tarefas do Windows pra mostrar o status de voz (parado/falando/
+// mudo/ensurdecido), só que o pedido foi pra tirar isso — o ícone da barra
+// de tarefas agora fica sempre só o PNG da logo, sem sobreposição nenhuma,
+// não importa o que esteja acontecendo na chamada. O canal IPC continua
+// aceitando a chamada (o renderer ainda avisa as mudanças de status), só
+// que agora ela não faz mais nada — assim não precisa mexer no renderer.
+ipcMain.handle('voiceOverlay:set', (_event, _status) => {
   if (!mainWindow || typeof mainWindow.setOverlayIcon !== 'function') return;
-  const icon = voiceOverlayIcons[status];
-  if (!icon || icon.isEmpty()) {
-    mainWindow.setOverlayIcon(null, '');
-  } else {
-    mainWindow.setOverlayIcon(icon, voiceOverlayDescriptions[status] || '');
-  }
+  mainWindow.setOverlayIcon(null, '');
 });

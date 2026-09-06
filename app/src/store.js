@@ -46,6 +46,9 @@ const MAX_MESSAGES_PER_CHANNEL = 200;
 function defaultState() {
   return {
     ownerIdentity: null,
+    // foto do servidor (aparece no ícone da barra à esquerda) — data URL,
+    // igual avatar/banner de usuário; vazio = usa só o logo padrão do app
+    serverIcon: '',
     channels: {
       text: [{ id: 'geral', name: 'geral' }],
       voice: [{ id: 'voz-da-galera', name: 'Voz da galera' }],
@@ -73,6 +76,7 @@ function normalizeState(parsed) {
   if (!parsed || typeof parsed !== 'object') return base;
   return {
     ownerIdentity: parsed.ownerIdentity ?? base.ownerIdentity,
+    serverIcon: typeof parsed.serverIcon === 'string' ? parsed.serverIcon : base.serverIcon,
     channels: {
       text: Array.isArray(parsed.channels?.text) ? parsed.channels.text : base.channels.text,
       voice: Array.isArray(parsed.channels?.voice) ? parsed.channels.voice : base.channels.voice,
@@ -179,7 +183,7 @@ function findUser(name) {
   return state.users[name.toLowerCase().trim()] || null;
 }
 
-function createUser(identity, password) {
+function createUser(identity, password, displayName) {
   const key = identity.toLowerCase().trim();
   if (state.users[key]) return null; // já existe
   const { salt, hash } = hashPassword(password);
@@ -187,7 +191,10 @@ function createUser(identity, password) {
     identity,
     salt,
     hash,
-    displayName: '',
+    // nome de exibição — pedido já na criação da conta (separado do nome de
+    // usuário/login, que só serve pra entrar); pode ser trocado depois a
+    // qualquer momento em "Editar perfil".
+    displayName: (displayName || '').trim().slice(0, 32),
     avatar: '',
     banner: '',
     status: '',
@@ -233,9 +240,19 @@ function getPublicProfiles() {
       banner: user.banner || '',
       status: user.status || '',
       displayName: user.displayName || '',
+      // desde quando a conta existe — usado pra mostrar "Entrou em ..." no
+      // cartão de perfil, igual ao "membro desde" do Discord
+      createdAt: user.createdAt || null,
     };
   }
   return out;
+}
+
+function updateServerIcon(icon) {
+  mutate((s) => {
+    s.serverIcon = icon || '';
+  });
+  return state.serverIcon;
 }
 
 // --- histórico de mensagens (canais de texto e DMs) ---
@@ -279,6 +296,7 @@ module.exports = {
   verifyUserPassword,
   updateUserProfile,
   getPublicProfiles,
+  updateServerIcon,
   MAX_IMAGE_LEN,
   dmKey,
   getMessages,

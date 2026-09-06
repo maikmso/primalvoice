@@ -326,6 +326,8 @@ html, body {
 #settings-form button:hover,
 #join-form button:hover { filter: brightness(1.1); }
 
+.join-field-hint { font-size: 11px; color: var(--muted); }
+
 .link-btn {
   display: block;
   width: 100%;
@@ -356,6 +358,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 8px;
   padding-top: 12px;
 }
 .server-icon {
@@ -371,12 +374,79 @@ html, body {
   justify-content: center;
   box-shadow: 0 2px 8px rgba(255, 94, 58, 0.35);
   overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-radius 0.15s ease;
+}
+.server-icon:hover, .server-icon.active { border-radius: 16px; }
+.server-icon.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 24px;
+  border-radius: 0 4px 4px 0;
+  background: var(--text);
 }
 .server-icon img {
   width: 78%;
   height: 78%;
   object-fit: contain;
 }
+/* ícone de "Mensagens diretas" (Home) — separado do servidor, igual Discord */
+.home-icon { background: var(--tile-bg); color: var(--muted); }
+.home-icon:hover, .home-icon.active { color: var(--text); }
+.home-icon svg { width: 24px; height: 24px; }
+
+.server-rail-divider {
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* atalhos de conversa privada com mensagem não lida, aparecem entre o Home
+   e o servidor — igual Discord, some sozinho assim que abre a conversa */
+.dm-quick-list { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.dm-quick-icon .avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--tile-bg);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dm-quick-icon .avatar.has-avatar { background-size: cover; background-position: center; color: transparent; }
+
+.server-icon-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  border: 3px solid var(--surface-deep);
+  box-sizing: content-box;
+}
+
+/* alterna qual lista aparece na barra lateral: DMs ou canais do servidor */
+.channel-sidebar.view-server #dm-view-group { display: none; }
+.channel-sidebar.view-dms #server-channels-group { display: none; }
 
 /* lista de canais */
 .channel-sidebar {
@@ -473,6 +543,54 @@ html, body {
 .channel-item:hover .channel-delete-btn { display: flex; }
 .channel-item .channel-delete-btn:hover { background: var(--danger); color: white; }
 
+.channel-item .channel-rename-btn {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 4px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.channel-item .channel-rename-btn svg { width: 13px; height: 13px; }
+.channel-item:hover .channel-rename-btn { display: flex; }
+.channel-item .channel-rename-btn:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+
+/* input que substitui o nome do canal na hora de renomear (duplo-clique no
+   nome, ou no lápis) — direto na lista, sem precisar abrir modal nenhum,
+   igual dá pra fazer no Discord clicando 2x. */
+.channel-item .channel-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-deep);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font: inherit;
+  padding: 1px 4px;
+}
+
+/* canal/DM com mensagem nova: nome fica destacado (igual Discord) e mostra
+   a bolinha vermelha com a quantidade de mensagens não lidas */
+.channel-item.has-unread .channel-label { color: var(--text); font-weight: 700; }
+.channel-badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
 .voice-members-list { padding: 2px 0 8px; }
 .member-row {
   display: flex;
@@ -488,8 +606,22 @@ html, body {
 .status-badge { display: none; color: var(--danger); }
 .status-badge.badge-on { display: flex; }
 .status-badge svg { width: 14px; height: 14px; }
-.status-badge.camera-badge,
-.status-badge.screenshare-badge { color: var(--speaking); }
+.status-badge.camera-badge { color: var(--speaking); }
+
+/* "AO VIVO" em vermelho — igual Discord, mais fácil de notar de longe do
+   que só um ícone pequeno de tela compartilhada. */
+.status-badge.live-badge {
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
 .member-row .avatar {
   width: 22px;
   height: 22px;
@@ -565,8 +697,6 @@ html, body {
 .resize-handle.dragging::before { background: var(--accent); }
 
 .resize-handle-left { left: calc(72px + var(--sidebar-w, 240px) - 5px); }
-.resize-handle-right { right: calc(var(--memberlist-w, 240px) - 5px); }
-
 .resize-handle .collapse-hint {
   width: 22px;
   height: 22px;
@@ -604,6 +734,9 @@ html, body {
 .channel-header-icon { display: flex; flex-shrink: 0; color: var(--muted); }
 .channel-header-icon svg { width: 20px; height: 20px; }
 .header-actions { margin-left: auto; display: flex; gap: 4px; -webkit-app-region: no-drag; }
+/* botão de mostrar/ocultar a lista de membros da direita — fica "aceso"
+   (cor de destaque) enquanto a lista está visível, igual um toggle */
+.member-toggle-btn.active { color: var(--text); }
 
 /* canal de texto (#geral) */
 .text-view {
@@ -764,6 +897,30 @@ html, body {
   object-fit: cover;
   z-index: 0;
 }
+/* compartilhamento de tela: NUNCA corta as pontas (troca "cover" por
+   "contain") — o espaço livre já é calculado sozinho pelo layout flexível
+   (a área do grid cresce/encolhe sozinha conforme as barras laterais abrem
+   ou fecham), então só precisava parar de recortar o vídeo pra caber */
+.tile video.video-el.screen-video { object-fit: contain; background: #000; }
+
+.hide-sidebar-fullscreen-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+.hide-sidebar-fullscreen-btn svg { width: 16px; height: 16px; }
+.hide-sidebar-fullscreen-btn:hover { background: rgba(0, 0, 0, 0.75); }
 .tile .initial {
   font-size: 32px;
   font-weight: 700;
@@ -894,6 +1051,11 @@ html, body {
   background: var(--border);
   margin: 6px 4px;
 }
+.context-menu-info {
+  padding: 6px 10px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
 .context-menu-item {
   display: flex;
   align-items: center;
@@ -977,7 +1139,8 @@ html, body {
    que cortava o topo do balão quando ele tentava "escapar" pra cima. Com
    fixed + coordenadas calculadas no JS (mouseenter), ele sempre aparece
    por cima de tudo, sem ser cortado. */
-.voice-quality-tooltip {
+.voice-quality-tooltip,
+.resize-tooltip {
   position: fixed;
   background: var(--surface-raised);
   color: var(--text);
@@ -1003,7 +1166,8 @@ html, body {
   border: 5px solid transparent;
   border-top-color: var(--surface-raised);
 }
-.voice-quality-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
+.voice-quality-tooltip.tooltip-visible,
+.resize-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
 .voice-status-icon svg { width: 16px; height: 16px; }
 .voice-status-icon .quality-bar { fill: var(--quality-dim); transition: fill 0.2s ease; }
 /* excelente: 3 barrinhas verdes */
@@ -1316,6 +1480,7 @@ html, body {
   flex-shrink: 0;
 }
 .dm-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-row.has-unread .dm-row-name { color: var(--text); font-weight: 700; }
 
 /* ---------- cartão de perfil (clique com botão esquerdo no nome) ---------- */
 .profile-card { width: 260px; min-width: 260px; padding: 0; overflow: hidden; }
@@ -1338,10 +1503,45 @@ html, body {
   align-items: center;
   justify-content: center;
   margin: -34px 0 0 16px;
+  position: relative;
 }
+/* bolinha de status (online/offline) no canto do avatar do cartão de
+   perfil — igual Discord: verde = online agora, cinza = offline */
+.profile-card-status-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid var(--panel);
+  background: var(--muted);
+}
+.profile-card-status-dot.is-online { background: var(--speaking); }
 .profile-card-body { padding: 12px 16px 4px; }
 .profile-card-name { font-size: 16px; font-weight: 700; color: var(--text); }
 .profile-card-tag { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.profile-card-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.profile-card-roles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.profile-card-role-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  color: var(--text);
+}
+.profile-card-join-date { font-size: 13px; color: var(--text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .profile-card-status { font-size: 13px; color: var(--text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .profile-card-actions { padding: 12px 16px 16px; }
 .profile-card-actions .secondary-btn { width: 100%; }
@@ -1437,8 +1637,19 @@ html, body {
   padding: 7px 0;
   font-size: 14px;
 }
-.manage-channels-group .manage-channel-row .name { flex: 1; }
+.manage-channels-group .manage-channel-row input.name {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--text);
+  font-size: 13px;
+}
+.manage-channels-group .manage-channel-row input.name:focus { border-color: var(--accent); outline: none; }
 .manage-channels-group .manage-channel-row button {
+  flex-shrink: 0;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1447,7 +1658,10 @@ html, body {
   cursor: pointer;
   font-size: 12px;
 }
-.manage-channels-group .manage-channel-row button:hover { color: var(--danger); border-color: var(--danger); }
+/* só o botão de Apagar fica vermelho no hover — o de Salvar (secondary-btn)
+   fica com a cor de destaque normal, senão parece que "Salvar" também apaga */
+.manage-channels-group .manage-channel-row button:not(.secondary-btn):hover { color: var(--danger); border-color: var(--danger); }
+.manage-channels-group .manage-channel-row button.secondary-btn:hover { color: var(--text); border-color: var(--accent); }
 .create-channel-row {
   display: flex;
   gap: 8px;

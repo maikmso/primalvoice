@@ -111,7 +111,7 @@ app.get('/api/config', (req, res) => {
 // da sala (ROOM_PASSWORD) — assim só quem já tem o convite consegue criar
 // conta, mas depois de criada a pessoa entra sempre com a própria senha.
 app.post('/api/register', async (req, res) => {
-  const { name, password, roomPassword } = req.body || {};
+  const { name, password, roomPassword, displayName } = req.body || {};
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return res.status(400).json({ error: 'Informe um nome de usuário.' });
@@ -119,6 +119,16 @@ app.post('/api/register', async (req, res) => {
   const cleanName = name.trim();
   if (cleanName.length > 24) {
     return res.status(400).json({ error: 'Nome muito longo (máx. 24 caracteres).' });
+  }
+  // Nome de exibição é obrigatório já na criação da conta — separado do nome
+  // de usuário (que fica só pra login, ninguém mais vê). Pode ser mudado
+  // depois a qualquer momento em "Editar perfil".
+  const cleanDisplayName = String(displayName || '').trim();
+  if (!cleanDisplayName) {
+    return res.status(400).json({ error: 'Informe um nome de exibição.' });
+  }
+  if (cleanDisplayName.length > 32) {
+    return res.status(400).json({ error: 'Nome de exibição muito longo (máx. 32 caracteres).' });
   }
   if (!password || typeof password !== 'string' || password.length < 4) {
     return res.status(400).json({ error: 'A senha precisa ter pelo menos 4 caracteres.' });
@@ -133,7 +143,7 @@ app.post('/api/register', async (req, res) => {
     return res.status(409).json({ error: 'Esse nome de usuário já existe. Escolha outro ou faça login.' });
   }
 
-  store.createUser(cleanName, password);
+  store.createUser(cleanName, password, cleanDisplayName);
   await issueTokenAndRespond(cleanName, res);
 });
 
@@ -245,10 +255,23 @@ app.get('/api/state', requireAuth, (req, res) => {
     roles: s.roles,
     memberRoles: s.memberRoles,
     ownerIdentity: s.ownerIdentity,
+    serverIcon: s.serverIcon || '',
     myIdentity: req.identity,
     myPermissions: store.getPermissions(req.identity),
     profiles: store.getPublicProfiles(),
   });
+});
+
+// Trocar a foto do servidor (ícone que aparece na barra à esquerda) — igual
+// ao "Alterar ícone do servidor" do Discord. Mesma permissão de gerenciar
+// canais (não existe cargo específico de "gerenciar servidor" ainda).
+app.patch('/api/server', requireAuth, requirePermission('manageChannels'), (req, res) => {
+  const { icon } = req.body || {};
+  if (typeof icon === 'string' && icon.length > store.MAX_IMAGE_LEN) {
+    return res.status(400).json({ error: 'Imagem grande demais.' });
+  }
+  const serverIcon = store.updateServerIcon(typeof icon === 'string' ? icon : '');
+  res.json({ serverIcon });
 });
 
 // Perfil salvo no servidor (segue a conta entre PCs/dispositivos).
@@ -260,6 +283,7 @@ app.get('/api/profile', requireAuth, (req, res) => {
     avatar: user.avatar || '',
     banner: user.banner || '',
     status: user.status || '',
+    createdAt: user.createdAt || null,
   });
 });
 
@@ -301,6 +325,26 @@ app.delete('/api/channels/:type/:id', requireAuth, requirePermission('manageChan
   const s = store.mutate((state) => {
     state.channels[type] = state.channels[type].filter((c) => c.id !== id);
   });
+  res.json({ channels: s.channels });
+});
+
+// Renomear canal de texto ou de voz (edição rápida, estilo Discord).
+app.patch('/api/channels/:type/:id', requireAuth, requirePermission('manageChannels'), (req, res) => {
+  const { type, id } = req.params;
+  const { name } = req.body || {};
+  if (type !== 'text' && type !== 'voice') return res.status(400).json({ error: 'Tipo de canal inválido.' });
+  const cleanName = String(name || '').trim().slice(0, 40);
+  if (!cleanName) return res.status(400).json({ error: 'Dê um nome pro canal.' });
+
+  let found = false;
+  const s = store.mutate((state) => {
+    const channel = state.channels[type].find((c) => c.id === id);
+    if (channel) {
+      channel.name = cleanName;
+      found = true;
+    }
+  });
+  if (!found) return res.status(404).json({ error: 'Canal não encontrado.' });
   res.json({ channels: s.channels });
 });
 

@@ -12,6 +12,9 @@ const gearBtn = document.getElementById('gear-btn');
 
 const joinForm = document.getElementById('join-form');
 const nameInput = document.getElementById('name-input');
+const usernamePrivacyHint = document.getElementById('username-privacy-hint');
+const joinDisplaynameLabel = document.getElementById('join-displayname-label');
+const displaynameInput = document.getElementById('displayname-input');
 const passwordInput = document.getElementById('password-input');
 const passwordConfirmInput = document.getElementById('password-confirm-input');
 const roomPasswordInput = document.getElementById('room-password-input');
@@ -26,6 +29,9 @@ const joinSubmitBtn = joinForm.querySelector('button[type="submit"]');
 let joinMode = 'login'; // 'login' | 'register'
 function applyJoinMode() {
   const isRegister = joinMode === 'register';
+  joinDisplaynameLabel.hidden = !isRegister;
+  displaynameInput.required = isRegister;
+  usernamePrivacyHint.hidden = !isRegister;
   joinPasswordConfirmLabel.hidden = !isRegister;
   joinRoomPasswordLabel.hidden = !isRegister;
   passwordConfirmInput.required = isRegister;
@@ -42,6 +48,14 @@ joinModeToggle.addEventListener('click', () => {
 
 const grid = document.getElementById('grid');
 const memberSidebarGroups = document.getElementById('member-sidebar-groups');
+const hideSidebarFullscreenBtn = document.getElementById('hide-sidebar-fullscreen-btn');
+const homeIconBtn = document.getElementById('home-icon-btn');
+const serverIconBtn = document.getElementById('server-icon-btn');
+const homeUnreadBadge = document.getElementById('home-unread-badge');
+const serverUnreadBadge = document.getElementById('server-unread-badge');
+const dmQuickList = document.getElementById('dm-quick-list');
+const sidebarTitleEl = document.getElementById('sidebar-title');
+const serverIconInput = document.getElementById('server-icon-input');
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
 const shareBtn = document.getElementById('share-btn');
@@ -54,7 +68,7 @@ const selfNameBtn = document.getElementById('self-name-btn');
 const channelSidebar = document.querySelector('.channel-sidebar');
 const memberList = document.querySelector('.member-list');
 const resizeLeft = document.getElementById('resize-left');
-const resizeRight = document.getElementById('resize-right');
+const toggleMembersBtn = document.getElementById('toggle-members-btn');
 const userPanelControls = document.querySelector('.user-panel-controls');
 const voiceStatusBar = document.getElementById('voice-status-bar');
 const voiceStatusChannel = document.getElementById('voice-status-channel');
@@ -148,6 +162,8 @@ const VOICE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
 const DM_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+const PENCIL_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"></path></svg>';
 
 const PERMISSION_LABELS = {
   manageChannels: 'Gerenciar canais (criar/apagar)',
@@ -233,6 +249,9 @@ const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]
 // Canais/DMs cujo histórico já foi carregado do servidor nesta sessão —
 // evita buscar de novo toda vez que a pessoa clica pra trocar de canal.
 const historyLoadedFor = new Set();
+// Contagem de mensagens não lidas por canal/DM (channelId -> quantidade),
+// tipo Discord — some assim que a pessoa abre aquela conversa.
+const unreadCounts = new Map();
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
 const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName }
@@ -252,6 +271,14 @@ let pendingProfileBanner = null;
 // ninguém que entrar na sala depois).
 const dmPeers = new Set(); // identities com quem já trocou DM nessa sessão
 let activeDmPeer = null; // identity da conversa privada aberta, ou null
+
+// Identidades que já vimos entrar na sala (ou de quem já recebemos o perfil)
+// durante essa sessão do app — existe pra garantir que a pessoa continue
+// aparecendo como OFFLINE na lista de membros depois que ela sai, mesmo se
+// ela criou a conta DEPOIS da última vez que buscamos o /api/state (nesse
+// caso ela não estaria no serverState.profiles ainda, e sem isso aqui
+// desapareceria da lista por completo em vez de virar OFFLINE).
+const knownIdentities = new Set();
 
 function dmChannelKey(identity) {
   return `dm:${identity}`;
@@ -309,6 +336,7 @@ async function fetchServerState() {
   const data = await apiFetch('/api/state');
   serverState = data;
   myPermissions = data.myPermissions || {};
+  applyServerIcon();
 
   // Perfil (foto/banner/nome/status) agora é uma conta de verdade guardada
   // no servidor — segue a pessoa entre PCs/dispositivos. Isso inclui gente
@@ -397,6 +425,33 @@ function applyProfileEverywhere(identity) {
   if (identity === myIdentity) applyAvatarToEl(selfAvatar, identity);
   if (identity === activeDmPeer) renderDmHeader();
   renderDmList();
+  // mensagens do chat que já estavam na tela quando a pessoa trocou de foto
+  // (ou quando o perfil dela só chegou depois que a mensagem foi mandada)
+  // ficavam pra sempre com o avatar antigo/vazio, porque só eram desenhadas
+  // uma vez — atualiza aqui pra pegar todo mundo que já apareceu na conversa.
+  document.querySelectorAll(`.chat-message[data-identity="${cssEscape(identity)}"] .avatar`).forEach((el) => applyAvatarToEl(el, identity));
+}
+
+// Cargo "principal" de alguém pra fins de cor (o primeiro cargo dela na
+// ordem de serverState.roles) — mesma lógica usada pra agrupar a lista de
+// membros da direita, só que aqui devolve só a cor (ou null se não tem
+// cargo nenhum).
+function topRoleColorFor(identity) {
+  if (!identity || !serverState.roles) return null;
+  const assigned = serverState.memberRoles[identity] || [];
+  const role = serverState.roles.find((r) => assigned.includes(r.id));
+  return role ? role.color : null;
+}
+
+// Se o cargo (ou a cor dele) mudar DEPOIS que a mensagem já apareceu na
+// tela, sem isso ela ficaria pra sempre com a cor antiga/nenhuma — mesmo
+// motivo da correção do avatar retroativo.
+function refreshAllChatAuthorColors() {
+  document.querySelectorAll('.chat-message[data-identity]').forEach((row) => {
+    const author = row.querySelector('.author');
+    if (!author) return;
+    author.style.color = topRoleColorFor(row.dataset.identity) || '';
+  });
 }
 
 function cssEscape(value) {
@@ -424,6 +479,12 @@ async function saveProfileToConfig() {
 const CROP_SPECS = {
   avatar: { frameW: 160, frameH: 160, outW: 160, outH: 160, maxBytes: 22000, shape: 'avatar' },
   banner: { frameW: 420, frameH: 140, outW: 420, outH: 140, maxBytes: 28000, shape: 'banner' },
+  servericon: { frameW: 160, frameH: 160, outW: 160, outH: 160, maxBytes: 22000, shape: 'avatar' },
+};
+const CROP_TITLES = {
+  avatar: 'Ajustar foto de perfil',
+  banner: 'Ajustar banner',
+  servericon: 'Ajustar foto do servidor',
 };
 
 const cropState = {
@@ -494,7 +555,7 @@ function openCropper(file, kind) {
       cropState.offsetY = (spec.frameH - img.naturalHeight * cropState.baseScale) / 2;
       cropState.resolve = resolve;
 
-      cropTitle.textContent = kind === 'avatar' ? 'Ajustar foto de perfil' : 'Ajustar banner';
+      cropTitle.textContent = CROP_TITLES[kind] || 'Ajustar imagem';
       cropStage.className = `crop-stage ${spec.shape}`;
       cropStage.style.width = `${spec.frameW}px`;
       cropStage.style.height = `${spec.frameH}px`;
@@ -850,7 +911,10 @@ function setSidebarCollapsed(collapsed) {
 function setMemberListCollapsed(collapsed) {
   memberListCollapsedState = collapsed;
   memberList.classList.toggle('collapsed', collapsed);
-  resizeRight.classList.toggle('collapsed', collapsed);
+  if (toggleMembersBtn) {
+    toggleMembersBtn.classList.toggle('active', !collapsed);
+    toggleMembersBtn.title = collapsed ? 'Mostrar lista de membros' : 'Ocultar lista de membros';
+  }
   if (collapsed) {
     if (memberListWidthPx > 20) lastMemberListWidth = memberListWidthPx;
     applyMemberListWidth(0);
@@ -858,6 +922,8 @@ function setMemberListCollapsed(collapsed) {
     applyMemberListWidth(lastMemberListWidth || MEMBERLIST_DEFAULT);
   }
 }
+
+toggleMembersBtn?.addEventListener('click', () => setMemberListCollapsed(!memberListCollapsedState));
 
 function setupResizeHandle(handle, panelEl, { invert, min, max, getWidth, applyWidth, isCollapsed, setCollapsed }) {
   let dragging = false;
@@ -914,15 +980,41 @@ setupResizeHandle(resizeLeft, channelSidebar, {
   setCollapsed: setSidebarCollapsed,
 });
 
-setupResizeHandle(resizeRight, memberList, {
-  invert: true,
-  min: MEMBERLIST_MIN,
-  max: MEMBERLIST_MAX,
-  getWidth: () => memberListWidthPx,
-  applyWidth: applyMemberListWidth,
-  isCollapsed: () => memberListCollapsedState,
-  setCollapsed: setMemberListCollapsed,
-});
+// Lista de membros da direita: fixa (não arrasta mais), só abre/fecha pelo
+// botão no cabeçalho — ver toggleMembersBtn acima.
+
+// Dica de "arraste/clique" das bordas redimensionáveis: era um title nativo
+// do navegador, que aparecia solto em cima do conteúdo (vídeo, lista de
+// membros) em qualquer altura onde o mouse estivesse na faixa inteira, e
+// ainda cortava na borda da janela do lado direito. Agora é um balãozinho
+// nosso, sempre ancorado no círculo da setinha (que fica no meio vertical
+// da faixa) e sempre abrindo pro lado do conteúdo principal, onde tem mais
+// espaço — nunca cortado na borda da janela.
+function setupResizeTooltip(handle, openTo) {
+  const tooltip = handle.querySelector('.resize-tooltip');
+  const hint = handle.querySelector('.collapse-hint');
+  handle.addEventListener('mouseenter', () => {
+    const rect = hint.getBoundingClientRect();
+    tooltip.style.top = `${rect.top + rect.height / 2}px`;
+    tooltip.style.transform = 'translateY(-50%)';
+    if (openTo === 'right') {
+      tooltip.style.left = `${rect.right + 10}px`;
+      tooltip.style.right = '';
+    } else {
+      tooltip.style.right = `${window.innerWidth - rect.left + 10}px`;
+      tooltip.style.left = '';
+    }
+    tooltip.classList.add('tooltip-visible');
+  });
+  handle.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('tooltip-visible');
+  });
+  handle.addEventListener('mousedown', () => {
+    tooltip.classList.remove('tooltip-visible');
+  });
+}
+
+setupResizeTooltip(resizeLeft, 'right');
 
 // ---------- canais (texto e voz) ----------
 function showTextView() {
@@ -954,7 +1046,35 @@ function buildChannelItemEl(channel, type) {
   label.textContent = channel.name;
   el.appendChild(label);
 
+  if (type === 'text') {
+    const unread = unreadCounts.get(channel.id) || 0;
+    if (unread > 0) {
+      el.classList.add('has-unread');
+      const badge = document.createElement('span');
+      badge.className = 'channel-badge';
+      badge.textContent = unread > 99 ? '99+' : String(unread);
+      el.appendChild(badge);
+    }
+  }
+
   if (myPermissions.manageChannels) {
+    // Duplo-clique no nome também entra no modo de edição — igual Discord,
+    // sem precisar caçar o lápis primeiro.
+    label.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startInlineChannelRename(el, channel, type, label);
+    });
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'channel-rename-btn';
+    renameBtn.title = 'Renomear canal';
+    renameBtn.innerHTML = PENCIL_ICON_SVG;
+    renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startInlineChannelRename(el, channel, type, label);
+    });
+    el.appendChild(renameBtn);
+
     const delBtn = document.createElement('button');
     delBtn.className = 'channel-delete-btn';
     delBtn.title = 'Apagar canal';
@@ -980,6 +1100,61 @@ function buildChannelItemEl(channel, type) {
   }
 
   return el;
+}
+
+// Troca o nome do canal, na hora, por um campinho de texto editável (sem
+// precisar abrir nenhum modal) — salva no Enter ou ao clicar fora, cancela
+// no Esc. Usado tanto pelo lápis quanto pelo duplo-clique no nome.
+async function renameChannel(type, channelId, newName) {
+  const data = await apiFetch(`/api/channels/${type}/${channelId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: newName }),
+  });
+  serverState.channels = data.channels;
+  renderChannelLists();
+  if (myPermissions.manageChannels) renderManageChannels();
+  broadcastStateChanged();
+}
+
+function startInlineChannelRename(itemEl, channel, type, labelEl) {
+  if (itemEl.querySelector('.channel-rename-input')) return; // já editando
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'channel-rename-input';
+  input.maxLength = 40;
+  input.value = channel.name;
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const finish = async (commit) => {
+    if (settled) return;
+    settled = true;
+    const newName = input.value.trim();
+    if (commit && newName && newName !== channel.name) {
+      try {
+        await renameChannel(type, channel.id, newName);
+        return; // renderChannelLists() já reconstrói tudo com o nome novo
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+    // sem mudança (ou deu erro/cancelou) — só volta o texto original no lugar
+    if (input.isConnected) input.replaceWith(labelEl);
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function renderChannelLists() {
@@ -1030,11 +1205,166 @@ function renderChannelLists() {
   });
 
   renderMemberSidebar();
+  updateRailBadges();
 }
+
+// ---------- alternar entre "servidor" (canais) e "mensagens diretas" ----------
+// Igual Discord: o ícone de cima (Home) mostra só as DMs, separado do
+// servidor de baixo — a barra lateral esquerda troca de conteúdo inteiro
+// (canais <-> lista de conversas), a área de chat/voz no meio não muda de
+// mecanismo nenhum, só qual conversa tá ativa.
+let sidebarView = 'server';
+let lastServerTextChannelId = null;
+
+function showServerView() {
+  sidebarView = 'server';
+  channelSidebar.classList.remove('view-dms');
+  channelSidebar.classList.add('view-server');
+  serverIconBtn?.classList.add('active');
+  homeIconBtn?.classList.remove('active');
+  if (sidebarTitleEl) sidebarTitleEl.textContent = 'Sala da galera';
+}
+
+function showDmsView() {
+  sidebarView = 'dms';
+  channelSidebar.classList.remove('view-server');
+  channelSidebar.classList.add('view-dms');
+  homeIconBtn?.classList.add('active');
+  serverIconBtn?.classList.remove('active');
+  if (sidebarTitleEl) sidebarTitleEl.textContent = 'Mensagens diretas';
+}
+
+// clique no ícone Home: abre a última DM ativa, ou a primeira da lista, ou
+// só mostra a view vazia se ainda não tiver nenhuma conversa
+function openDmHome() {
+  if (activeDmPeer && dmPeers.has(activeDmPeer)) {
+    switchToDm(activeDmPeer);
+    return;
+  }
+  const sorted = Array.from(dmPeers).sort((a, b) => displayNameFor(a).localeCompare(displayNameFor(b)));
+  if (sorted.length > 0) {
+    switchToDm(sorted[0]);
+  } else {
+    showDmsView();
+    renderChannelLists();
+    renderDmList();
+  }
+}
+
+// clique no ícone do servidor: volta pro último canal de texto que tava
+// aberto (só mexe na conversa ativa se a pessoa realmente tava numa DM)
+function openServerView() {
+  const wasInDm = sidebarView === 'dms';
+  showServerView();
+  renderChannelLists();
+  renderDmList();
+  if (wasInDm) {
+    const fallbackId = lastServerTextChannelId || (serverState.channels.text[0] && serverState.channels.text[0].id);
+    if (fallbackId) switchTextChannel(fallbackId);
+  }
+}
+
+homeIconBtn?.addEventListener('click', () => openDmHome());
+serverIconBtn?.addEventListener('click', () => openServerView());
+
+// ---------- foto do servidor + menu de botão direito no ícone do servidor ----------
+// Igual Discord: clicar com o botão direito no ícone do servidor (na barra
+// da esquerda) abre um menu com opções de "servidor" (não de uma pessoa) —
+// trocar o ícone, ver os membros, e uma informação de quando a própria
+// conta entrou no PrimalVoice.
+function applyServerIcon() {
+  const img = serverIconBtn?.querySelector('img');
+  if (!img) return;
+  img.src = serverState.serverIcon || 'assets/logo.png';
+}
+
+function formatJoinDate(ts) {
+  if (!ts) return null;
+  try {
+    return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  } catch {
+    return null;
+  }
+}
+
+serverIconInput?.addEventListener('change', async () => {
+  const file = serverIconInput.files[0];
+  serverIconInput.value = '';
+  if (!file) return;
+  try {
+    const dataUrl = await openCropper(file, 'servericon');
+    if (!dataUrl) return;
+    const data = await apiFetch('/api/server', { method: 'PATCH', body: JSON.stringify({ icon: dataUrl }) });
+    serverState.serverIcon = data.serverIcon;
+    applyServerIcon();
+    broadcastStateChanged();
+  } catch (err) {
+    alert(err.message || 'Não consegui usar essa imagem.');
+  }
+});
+
+serverIconBtn?.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  closeContextMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.addEventListener('click', (ev) => ev.stopPropagation());
+
+  const header = document.createElement('div');
+  header.className = 'context-menu-header';
+  header.textContent = 'PrimalVoice';
+  menu.appendChild(header);
+
+  if (myPermissions.manageChannels) {
+    const changeIconItem = document.createElement('div');
+    changeIconItem.className = 'context-menu-item';
+    const changeIconLabel = document.createElement('span');
+    changeIconLabel.className = 'label';
+    changeIconLabel.textContent = 'Alterar foto do servidor';
+    changeIconItem.appendChild(changeIconLabel);
+    changeIconItem.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      closeContextMenu();
+      serverIconInput.click();
+    });
+    menu.appendChild(changeIconItem);
+    menu.appendChild(dividerEl());
+  }
+
+  const viewMembersItem = document.createElement('div');
+  viewMembersItem.className = 'context-menu-item';
+  const viewMembersLabel = document.createElement('span');
+  viewMembersLabel.className = 'label';
+  viewMembersLabel.textContent = 'Ver membros';
+  viewMembersItem.appendChild(viewMembersLabel);
+  viewMembersItem.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    closeContextMenu();
+    if (memberListCollapsedState) setMemberListCollapsed(false);
+  });
+  menu.appendChild(viewMembersItem);
+
+  menu.appendChild(dividerEl());
+
+  const myProfile = serverState.profiles?.[myIdentity];
+  const joinDate = formatJoinDate(myProfile?.createdAt);
+  const info = document.createElement('div');
+  info.className = 'context-menu-info';
+  info.textContent = joinDate ? `Você entrou no PrimalVoice em ${joinDate}` : 'Data de entrada não disponível';
+  menu.appendChild(info);
+
+  document.body.appendChild(menu);
+  contextMenuEl = menu;
+  positionContextMenu(e.clientX, e.clientY, menu);
+});
 
 function switchTextChannel(channelId) {
   activeTextChannelId = channelId;
   activeDmPeer = null;
+  lastServerTextChannelId = channelId;
+  showServerView();
+  unreadCounts.delete(channelId);
   const channel = serverState.channels.text.find((c) => c.id === channelId);
   channelHeaderIcon.innerHTML = HASH_ICON_SVG;
   channelHeaderName.textContent = channel ? channel.name : '';
@@ -1059,6 +1389,8 @@ function switchToDm(peerIdentity) {
   dmPeers.add(peerIdentity);
   activeDmPeer = peerIdentity;
   activeTextChannelId = dmChannelKey(peerIdentity);
+  showDmsView();
+  unreadCounts.delete(activeTextChannelId);
   channelHeaderIcon.innerHTML = DM_ICON_SVG;
   channelHeaderName.textContent = displayNameFor(peerIdentity);
   chatInput.placeholder = `Conversar com @${displayNameFor(peerIdentity)}`;
@@ -1097,9 +1429,75 @@ function renderDmList() {
       name.textContent = displayNameFor(identity);
       row.appendChild(name);
 
+      const unread = unreadCounts.get(dmChannelKey(identity)) || 0;
+      if (unread > 0) {
+        row.classList.add('has-unread');
+        const badge = document.createElement('span');
+        badge.className = 'channel-badge';
+        badge.textContent = unread > 99 ? '99+' : String(unread);
+        row.appendChild(badge);
+      }
+
       row.addEventListener('click', () => switchToDm(identity));
       dmListEl.appendChild(row);
     });
+  updateRailBadges();
+}
+
+// ---------- indicadores de notificação na barra de servidores (ícone Home / ícone do servidor) ----------
+// Um atalho pra cada conversa privada que a pessoa já tem, com uma bolinha
+// vermelha quando tem mensagem não lida — igual ao Discord. O ícone Home
+// soma o total de não lidas de todas as DMs, e o ícone do servidor soma o
+// total de não lidas dos canais de texto do servidor. Clicar num atalho de
+// DM já leva direto pra conversa (switchToDm limpa o "não lido" na hora).
+function updateRailBadges() {
+  if (dmQuickList) {
+    dmQuickList.innerHTML = '';
+    Array.from(dmPeers)
+      .sort((a, b) => displayNameFor(a).localeCompare(displayNameFor(b)))
+      .forEach((identity) => {
+        const unread = unreadCounts.get(dmChannelKey(identity)) || 0;
+        const icon = document.createElement('div');
+        icon.className = 'server-icon dm-quick-icon';
+        icon.dataset.identity = identity;
+        icon.title = displayNameFor(identity);
+        icon.classList.toggle('active', sidebarView === 'dms' && activeDmPeer === identity);
+
+        const avatar = document.createElement('span');
+        avatar.className = 'avatar';
+        avatar.textContent = displayNameFor(identity).charAt(0).toUpperCase();
+        applyAvatarToEl(avatar, identity);
+        icon.appendChild(avatar);
+
+        if (unread > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'server-icon-badge';
+          badge.textContent = unread > 99 ? '99+' : String(unread);
+          icon.appendChild(badge);
+        }
+
+        icon.addEventListener('click', () => switchToDm(identity));
+        dmQuickList.appendChild(icon);
+      });
+  }
+
+  let homeUnread = 0;
+  dmPeers.forEach((identity) => {
+    homeUnread += unreadCounts.get(dmChannelKey(identity)) || 0;
+  });
+  if (homeUnreadBadge) {
+    homeUnreadBadge.hidden = homeUnread <= 0;
+    homeUnreadBadge.textContent = homeUnread > 99 ? '99+' : String(homeUnread);
+  }
+
+  let serverUnread = 0;
+  serverState.channels.text.forEach((ch) => {
+    serverUnread += unreadCounts.get(ch.id) || 0;
+  });
+  if (serverUnreadBadge) {
+    serverUnreadBadge.hidden = serverUnread <= 0;
+    serverUnreadBadge.textContent = serverUnread > 99 ? '99+' : String(serverUnread);
+  }
 }
 
 async function joinVoiceChannel(channelId) {
@@ -1249,6 +1647,7 @@ async function leaveVoiceChannel(opts = {}) {
   updateVoiceOverlay();
 
   grid.innerHTML = '';
+  if (grid.classList.contains('has-expanded')) exitExpandedExtras();
   grid.classList.remove('has-expanded');
   resetAudioState();
   resetVoiceControlsUI();
@@ -1295,6 +1694,7 @@ function appendChatMessageEl({ name, text, isSelf, identity, attachment }) {
 
   const row = document.createElement('div');
   row.className = isSelf ? 'chat-message self' : 'chat-message';
+  if (identity) row.dataset.identity = identity;
 
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
@@ -1310,6 +1710,11 @@ function appendChatMessageEl({ name, text, isSelf, identity, attachment }) {
   const author = document.createElement('span');
   author.className = 'author';
   author.textContent = name || 'Alguém';
+  // cor do cargo no nome de quem mandou, igual Discord — só aqui e na lista
+  // de membros da direita; NÃO na listinha de dentro do canal de voz nem no
+  // seu próprio nome lá embaixo no painel (isso já é assim de propósito)
+  const roleColor = topRoleColorFor(identity);
+  if (roleColor) author.style.color = roleColor;
   meta.appendChild(author);
   const time = document.createElement('span');
   time.className = 'time';
@@ -1351,7 +1756,17 @@ function pushChatMessage(channelId, msg) {
   if (!channelId) return;
   if (!chatHistoryByChannel.has(channelId)) chatHistoryByChannel.set(channelId, []);
   chatHistoryByChannel.get(channelId).push(msg);
-  if (channelId === activeTextChannelId) appendChatMessageEl(msg);
+  // "Visível" de verdade quer dizer: é o canal ativo E a pessoa tá mesmo
+  // olhando o chat de texto agora (não a chamada de voz) — senão a mensagem
+  // vira notificação em vez de só ser desenhada silenciosamente escondida.
+  const isVisible = channelId === activeTextChannelId && !textView.hidden;
+  if (isVisible) {
+    appendChatMessageEl(msg);
+  } else if (!msg.isSelf) {
+    unreadCounts.set(channelId, (unreadCounts.get(channelId) || 0) + 1);
+    renderChannelLists();
+    renderDmList();
+  }
 }
 
 // Busca o histórico salvo no servidor pra esse canal/DM (uma vez só por
@@ -1521,6 +1936,10 @@ function attachTrack(track, participant) {
   const el = track.attach();
   if (track.kind === 'video') {
     el.classList.add('video-el');
+    // compartilhamento de tela nunca pode cortar as pontas (a pessoa
+    // assistindo precisa ver a tela inteira) — câmera pode continuar
+    // preenchendo o quadro todo (cover), que fica melhor pra rosto
+    if (track.source === Track.Source.ScreenShare) el.classList.add('screen-video');
     const old = tile.querySelector('video');
     if (old) old.remove();
     tile.appendChild(el);
@@ -1553,13 +1972,40 @@ function removeTile(participant) {
   const tile = document.getElementById(tileId(participant.identity));
   if (tile && tile.classList.contains('expanded')) {
     grid.classList.remove('has-expanded');
+    exitExpandedExtras();
   }
   if (tile) tile.remove();
 }
 
+// Ao expandir um vídeo (tela cheia dentro do app): a lista de membros da
+// direita esconde sozinha (o vídeo ganha aquele espaço), e some um botão
+// pra também esconder a barra esquerda, pra quem quiser ficar 100% sem
+// nenhuma barra. Ao sair, volta tudo exatamente como estava antes.
+let memberListStateBeforeExpand = null;
+let sidebarStateBeforeExpand = null;
+
+function enterExpandedExtras() {
+  memberListStateBeforeExpand = memberListCollapsedState;
+  sidebarStateBeforeExpand = sidebarCollapsed;
+  if (!memberListCollapsedState) setMemberListCollapsed(true);
+  if (hideSidebarFullscreenBtn) hideSidebarFullscreenBtn.hidden = false;
+}
+
+function exitExpandedExtras() {
+  if (memberListStateBeforeExpand === false) setMemberListCollapsed(false);
+  if (sidebarStateBeforeExpand !== null && sidebarStateBeforeExpand !== sidebarCollapsed) {
+    setSidebarCollapsed(sidebarStateBeforeExpand);
+  }
+  memberListStateBeforeExpand = null;
+  sidebarStateBeforeExpand = null;
+  if (hideSidebarFullscreenBtn) hideSidebarFullscreenBtn.hidden = true;
+}
+
 function collapseExpandedTile() {
+  const wasExpanded = grid.classList.contains('has-expanded');
   grid.querySelectorAll('.tile.expanded').forEach((t) => t.classList.remove('expanded'));
   grid.classList.remove('has-expanded');
+  if (wasExpanded) exitExpandedExtras();
 }
 
 grid.addEventListener('click', (e) => {
@@ -1567,12 +2013,26 @@ grid.addEventListener('click', (e) => {
   if (!tile) return;
 
   const wasExpanded = tile.classList.contains('expanded');
-  collapseExpandedTile();
+  const gridWasExpanded = grid.classList.contains('has-expanded');
+  grid.querySelectorAll('.tile.expanded').forEach((t) => t.classList.remove('expanded'));
 
-  if (!wasExpanded) {
+  if (wasExpanded) {
+    // clicou de novo no mesmo vídeo que já tava em tela cheia -> sai de vez
+    grid.classList.remove('has-expanded');
+    exitExpandedExtras();
+  } else {
     tile.classList.add('expanded');
     grid.classList.add('has-expanded');
+    // só dispara a troca de layout (esconder lista/mostrar botão) ao ENTRAR
+    // em tela cheia — trocar de vídeo expandido pra outro não deve mexer
+    // nas barras de novo
+    if (!gridWasExpanded) enterExpandedExtras();
   }
+});
+
+hideSidebarFullscreenBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setSidebarCollapsed(!sidebarCollapsed);
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1659,8 +2119,6 @@ const DEAFEN_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 const CAMERA_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>';
-const SCREENSHARE_BADGE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
 
 function buildMemberRow(participant, opts = {}) {
   const row = document.createElement('div');
@@ -1677,23 +2135,26 @@ function buildMemberRow(participant, opts = {}) {
   const name = document.createElement('span');
   name.className = 'member-name';
   name.textContent = displayNameFor(participant.identity);
+  if (opts.roleColor) name.style.color = opts.roleColor;
   row.appendChild(name);
 
   if (opts.showStatus) {
     const badges = document.createElement('span');
     badges.className = 'member-status-badges';
 
+    // "AO VIVO" em vermelho no lugar do ícone de tela — mais visível que só
+    // um ícone pequeno, dá pra ver de longe quem tá transmitindo no canal.
+    const liveBadge = document.createElement('span');
+    liveBadge.className = 'status-badge live-badge';
+    liveBadge.title = 'Compartilhando tela';
+    liveBadge.textContent = 'AO VIVO';
+    badges.appendChild(liveBadge);
+
     const cameraBadge = document.createElement('span');
     cameraBadge.className = 'status-badge camera-badge';
     cameraBadge.title = 'Câmera ligada';
     cameraBadge.innerHTML = CAMERA_BADGE_SVG;
     badges.appendChild(cameraBadge);
-
-    const screenShareBadge = document.createElement('span');
-    screenShareBadge.className = 'status-badge screenshare-badge';
-    screenShareBadge.title = 'Compartilhando tela';
-    screenShareBadge.innerHTML = SCREENSHARE_BADGE_SVG;
-    badges.appendChild(screenShareBadge);
 
     const micBadge = document.createElement('span');
     micBadge.className = 'status-badge mic-badge';
@@ -1723,11 +2184,11 @@ function ensureVoiceStatus(identity) {
 
 function applyStatusBadges(row, status) {
   const cameraBadge = row.querySelector('.status-badge.camera-badge');
-  const screenShareBadge = row.querySelector('.status-badge.screenshare-badge');
+  const liveBadge = row.querySelector('.status-badge.live-badge');
   const micBadge = row.querySelector('.status-badge.mic-badge');
   const deafenBadge = row.querySelector('.status-badge.deafen-badge');
   if (cameraBadge) cameraBadge.classList.toggle('badge-on', !!status.camera);
-  if (screenShareBadge) screenShareBadge.classList.toggle('badge-on', !!status.screenShare);
+  if (liveBadge) liveBadge.classList.toggle('badge-on', !!status.screenShare);
   if (micBadge) micBadge.classList.toggle('badge-on', !!status.muted);
   if (deafenBadge) deafenBadge.classList.toggle('badge-on', !!status.deafened);
 }
@@ -1740,6 +2201,7 @@ function setVoiceMemberStatus(identity, patch) {
 }
 
 function addMember(participant) {
+  knownIdentities.add(participant.identity);
   const id = memberRowId(participant.identity);
   if (!document.getElementById(id)) {
     const row = buildMemberRow(participant);
@@ -1759,7 +2221,7 @@ function clearMembers() {
 // linha (só visual) pra quem não está online agora — clicável, mostra o
 // perfil salvo, mas sem os badges de câmera/mic/etc. que só existem em
 // chamada de voz
-function buildOfflineMemberRow(identity) {
+function buildOfflineMemberRow(identity, opts = {}) {
   const row = document.createElement('div');
   row.className = 'offline-member-row';
   row.dataset.identity = identity;
@@ -1774,6 +2236,7 @@ function buildOfflineMemberRow(identity) {
   const name = document.createElement('span');
   name.className = 'member-name';
   name.textContent = displayNameFor(identity);
+  if (opts.roleColor) name.style.color = opts.roleColor;
   row.appendChild(name);
 
   return row;
@@ -1790,6 +2253,7 @@ function renderMemberSidebar() {
 
   const allKnown = new Set(Object.keys(serverState.profiles || {}));
   onlineIdentities.forEach((id) => allKnown.add(id));
+  knownIdentities.forEach((id) => allKnown.add(id));
   if (serverState.ownerIdentity) allKnown.add(serverState.ownerIdentity);
 
   const roleGroups = [];
@@ -1827,9 +2291,15 @@ function renderMemberSidebar() {
     section.appendChild(header);
 
     identities.sort(byName).forEach((identity) => {
+      // cor do cargo só no nome de quem tá com a lista agrupada por cargo aqui
+      // na barra lateral — igual Discord, não mexe no nome dentro da chamada
+      // de voz (isso usa buildMemberRow em outro lugar, sem passar roleColor).
+      // showStatus fica de fora aqui: essa lista é "quem tá online", não "quem
+      // tá em chamada de voz" — os ícones de mic/fone mudo só fazem sentido
+      // na listinha de dentro do canal de voz (essa sim passa showStatus).
       const row = opts.offline
-        ? buildOfflineMemberRow(identity)
-        : buildMemberRow({ identity, name: displayNameFor(identity) }, { showStatus: true });
+        ? buildOfflineMemberRow(identity, { roleColor: color })
+        : buildMemberRow({ identity, name: displayNameFor(identity) }, { roleColor: color });
       section.appendChild(row);
     });
 
@@ -1931,6 +2401,15 @@ function openProfileCard(x, y, identity) {
   avatar.className = 'avatar profile-card-avatar';
   avatar.textContent = displayNameFor(identity).charAt(0).toUpperCase();
   applyAvatarToEl(avatar, identity);
+
+  // bolinha verde/cinza igual Discord — mesma checagem usada pra montar a
+  // lista de online/offline (se tem uma linha na lista de dentro da sala,
+  // a pessoa tá online agora).
+  const statusDot = document.createElement('span');
+  statusDot.className = 'profile-card-status-dot';
+  statusDot.classList.toggle('is-online', !!document.getElementById(memberRowId(identity)));
+  avatar.appendChild(statusDot);
+
   card.appendChild(avatar);
 
   const body = document.createElement('div');
@@ -1951,6 +2430,43 @@ function openProfileCard(x, y, identity) {
     statusEl.className = 'profile-card-status';
     statusEl.textContent = profile.status;
     body.appendChild(statusEl);
+  }
+
+  // cargos do servidor que essa pessoa tem — igual Discord, mostra os
+  // cargos com a mesma cor que aparecem na lista de membros
+  const roleIds = serverState.memberRoles?.[identity] || [];
+  const roles = (serverState.roles || []).filter((r) => roleIds.includes(r.id));
+  if (roles.length > 0) {
+    const rolesTitle = document.createElement('div');
+    rolesTitle.className = 'profile-card-section-title';
+    rolesTitle.textContent = 'Cargos';
+    body.appendChild(rolesTitle);
+
+    const rolesWrap = document.createElement('div');
+    rolesWrap.className = 'profile-card-roles';
+    roles.forEach((role) => {
+      const chip = document.createElement('span');
+      chip.className = 'profile-card-role-chip';
+      const dot = document.createElement('span');
+      dot.className = 'role-color-dot';
+      dot.style.background = role.color;
+      chip.appendChild(dot);
+      const label = document.createElement('span');
+      label.textContent = role.name;
+      chip.appendChild(label);
+      rolesWrap.appendChild(chip);
+    });
+    body.appendChild(rolesWrap);
+  }
+
+  // desde quando a pessoa usa o PrimalVoice (data de criação da conta) —
+  // vem junto do perfil público que o servidor manda em /api/state
+  const joinDate = formatJoinDate(serverState.profiles?.[identity]?.createdAt);
+  if (joinDate) {
+    const joinEl = document.createElement('div');
+    joinEl.className = 'profile-card-join-date';
+    joinEl.textContent = `No PrimalVoice desde ${joinDate}`;
+    body.appendChild(joinEl);
   }
 
   card.appendChild(body);
@@ -2187,6 +2703,9 @@ joinForm.addEventListener('submit', async (e) => {
     if (joinMode === 'register' && password !== passwordConfirmInput.value) {
       throw new Error('As senhas não são iguais.');
     }
+    if (joinMode === 'register' && !displaynameInput.value.trim()) {
+      throw new Error('Informe um nome de exibição (é o nome que os outros vão ver).');
+    }
 
     const configRes = await fetch(`${serverUrl}/api/config`);
     if (!configRes.ok) throw new Error('Não foi possível falar com o servidor.');
@@ -2196,7 +2715,7 @@ joinForm.addEventListener('submit', async (e) => {
     const endpoint = joinMode === 'register' ? '/api/register' : '/api/token';
     const body =
       joinMode === 'register'
-        ? { name, password, roomPassword: roomPasswordInput.value }
+        ? { name, password, roomPassword: roomPasswordInput.value, displayName: displaynameInput.value.trim() }
         : { name, password };
 
     const tokenRes = await fetch(`${serverUrl}${endpoint}`, {
@@ -2265,6 +2784,7 @@ joinForm.addEventListener('submit', async (e) => {
       } else if (msg.type === 'voice-status') {
         setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
       } else if (msg.type === 'profile-update') {
+        knownIdentities.add(msg.identity);
         memberProfiles.set(msg.identity, {
           avatar: msg.avatar || '',
           banner: msg.banner || '',
@@ -2272,6 +2792,7 @@ joinForm.addEventListener('submit', async (e) => {
           displayName: msg.displayName || '',
         });
         applyProfileEverywhere(msg.identity);
+        renderMemberSidebar();
       } else if (msg.type === 'state-changed') {
         fetchServerState().catch(() => {});
       } else if (msg.type === 'dm') {
@@ -2671,10 +3192,26 @@ settingsModalOverlay.addEventListener('click', (e) => {
 function buildManageChannelRow(channel, type) {
   const row = document.createElement('div');
   row.className = 'manage-channel-row';
-  const name = document.createElement('span');
-  name.className = 'name';
-  name.textContent = channel.name;
-  row.appendChild(name);
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'name';
+  nameInput.maxLength = 40;
+  nameInput.value = channel.name;
+  row.appendChild(nameInput);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'secondary-btn';
+  saveBtn.textContent = 'Salvar';
+  saveBtn.addEventListener('click', async () => {
+    const newName = nameInput.value.trim();
+    if (!newName || newName === channel.name) return;
+    try {
+      await renameChannel(type, channel.id, newName);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  row.appendChild(saveBtn);
 
   const delBtn = document.createElement('button');
   delBtn.textContent = 'Apagar';
@@ -2835,6 +3372,8 @@ function renderRoleEditor() {
       });
       serverState.roles = data.roles;
       renderRolesTab();
+      renderMemberSidebar();
+      refreshAllChatAuthorColors();
       broadcastStateChanged();
     } catch (err) {
       alert(err.message);
@@ -2851,6 +3390,8 @@ function renderRoleEditor() {
       serverState.memberRoles = data.memberRoles;
       selectedRoleId = null;
       renderRolesTab();
+      renderMemberSidebar();
+      refreshAllChatAuthorColors();
       broadcastStateChanged();
     } catch (err) {
       alert(err.message);
@@ -2920,6 +3461,12 @@ function renderRoleMembers() {
           });
           serverState.memberRoles = data.memberRoles;
           renderRoleMembers();
+          // sem isso, quem atribuiu o cargo só via a lista da direita
+          // reagrupada depois de reconectar — os outros já recebem certo
+          // pelo broadcastStateChanged, mas quem clicou aqui não recebe o
+          // próprio broadcast de volta
+          renderMemberSidebar();
+          refreshAllChatAuthorColors();
           broadcastStateChanged();
         } catch (err) {
           alert(err.message);
