@@ -58,6 +58,8 @@ const resizeRight = document.getElementById('resize-right');
 const userPanelControls = document.querySelector('.user-panel-controls');
 const voiceStatusBar = document.getElementById('voice-status-bar');
 const voiceStatusChannel = document.getElementById('voice-status-channel');
+const voiceStatusTitle = document.getElementById('voice-status-title');
+const voiceQualityTooltip = document.getElementById('voice-quality-tooltip');
 const voiceQualityIcon = document.getElementById('voice-quality-icon');
 const channelHeaderIcon = document.getElementById('channel-header-icon');
 const channelHeaderName = document.getElementById('channel-header-name');
@@ -177,7 +179,7 @@ function setVoiceQuality(quality) {
 function updateVoiceQualityTooltip() {
   if (!voiceRoom) return;
   const rtt = voiceRoom.engine && voiceRoom.engine.client && voiceRoom.engine.client.rtt;
-  voiceQualityIcon.title = typeof rtt === 'number' && rtt > 0 ? `Ping: ${rtt}ms` : 'Qualidade da conexão';
+  voiceQualityTooltip.textContent = typeof rtt === 'number' && rtt > 0 ? `Ping: ${rtt}ms` : 'Qualidade da conexão';
 }
 
 function stopVoiceQualityMonitor() {
@@ -186,7 +188,7 @@ function stopVoiceQualityMonitor() {
     voiceQualityInterval = null;
   }
   setVoiceQuality('unknown');
-  voiceQualityIcon.title = 'Qualidade da conexão';
+  voiceQualityTooltip.textContent = 'Qualidade da conexão';
 }
 let joining = false;
 
@@ -922,10 +924,16 @@ async function joinVoiceChannel(channelId) {
     await leaveVoiceChannel({ silent: true });
   }
 
+  voiceStatusTitle.textContent = 'Conectando...';
+  voiceStatusTitle.classList.add('connecting');
+  voiceStatusChannel.textContent = channel.name;
+  voiceStatusBar.hidden = false;
+
   let data;
   try {
     data = await apiFetch('/api/voice-token', { method: 'POST', body: JSON.stringify({ channelId }) });
   } catch (err) {
+    voiceStatusBar.hidden = true;
     alert(err.message || 'Não consegui entrar no canal de voz.');
     return;
   }
@@ -999,6 +1007,8 @@ async function joinVoiceChannel(channelId) {
   try {
     await vr.connect(livekitUrl, data.token);
   } catch (err) {
+    voiceStatusBar.hidden = true;
+    voiceStatusTitle.classList.remove('connecting');
     alert('Não consegui conectar no canal de voz.');
     return;
   }
@@ -1014,6 +1024,8 @@ async function joinVoiceChannel(channelId) {
   micBtn.classList.remove('off');
   micBtn.title = 'Microfone';
   userPanelControls.classList.remove('voice-disabled');
+  voiceStatusTitle.textContent = 'Conectado';
+  voiceStatusTitle.classList.remove('connecting');
   voiceStatusChannel.textContent = channel.name;
   voiceStatusBar.hidden = false;
   setVoiceQuality(ConnectionQuality ? ConnectionQuality.Unknown : 'unknown');
@@ -1075,6 +1087,7 @@ function resetVoiceControlsUI() {
   setDeafened(false, { silent: true });
   userPanelControls.classList.add('voice-disabled');
   voiceStatusBar.hidden = true;
+  voiceStatusTitle.classList.remove('connecting');
   stopVoiceQualityMonitor();
 }
 
@@ -2557,6 +2570,7 @@ const updateBanner = document.getElementById('update-banner');
 const updateBannerText = document.getElementById('update-banner-text');
 const updateBannerBtn = document.getElementById('update-banner-btn');
 const updateBannerDismiss = document.getElementById('update-banner-dismiss');
+const updateInstallOverlay = document.getElementById('update-install-overlay');
 let updateReadyToInstall = false;
 
 function showUpdateBanner(text, { showButton = false } = {}) {
@@ -2583,7 +2597,11 @@ if (window.vortex && window.vortex.onUpdateStatus) {
 
 updateBannerBtn.addEventListener('click', () => {
   if (!updateReadyToInstall) return;
-  window.vortex.installUpdate();
+  // mostra a telinha escura com o logo girando (igual Discord) antes de
+  // mandar instalar — dá um tempinho pro Chromium desenhar isso na tela
+  // antes do app fechar pra instalar em segundo plano.
+  updateInstallOverlay.hidden = false;
+  setTimeout(() => window.vortex.installUpdate(), 250);
 });
 
 updateBannerDismiss.addEventListener('click', () => {

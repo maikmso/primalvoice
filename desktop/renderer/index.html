@@ -13,6 +13,11 @@
     <button type="button" id="update-banner-dismiss" class="update-banner-dismiss" title="Fechar">×</button>
   </div>
 
+  <div id="update-install-overlay" class="update-install-overlay" hidden>
+    <img src="assets/logo.png" alt="" class="update-install-spinner" />
+    <div class="update-install-text">Atualizando o PrimalVoice...</div>
+  </div>
+
   <div id="settings-screen" class="screen">
     <div class="card">
       <h1>PrimalVoice</h1>
@@ -100,15 +105,16 @@
       <div class="user-panel">
         <div class="user-panel-controls voice-disabled">
           <div id="voice-status-bar" class="voice-status-bar" hidden>
-            <span class="voice-status-icon" id="voice-quality-icon" title="Qualidade da conexão">
+            <span class="voice-status-icon" id="voice-quality-icon">
               <svg viewBox="0 0 16 16" fill="currentColor">
                 <rect class="quality-bar" data-bar="1" x="0" y="9" width="3.6" height="6" rx="1"></rect>
                 <rect class="quality-bar" data-bar="2" x="5.6" y="5.5" width="3.6" height="9.5" rx="1"></rect>
                 <rect class="quality-bar" data-bar="3" x="11.2" y="1.5" width="3.6" height="13.5" rx="1"></rect>
               </svg>
+              <span class="voice-quality-tooltip" id="voice-quality-tooltip">Qualidade da conexão</span>
             </span>
             <div class="voice-status-text">
-              <span class="voice-status-title">Voz conectada</span>
+              <span class="voice-status-title" id="voice-status-title">Conectando...</span>
               <span class="voice-status-channel" id="voice-status-channel"></span>
             </div>
             <button id="hangup-btn" class="ctrl-icon leave voice-hangup-btn" title="Desconectar da chamada">

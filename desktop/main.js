@@ -267,7 +267,9 @@ ipcMain.handle('update:check', () => {
 });
 
 ipcMain.handle('update:install', () => {
-  autoUpdater.quitAndInstall();
+  // silencioso (sem a telinha feia do instalador NSIS) + reabre sozinho
+  // depois de instalar, igual ao Discord.
+  autoUpdater.quitAndInstall(true, true);
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
