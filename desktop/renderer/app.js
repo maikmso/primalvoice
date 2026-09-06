@@ -152,6 +152,20 @@ let activeTextChannelId = null;
 let activeVoiceChannelId = null;
 let selectedRoleId = null;
 let isDeafened = false;
+// guarda se a voz já estava mutada por escolha da pessoa antes de ensurdecer
+// — assim, ao tirar o ensurdecer, a gente sabe se deve voltar a falar ou não
+// (igual Discord: mutar sozinho não mexe no escutar; ensurdecer muta os dois;
+// tirar o ensurdecer só devolve a fala se ela não tinha sido mutada por
+// escolha própria antes)
+let micMutedBeforeDeafen = false;
+
+function animateIconKick(el) {
+  if (!el) return;
+  el.classList.remove('icon-kick');
+  void el.offsetWidth; // força reflow pra poder reiniciar a animação
+  el.classList.add('icon-kick');
+  el.addEventListener('animationend', () => el.classList.remove('icon-kick'), { once: true });
+}
 let amISpeaking = false;
 
 // ---------- indicador de voz no ícone da barra de tarefas (igual Discord) ----------
@@ -1085,6 +1099,7 @@ function resetVoiceControlsUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
   setDeafened(false, { silent: true });
+  micMutedBeforeDeafen = false;
   userPanelControls.classList.add('voice-disabled');
   voiceStatusBar.hidden = true;
   voiceStatusTitle.classList.remove('connecting');
@@ -1375,13 +1390,29 @@ function setDeafened(value, opts = {}) {
   if (deafenBtn) {
     deafenBtn.dataset.on = String(!value);
     deafenBtn.classList.toggle('off', value);
+    if (!opts.silent) animateIconKick(deafenBtn);
   }
   audioElsByIdentity.forEach((_els, identity) => applyVolume(identity));
-  if (value && !opts.silent && voiceRoom && micBtn.dataset.on === 'true') {
-    voiceRoom.localParticipant.setMicrophoneEnabled(false);
+
+  if (value) {
+    // ensurdecendo: guarda se a voz já estava mutada por escolha da pessoa
+    // (pra saber depois se devolve a fala ou não) e força mutar agora
+    micMutedBeforeDeafen = micBtn.dataset.on !== 'true';
+    if (!opts.silent && voiceRoom && micBtn.dataset.on === 'true') {
+      voiceRoom.localParticipant.setMicrophoneEnabled(false);
+    }
     micBtn.dataset.on = 'false';
     micBtn.classList.add('off');
+    if (!opts.silent) animateIconKick(micBtn);
+  } else if (!opts.silent && !micMutedBeforeDeafen) {
+    // desensurdecendo: só volta a falar se a voz não tinha sido mutada por
+    // escolha própria antes de ensurdecer
+    if (voiceRoom) voiceRoom.localParticipant.setMicrophoneEnabled(true);
+    micBtn.dataset.on = 'true';
+    micBtn.classList.remove('off');
+    animateIconKick(micBtn);
   }
+
   if (myIdentity) setVoiceMemberStatus(myIdentity, { deafened: value });
   if (!opts.silent) {
     broadcastVoiceStatus();
@@ -1962,11 +1993,19 @@ joinForm.addEventListener('submit', async (e) => {
 
 micBtn.addEventListener('click', async () => {
   if (!voiceRoom) return;
+  // clicar no microfone enquanto está ensurdecido sempre desfaz o
+  // ensurdecer (igual Discord) — a voz volta pro estado de antes de
+  // ensurdecer, dentro do setDeafened
+  if (isDeafened) {
+    setDeafened(false);
+    return;
+  }
   const newOn = micBtn.dataset.on !== 'true';
   await voiceRoom.localParticipant.setMicrophoneEnabled(newOn);
   micBtn.dataset.on = String(newOn);
   micBtn.classList.toggle('off', !newOn);
   playSound(newOn ? unmuteSound : muteSound); // só toca pra quem clicou, não é avisado pros outros
+  animateIconKick(micBtn);
   updateVoiceOverlay();
 });
 
@@ -2190,10 +2229,15 @@ keybindDeafenClearBtn.addEventListener('click', () => clearKeybind(keybindDeafen
 window.vortex.onShortcut((action) => {
   if (action === 'muteSelf') {
     if (!voiceRoom) return;
+    if (isDeafened) {
+      setDeafened(false);
+      return;
+    }
     const newOn = micBtn.dataset.on !== 'true';
     voiceRoom.localParticipant.setMicrophoneEnabled(newOn);
     micBtn.dataset.on = String(newOn);
     micBtn.classList.toggle('off', !newOn);
+    animateIconKick(micBtn);
   } else if (action === 'deafen') {
     if (!voiceRoom) return;
     setDeafened(!isDeafened);

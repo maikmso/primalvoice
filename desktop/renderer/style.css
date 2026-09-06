@@ -799,6 +799,17 @@ html, body {
 }
 .ctrl-icon svg { width: 18px; height: 18px; }
 .ctrl-icon:hover { background: var(--hover-strong); color: var(--text); }
+/* efeito de "mexida" ao passar o mouse (igual Discord) e ao clicar
+   (mic/fone mudam de estado com uma animaçãozinha em vez de só trocar cor) */
+.ctrl-icon:hover { animation: icon-kick 0.35s ease; }
+.ctrl-icon.icon-kick { animation: icon-kick 0.35s ease; }
+@keyframes icon-kick {
+  0% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.22) rotate(-10deg); }
+  55% { transform: scale(0.92) rotate(8deg); }
+  80% { transform: scale(1.06) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
 .ctrl-icon.off { color: var(--danger); }
 .ctrl-icon.leave { color: var(--danger); }
 .ctrl-icon.leave:hover { background: var(--danger); color: white; }
