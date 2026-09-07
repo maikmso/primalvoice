@@ -9,17 +9,6 @@
 <body>
   <div id="app-titlebar"></div>
 
-  <div id="boot-splash" class="boot-splash">
-    <div class="boot-splash-card">
-      <div class="boot-splash-grid"></div>
-      <div class="boot-splash-sparkles">
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <img src="assets/logo.png" alt="" class="boot-splash-logo" />
-      <div class="boot-splash-text">Iniciando...</div>
-    </div>
-  </div>
-
   <div id="update-banner" class="update-banner" hidden>
     <span id="update-banner-text">Nova atualização disponível</span>
     <button type="button" id="update-banner-btn" class="update-banner-btn">Reiniciar e instalar</button>
@@ -85,23 +74,23 @@
 
   <div id="room-screen" class="screen discord-shell" hidden>
     <nav class="server-rail">
-      <div id="home-icon-btn" class="server-icon home-icon active" title="Mensagens diretas">
+      <div id="home-icon-btn" class="server-icon home-icon active" data-tooltip="Mensagens diretas">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         <span id="home-unread-badge" class="server-icon-badge" hidden>0</span>
       </div>
       <div class="server-rail-divider"></div>
       <div id="dm-quick-list" class="dm-quick-list"></div>
-      <div id="server-icon-btn" class="server-icon" title="PrimalVoice">
+      <div id="server-icon-btn" class="server-icon" data-tooltip="PrimalVoice">
         <img src="assets/logo.png" alt="PrimalVoice" />
         <span id="server-unread-badge" class="server-icon-badge" hidden>0</span>
       </div>
     </nav>
+    <div id="rail-tooltip" class="rail-tooltip"></div>
 
     <div id="resize-left" class="resize-handle resize-handle-left">
       <span class="collapse-hint">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 11 8 15"></polyline><polyline points="16 7 20 11 16 15"></polyline></svg>
       </span>
-      <span class="resize-tooltip">Arraste para redimensionar. Clique para recolher.</span>
     </div>
 
     <aside class="channel-sidebar view-server">
@@ -159,7 +148,11 @@
             <button id="share-btn" class="ctrl-icon feature-btn" data-on="false" title="Compartilhar tela">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
             </button>
+            <button id="soundboard-btn" class="ctrl-icon feature-btn" data-on="false" title="Efeitos sonoros">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            </button>
           </div>
+          <input type="file" id="soundboard-file-input" accept="audio/*" hidden />
 
           <div class="user-info-row">
             <button type="button" class="avatar avatar-btn" id="self-avatar" title="Editar perfil"></button>

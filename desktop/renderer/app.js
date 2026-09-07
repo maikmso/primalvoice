@@ -1,4 +1,4 @@
-const { Room, RoomEvent, ConnectionQuality, Track } = LivekitClient;
+const { Room, RoomEvent, ConnectionQuality, Track, createAudioAnalyser } = LivekitClient;
 
 const settingsScreen = document.getElementById('settings-screen');
 const joinScreen = document.getElementById('join-screen');
@@ -59,6 +59,8 @@ const serverIconInput = document.getElementById('server-icon-input');
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
 const shareBtn = document.getElementById('share-btn');
+const soundboardBtn = document.getElementById('soundboard-btn');
+const soundboardFileInput = document.getElementById('soundboard-file-input');
 const hangupBtn = document.getElementById('hangup-btn');
 const exitAppBtn = document.getElementById('exit-app-btn');
 const memberListItems = document.getElementById('member-list-items');
@@ -89,6 +91,31 @@ voiceQualityIcon.addEventListener('mouseenter', () => {
 voiceQualityIcon.addEventListener('mouseleave', () => {
   voiceQualityTooltip.classList.remove('tooltip-visible');
 });
+
+// Balãozinho igual o do "Ping: Xms" só que pra direita, pros ícones da barra
+// de servidores (PrimalVoice, Mensagens diretas, atalhos de DM) — antes
+// usavam o "title" nativo do HTML, que é o tooltip feio/padrão do sistema
+// (demora pra aparecer, não combina com o tema do app).
+const railTooltip = document.getElementById('rail-tooltip');
+function attachRailTooltip(el, getText) {
+  if (!el) return;
+  el.addEventListener('mouseenter', () => {
+    const text = typeof getText === 'function' ? getText() : getText;
+    if (!text) return;
+    railTooltip.textContent = text;
+    const rect = el.getBoundingClientRect();
+    railTooltip.style.left = `${rect.right + 12}px`;
+    railTooltip.style.top = `${rect.top + rect.height / 2}px`;
+    railTooltip.style.transform = 'translateY(-50%)';
+    railTooltip.classList.add('tooltip-visible');
+  });
+  el.addEventListener('mouseleave', () => {
+    railTooltip.classList.remove('tooltip-visible');
+  });
+  el.removeAttribute('title');
+}
+attachRailTooltip(homeIconBtn, () => homeIconBtn.dataset.tooltip);
+attachRailTooltip(serverIconBtn, () => serverIconBtn.dataset.tooltip);
 const channelHeaderIcon = document.getElementById('channel-header-icon');
 const channelHeaderName = document.getElementById('channel-header-name');
 const textView = document.getElementById('text-view');
@@ -807,6 +834,26 @@ async function loadPrefsFromConfig(cfg) {
   if (keybinds.deafen) await window.vortex.setShortcut('deafen', keybinds.deafen);
 }
 
+// ---------- efeitos sonoros (soundboard) ----------
+// Guardado só neste PC (não segue a conta pra outros dispositivos, diferente
+// do perfil) — cada som vira um data URL (base64) dentro do config.json,
+// igual já é feito com foto de perfil/banner, só que com um limite bem mais
+// apertado (áudio comprimido em base64 infla rápido o arquivo de config).
+let mySounds = [];
+const MAX_SOUND_BYTES = 1_000_000; // ~1MB por efeito, dá uns poucos segundos de áudio
+const MAX_SOUND_SECONDS = 12;
+const MAX_SOUNDS = 24;
+
+function loadSoundboardFromConfig(cfg) {
+  mySounds = Array.isArray(cfg.soundboard) ? cfg.soundboard : [];
+}
+
+async function saveSoundboardToConfig() {
+  const cfg = (await window.vortex.getConfig()) || {};
+  cfg.soundboard = mySounds;
+  await window.vortex.setConfig(cfg);
+}
+
 async function init() {
   const modalVersionEl = document.getElementById('modal-version');
   if (modalVersionEl && window.vortex?.getAppVersion) {
@@ -818,6 +865,7 @@ async function init() {
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
   loadProfileFromConfig(cfg);
+  loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
@@ -953,7 +1001,11 @@ function setupResizeHandle(handle, panelEl, { invert, min, max, getWidth, applyW
     const delta = invert ? -dx : dx;
     let next = startWidth + delta;
 
-    if (next < min * 0.55) {
+    // só recolhe quando chega bem pertinho do fim de verdade (era min*0.55,
+    // ou seja, recolhia sozinho ainda no meio do arraste, bem antes da
+    // pessoa soltar) — agora só recolhe se ela arrastar até quase o 0
+    const COLLAPSE_THRESHOLD_PX = 28;
+    if (next < COLLAPSE_THRESHOLD_PX) {
       if (!isCollapsed()) setCollapsed(true);
       return;
     }
@@ -987,38 +1039,9 @@ setupResizeHandle(resizeLeft, channelSidebar, {
 // Lista de membros da direita: fixa (não arrasta mais), só abre/fecha pelo
 // botão no cabeçalho — ver toggleMembersBtn acima.
 
-// Dica de "arraste/clique" das bordas redimensionáveis: era um title nativo
-// do navegador, que aparecia solto em cima do conteúdo (vídeo, lista de
-// membros) em qualquer altura onde o mouse estivesse na faixa inteira, e
-// ainda cortava na borda da janela do lado direito. Agora é um balãozinho
-// nosso, sempre ancorado no círculo da setinha (que fica no meio vertical
-// da faixa) e sempre abrindo pro lado do conteúdo principal, onde tem mais
-// espaço — nunca cortado na borda da janela.
-function setupResizeTooltip(handle, openTo) {
-  const tooltip = handle.querySelector('.resize-tooltip');
-  const hint = handle.querySelector('.collapse-hint');
-  handle.addEventListener('mouseenter', () => {
-    const rect = hint.getBoundingClientRect();
-    tooltip.style.top = `${rect.top + rect.height / 2}px`;
-    tooltip.style.transform = 'translateY(-50%)';
-    if (openTo === 'right') {
-      tooltip.style.left = `${rect.right + 10}px`;
-      tooltip.style.right = '';
-    } else {
-      tooltip.style.right = `${window.innerWidth - rect.left + 10}px`;
-      tooltip.style.left = '';
-    }
-    tooltip.classList.add('tooltip-visible');
-  });
-  handle.addEventListener('mouseleave', () => {
-    tooltip.classList.remove('tooltip-visible');
-  });
-  handle.addEventListener('mousedown', () => {
-    tooltip.classList.remove('tooltip-visible');
-  });
-}
-
-setupResizeTooltip(resizeLeft, 'right');
+// (o balãozinho de texto explicando "arraste/clique" foi tirado — igual o
+// Discord, que não mostra nenhum texto, só a faixa fina com a setinha
+// dupla aparecendo no hover; mais limpo)
 
 // ---------- canais (texto e voz) ----------
 function showTextView() {
@@ -1457,15 +1480,21 @@ function renderDmList() {
 function updateRailBadges() {
   if (dmQuickList) {
     dmQuickList.innerHTML = '';
+    // Só mostra aqui na barra de servidores quem tem mensagem não lida —
+    // igual Discord. Antes ficava toda conversa que já foi aberta na sessão
+    // pra sempre destacada aqui (mesmo depois de já ter lido); assim que a
+    // pessoa clica e entra na conversa, o não lido zera (switchToDm) e o
+    // atalho já não aparece mais nem aqui, só dentro de "Conversas diretas".
     Array.from(dmPeers)
+      .filter((identity) => (unreadCounts.get(dmChannelKey(identity)) || 0) > 0)
       .sort((a, b) => displayNameFor(a).localeCompare(displayNameFor(b)))
       .forEach((identity) => {
         const unread = unreadCounts.get(dmChannelKey(identity)) || 0;
         const icon = document.createElement('div');
         icon.className = 'server-icon dm-quick-icon';
         icon.dataset.identity = identity;
-        icon.title = displayNameFor(identity);
         icon.classList.toggle('active', sidebarView === 'dms' && activeDmPeer === identity);
+        attachRailTooltip(icon, () => displayNameFor(identity));
 
         const avatar = document.createElement('span');
         avatar.className = 'avatar';
@@ -1562,10 +1591,12 @@ async function joinVoiceChannel(channelId) {
     playSound(leaveSound);
   });
   vr.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+    // Eu mesmo não entro nessa lista: quem decide se EU estou falando é a
+    // detecção local (startLocalSpeakingDetection, mais rápida que esperar
+    // o servidor mandar essa atualização) — ver o comentário lá em cima,
+    // perto de setSpeaking. Só aplica pros outros participantes aqui.
     const speakingIds = new Set(speakers.map((p) => p.identity));
-    const all = [vr.localParticipant, ...vr.remoteParticipants.values()];
-    all.forEach((p) => setSpeaking(p.identity, speakingIds.has(p.identity)));
-    amISpeaking = speakingIds.has(vr.localParticipant.identity);
+    vr.remoteParticipants.forEach((p) => setSpeaking(p.identity, speakingIds.has(p.identity)));
     updateVoiceOverlay();
   });
   vr.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
@@ -1589,8 +1620,21 @@ async function joinVoiceChannel(channelId) {
   };
   vr.on(RoomEvent.TrackPublished, handleTrackPublishedChange(true));
   vr.on(RoomEvent.TrackUnpublished, handleTrackPublishedChange(false));
-  vr.on(RoomEvent.LocalTrackPublished, handleTrackPublishedChange(true));
-  vr.on(RoomEvent.LocalTrackUnpublished, handleTrackPublishedChange(false));
+  vr.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
+    handleTrackPublishedChange(true)(publication, participant);
+    if (publication.source === Track.Source.Microphone && publication.track) {
+      startLocalSpeakingDetection(publication.track);
+    }
+  });
+  vr.on(RoomEvent.LocalTrackUnpublished, (publication, participant) => {
+    handleTrackPublishedChange(false)(publication, participant);
+    if (publication.source === Track.Source.Microphone) {
+      stopLocalSpeakingDetection();
+      setSpeaking(myIdentity, false);
+      amISpeaking = false;
+      updateVoiceOverlay();
+    }
+  });
 
   try {
     await vr.connect(livekitUrl, data.token);
@@ -1648,6 +1692,7 @@ async function leaveVoiceChannel(opts = {}) {
   voiceRoom = null;
   activeVoiceChannelId = null;
   amISpeaking = false;
+  stopLocalSpeakingDetection();
   updateVoiceOverlay();
 
   grid.innerHTML = '';
@@ -1692,7 +1737,44 @@ function renderChatForActiveChannel() {
   history.forEach((msg) => appendChatMessageEl(msg));
 }
 
-function appendChatMessageEl({ name, text, isSelf, identity, attachment }) {
+// Deixa os links dentro do texto da mensagem clicáveis (abrem no navegador
+// padrão, não dentro do próprio PrimalVoice) e mantém o resto do texto
+// como texto normal — sem isso o link aparecia igual a qualquer palavra,
+// sem dar pra clicar nem tinha como saber que era um link antes de tentar.
+const CHAT_URL_REGEX = /(https?:\/\/[^\s<>"']+)/g;
+
+function renderMessageTextWithLinks(container, text) {
+  CHAT_URL_REGEX.lastIndex = 0;
+  let lastIndex = 0;
+  let match;
+  while ((match = CHAT_URL_REGEX.exec(text))) {
+    if (match.index > lastIndex) {
+      container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+    // tira pontuação de fechamento que normalmente não faz parte do link em
+    // si (ex: "olha isso: https://x.com/y." ou "(https://x.com/y)")
+    let url = match[0];
+    let trailing = '';
+    while (url && /[).,!?;:'"]$/.test(url)) {
+      trailing = url.slice(-1) + trailing;
+      url = url.slice(0, -1);
+    }
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'chat-link';
+    link.textContent = url;
+    container.appendChild(link);
+    if (trailing) container.appendChild(document.createTextNode(trailing));
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    container.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+}
+
+function appendChatMessageEl({ name, text, isSelf, identity, attachment, ts }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
@@ -1722,14 +1804,18 @@ function appendChatMessageEl({ name, text, isSelf, identity, attachment }) {
   meta.appendChild(author);
   const time = document.createElement('span');
   time.className = 'time';
-  time.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  // usa o horário real de quando a mensagem foi mandada (ts, vindo do
+  // servidor ou gerado na hora do envio) — antes usava a hora ATUAL toda
+  // vez que essa função rodava, então o horário "andava" sozinho cada
+  // vez que a pessoa entrava de novo no canal e o histórico era redesenhado
+  time.textContent = new Date(ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   meta.appendChild(time);
   body.appendChild(meta);
 
   if (text) {
     const textEl = document.createElement('div');
     textEl.className = 'text';
-    textEl.textContent = text;
+    renderMessageTextWithLinks(textEl, text);
     body.appendChild(textEl);
   }
 
@@ -1935,20 +2021,115 @@ function ensureTile(participant) {
   return tile;
 }
 
+// Compartilhamento de tela de OUTRA pessoa não abre sozinho pra quem tá na
+// sala — fica só um botão "Assistir transmissão" no meio da telinha até a
+// pessoa clicar (igual pedido, pra não abrir do nada no meio de uma call).
+// screenShareTracks guarda o track de cada identidade que tá compartilhando
+// (pra poder desenhar quando clicar em assistir); watchingScreenShare guarda
+// quem JÁ clicou em assistir agora.
+const screenShareTracks = new Map();
+const watchingScreenShare = new Set();
+
+function isMyIdentity(identity) {
+  return !!(voiceRoom && voiceRoom.localParticipant && voiceRoom.localParticipant.identity === identity);
+}
+
+function showWatchStreamPrompt(tile, participant) {
+  if (tile.querySelector('.watch-stream-prompt')) return;
+  tile.classList.add('screen-pending');
+  const prompt = document.createElement('div');
+  prompt.className = 'watch-stream-prompt';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'watch-stream-btn';
+  btn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"></path></svg>Assistir transmissão';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    watchingScreenShare.add(participant.identity);
+    const track = screenShareTracks.get(participant.identity);
+    if (track) attachTrack(track, participant);
+  });
+  prompt.appendChild(btn);
+  tile.appendChild(prompt);
+}
+
+function addScreenShareControls(tile, participant) {
+  if (tile.querySelector('.screen-share-controls')) return;
+  const bar = document.createElement('div');
+  bar.className = 'screen-share-controls';
+
+  const fullscreenBtn = document.createElement('button');
+  fullscreenBtn.type = 'button';
+  fullscreenBtn.className = 'screen-share-ctrl-btn';
+  fullscreenBtn.title = 'Tela cheia';
+  fullscreenBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>';
+  fullscreenBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const videoEl = tile.querySelector('video.screen-video');
+    if (videoEl && videoEl.requestFullscreen) videoEl.requestFullscreen().catch(() => {});
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'screen-share-ctrl-btn';
+  closeBtn.title = 'Fechar transmissão';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopWatchingScreenShare(participant);
+  });
+
+  bar.appendChild(fullscreenBtn);
+  bar.appendChild(closeBtn);
+  tile.appendChild(bar);
+}
+
+// Clicou no X: só para de MOSTRAR a transmissão pra essa pessoa (volta a
+// mostrar o botão de assistir) — não mexe em nada de quem está compartilhando.
+function stopWatchingScreenShare(participant) {
+  watchingScreenShare.delete(participant.identity);
+  const tile = document.getElementById(tileId(participant.identity));
+  if (!tile) return;
+  const track = screenShareTracks.get(participant.identity);
+  if (track) detachTrackFromTile(track, tile, participant.identity);
+  tile.querySelector('.screen-share-controls')?.remove();
+  if (track && screenShareTracks.has(participant.identity)) {
+    showWatchStreamPrompt(tile, participant);
+  }
+}
+
 function attachTrack(track, participant) {
   const tile = ensureTile(participant);
+  const isScreenShare = track.kind === 'video' && track.source === Track.Source.ScreenShare;
+  const isRemoteScreenShare = isScreenShare && !isMyIdentity(participant.identity);
+
+  if (isRemoteScreenShare) {
+    screenShareTracks.set(participant.identity, track);
+    if (!watchingScreenShare.has(participant.identity)) {
+      showWatchStreamPrompt(tile, participant);
+      return;
+    }
+  }
+
   const el = track.attach();
   if (track.kind === 'video') {
     el.classList.add('video-el');
     // compartilhamento de tela nunca pode cortar as pontas (a pessoa
     // assistindo precisa ver a tela inteira) — câmera pode continuar
     // preenchendo o quadro todo (cover), que fica melhor pra rosto
-    if (track.source === Track.Source.ScreenShare) el.classList.add('screen-video');
+    if (isScreenShare) el.classList.add('screen-video');
     const old = tile.querySelector('video');
     if (old) old.remove();
     tile.appendChild(el);
     tile.classList.add('has-video');
     applyVideoVisibility(participant.identity);
+    if (isRemoteScreenShare) {
+      tile.querySelector('.watch-stream-prompt')?.remove();
+      tile.classList.remove('screen-pending');
+      addScreenShareControls(tile, participant);
+    }
   } else {
     el.classList.add('audio-el');
     tile.appendChild(el);
@@ -1969,6 +2150,17 @@ function detachTrackFromTile(track, tile, identity) {
 
 function detachTrack(track, participant) {
   const tile = participant ? document.getElementById(tileId(participant.identity)) : null;
+  // parou de compartilhar (ou saiu do canal) antes de alguém clicar em
+  // "assistir" — limpa o estado de pendência e tira o botão da tela
+  if (participant && screenShareTracks.get(participant.identity) === track) {
+    screenShareTracks.delete(participant.identity);
+    watchingScreenShare.delete(participant.identity);
+    if (tile) {
+      tile.querySelector('.watch-stream-prompt')?.remove();
+      tile.querySelector('.screen-share-controls')?.remove();
+      tile.classList.remove('screen-pending');
+    }
+  }
   detachTrackFromTile(track, tile, participant?.identity);
 }
 
@@ -1978,6 +2170,8 @@ function removeTile(participant) {
     grid.classList.remove('has-expanded');
     exitExpandedExtras();
   }
+  screenShareTracks.delete(participant.identity);
+  watchingScreenShare.delete(participant.identity);
   if (tile) tile.remove();
 }
 
@@ -2321,6 +2515,73 @@ function renderMemberSidebar() {
   addSection('Offline', null, offline, { offline: true });
 }
 
+// Detecta se EU estou falando direto do áudio do microfone (Web Audio API,
+// via o próprio helper que o LiveKit já expõe), sem esperar o aviso do
+// servidor — era exatamente essa espera (o "ActiveSpeakersChanged" só chega
+// de tempos em tempos, não é instantâneo) que fazia o aninhado verde demorar
+// pra acender depois que a pessoa já tinha começado a falar. Só se aplica a
+// mim mesmo: pra quem está do outro lado, continua vindo do servidor (não
+// dá pra saber se alguém remoto está falando sem passar pela rede).
+let localSpeakingAnalyser = null;
+let localSpeakingLoopId = null;
+let localSpeakingActive = false;
+let localSpeakingHangoverAt = 0;
+const SPEAKING_VOLUME_THRESHOLD = 0.02;
+const SPEAKING_HANGOVER_MS = 300; // segura o "falando" um pouquinho a mais pra não piscar entre palavras
+const SPEAKING_POLL_MS = 100; // não usa requestAnimationFrame de propósito: isso pausa/fica bem lento com a janela minimizada ou sem foco, e a pessoa pode continuar numa chamada de voz com o PrimalVoice em segundo plano
+
+function stopLocalSpeakingDetection() {
+  if (localSpeakingLoopId) {
+    clearInterval(localSpeakingLoopId);
+    localSpeakingLoopId = null;
+  }
+  if (localSpeakingAnalyser) {
+    localSpeakingAnalyser.cleanup().catch(() => {});
+    localSpeakingAnalyser = null;
+  }
+  localSpeakingActive = false;
+}
+
+function startLocalSpeakingDetection(track) {
+  stopLocalSpeakingDetection();
+  if (!track || typeof createAudioAnalyser !== 'function') return;
+  try {
+    // minDecibels/maxDecibels bem mais abertos que o padrão do helper (que é
+    // -100/-80, uma faixa de só 20dB — satura rápido demais e detecta até
+    // ruído bem fraco como "falando"). -100/-30 é a faixa normal usada em
+    // medidor de nível de voz, dá uma resposta muito mais fiel a fala real.
+    localSpeakingAnalyser = createAudioAnalyser(track, {
+      fftSize: 512,
+      smoothingTimeConstant: 0.2,
+      minDecibels: -100,
+      maxDecibels: -30,
+    });
+  } catch {
+    localSpeakingAnalyser = null;
+    return;
+  }
+  const loop = () => {
+    if (!localSpeakingAnalyser) return;
+    const volume = localSpeakingAnalyser.calculateVolume();
+    const now = Date.now();
+    if (volume > SPEAKING_VOLUME_THRESHOLD) {
+      localSpeakingHangoverAt = now + SPEAKING_HANGOVER_MS;
+      if (!localSpeakingActive) {
+        localSpeakingActive = true;
+        setSpeaking(myIdentity, true);
+        amISpeaking = true;
+        updateVoiceOverlay();
+      }
+    } else if (localSpeakingActive && now > localSpeakingHangoverAt) {
+      localSpeakingActive = false;
+      setSpeaking(myIdentity, false);
+      amISpeaking = false;
+      updateVoiceOverlay();
+    }
+  };
+  localSpeakingLoopId = setInterval(loop, SPEAKING_POLL_MS);
+}
+
 function setSpeaking(identity, isSpeaking) {
   document.getElementById(tileId(identity))?.classList.toggle('speaking', isSpeaking);
   document.getElementById(memberRowId(identity))?.classList.toggle('speaking', isSpeaking);
@@ -2387,6 +2648,202 @@ function positionContextMenu(x, y, menu) {
   if (top + rect.height > window.innerHeight) top = window.innerHeight - rect.height - 8;
   menu.style.left = `${Math.max(8, left)}px`;
   menu.style.top = `${Math.max(8, top)}px`;
+}
+
+// ---------- efeitos sonoros (soundboard) ----------
+const SOUNDBOARD_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
+
+function openSoundboardPanel() {
+  closeContextMenu();
+  const panel = document.createElement('div');
+  panel.className = 'context-menu soundboard-panel';
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  const header = document.createElement('div');
+  header.className = 'context-menu-header';
+  header.textContent = 'Efeitos sonoros';
+  panel.appendChild(header);
+
+  const hint = document.createElement('div');
+  hint.className = 'soundboard-hint';
+  hint.textContent = voiceRoom
+    ? 'Clique num efeito pra tocar — todo mundo no canal de voz escuta.'
+    : 'Entre num canal de voz pra poder tocar os efeitos.';
+  panel.appendChild(hint);
+
+  const grid = document.createElement('div');
+  grid.className = 'soundboard-grid';
+
+  if (mySounds.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'soundboard-empty';
+    empty.textContent = 'Você ainda não adicionou nenhum efeito sonoro.';
+    grid.appendChild(empty);
+  } else {
+    mySounds.forEach((sound) => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'soundboard-tile';
+      tile.title = sound.name;
+
+      const icon = document.createElement('span');
+      icon.innerHTML = SOUNDBOARD_ICON_SVG;
+      tile.appendChild(icon);
+
+      const name = document.createElement('span');
+      name.className = 'soundboard-tile-name';
+      name.textContent = sound.name;
+      tile.appendChild(name);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'soundboard-tile-remove';
+      removeBtn.title = 'Remover';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        mySounds = mySounds.filter((s) => s.id !== sound.id);
+        saveSoundboardToConfig().catch(() => {});
+        openSoundboardPanel(); // reabre já atualizado, na mesma posição de antes não importa muito aqui
+      });
+      tile.appendChild(removeBtn);
+
+      tile.addEventListener('click', () => playSoundboardClip(sound));
+      grid.appendChild(tile);
+    });
+  }
+
+  if (mySounds.length < MAX_SOUNDS) {
+    const addTile = document.createElement('button');
+    addTile.type = 'button';
+    addTile.className = 'soundboard-tile soundboard-add';
+    addTile.innerHTML = '<span style="font-size:20px;line-height:1;">+</span><span class="soundboard-tile-name">Adicionar</span>';
+    addTile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      soundboardFileInput.click();
+    });
+    grid.appendChild(addTile);
+  }
+
+  panel.appendChild(grid);
+
+  document.body.appendChild(panel);
+  contextMenuEl = panel;
+  // Abre pra CIMA do botão (não pra baixo, tipo os outros menus) — o botão
+  // fica no rodapé da barra lateral, então "abrir pra baixo" sairia da tela.
+  const anchorRect = soundboardBtn.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  let left = anchorRect.left;
+  if (left + panelRect.width > window.innerWidth) left = window.innerWidth - panelRect.width - 8;
+  let top = anchorRect.top - panelRect.height - 10;
+  panel.style.left = `${Math.max(8, left)}px`;
+  panel.style.top = `${Math.max(8, top)}px`;
+}
+
+async function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+soundboardBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openSoundboardPanel();
+});
+
+soundboardFileInput.addEventListener('change', async () => {
+  const file = soundboardFileInput.files[0];
+  soundboardFileInput.value = '';
+  if (!file) return;
+  if (file.size > MAX_SOUND_BYTES) {
+    alert(`Esse áudio é muito grande (máximo ${(MAX_SOUND_BYTES / 1_000_000).toFixed(1)}MB — dá pra usar um trecho bem curtinho).`);
+    return;
+  }
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const probeCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let duration;
+    try {
+      const decoded = await probeCtx.decodeAudioData(arrayBuffer.slice(0));
+      duration = decoded.duration;
+    } finally {
+      probeCtx.close().catch(() => {});
+    }
+    if (duration > MAX_SOUND_SECONDS) {
+      alert(`Esse áudio dura ${duration.toFixed(1)}s — o limite pra efeito sonoro é ${MAX_SOUND_SECONDS}s.`);
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const name = file.name.replace(/\.[^./\\]+$/, '').slice(0, 32) || 'Som';
+    mySounds.push({ id: `snd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, dataUrl });
+    await saveSoundboardToConfig();
+    openSoundboardPanel();
+  } catch (err) {
+    console.warn('Não consegui usar esse arquivo de áudio:', err);
+    alert('Não consegui usar esse arquivo — confira se é mesmo um áudio válido.');
+  }
+});
+
+// AudioContext único reaproveitado entre um efeito e outro (evita criar uma
+// pilha de contextos de áudio abertos, o Chromium reclama depois de muitos).
+let soundboardAudioCtx = null;
+
+// Toca o efeito no seu PC (você também escuta) E manda ele como uma faixa de
+// áudio extra pro canal de voz — assim todo mundo que está na chamada ouve
+// junto, igual o soundboard de verdade do Discord. Continua tocando mesmo
+// que o microfone esteja mudo (é uma faixa separada, não depende do mic).
+async function playSoundboardClip(sound) {
+  if (!voiceRoom) {
+    alert('Entre em um canal de voz pra poder tocar efeitos sonoros.');
+    return;
+  }
+  try {
+    const resp = await fetch(sound.dataUrl);
+    const arrayBuffer = await resp.arrayBuffer();
+    if (!soundboardAudioCtx || soundboardAudioCtx.state === 'closed') {
+      soundboardAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = soundboardAudioCtx;
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    const gain = ctx.createGain();
+    gain.gain.value = 1.0;
+    source.connect(gain);
+
+    // você ouve local (ligado direto na saída de som de verdade)
+    gain.connect(ctx.destination);
+
+    // todo mundo na chamada ouve (faixa extra publicada só enquanto o
+    // efeito está tocando — não usa Track.Source.Microphone de propósito,
+    // senão o resto do app ia confundir isso com o seu microfone de verdade
+    // nos badges de "mudo"/etc.)
+    const mixDestination = ctx.createMediaStreamDestination();
+    gain.connect(mixDestination);
+    const track = mixDestination.stream.getAudioTracks()[0];
+    await voiceRoom.localParticipant.publishTrack(track, {
+      name: `soundboard-${sound.id}-${Date.now()}`,
+      source: Track.Source.Unknown,
+    });
+
+    source.start();
+    source.onended = async () => {
+      try {
+        await voiceRoom?.localParticipant.unpublishTrack(track);
+      } catch {
+        // já pode ter caído junto com a sala
+      }
+      track.stop();
+    };
+  } catch (err) {
+    console.warn('Não consegui tocar esse efeito sonoro:', err);
+    alert('Não consegui tocar esse efeito sonoro.');
+  }
 }
 
 // ---------- cartão de perfil (clique com botão esquerdo) ----------
@@ -3191,11 +3648,27 @@ function fillSelect(select, list, selectedId, fallbackLabel) {
   if (selectedId && list.some((d) => d.deviceId === selectedId)) select.value = selectedId;
 }
 
+// Só pede getUserMedia (o que acende a luzinha da câmera/microfone) UMA VEZ
+// por sessão do app — a primeira vez que abre as configurações e o Chromium
+// ainda não liberou os NOMES de verdade dos dispositivos (sem permissão
+// concedida ainda, enumerateDevices() devolve tudo sem "label", tipo
+// "Microfone 1" em vez do nome real). Depois que já tem permissão, abrir
+// as configurações de novo não precisa mais pedir — antes pedia TODA vez,
+// e por isso a câmera acendia e apagava rapidinho sempre que abria essa tela.
+let mediaLabelsUnlocked = false;
+
 async function populateDeviceSelects() {
   try {
-    const tmpStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    if (tmpStream) tmpStream.getTracks().forEach((t) => t.stop());
+    let devices = await navigator.mediaDevices.enumerateDevices();
+    const hasLabels = devices.some((d) => d.label);
+    if (!hasLabels && !mediaLabelsUnlocked) {
+      const tmpStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
+      if (tmpStream) {
+        tmpStream.getTracks().forEach((t) => t.stop());
+        devices = await navigator.mediaDevices.enumerateDevices();
+      }
+    }
+    if (devices.some((d) => d.label)) mediaLabelsUnlocked = true;
 
     fillSelect(micSelect, devices.filter((d) => d.kind === 'audioinput'), devicePrefs.micId, 'Microfone');
     fillSelect(cameraSelect, devices.filter((d) => d.kind === 'videoinput'), devicePrefs.cameraId, 'Câmera');
@@ -3227,6 +3700,11 @@ micSelect.addEventListener('change', async () => {
   if (voiceRoom) {
     try {
       await voiceRoom.switchActiveDevice('audioinput', micSelect.value);
+      // Trocar de microfone substitui o track de áudio por baixo dos panos —
+      // reinicia a detecção de "estou falando" nesse track novo, senão ela
+      // fica presa ouvindo o dispositivo antigo (que já nem existe mais).
+      const micPub = voiceRoom.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (micPub?.track) startLocalSpeakingDetection(micPub.track);
     } catch {
       // ignora
     }
@@ -3613,25 +4091,8 @@ updateBannerDismiss.addEventListener('click', () => {
   updateBanner.hidden = true;
 });
 
-function hideBootSplash() {
-  const splash = document.getElementById('boot-splash');
-  if (!splash) return;
-  splash.classList.add('boot-splash-hide');
-  setTimeout(() => {
-    splash.hidden = true;
-  }, 450);
-}
-
-// tela de abertura (igual Discord) fica visível pelo menos um tempinho,
-// mesmo que o app carregue rapidinho, pra dar tempo de ver a animação
-(async () => {
-  const startedAt = Date.now();
-  const MIN_SPLASH_MS = 900;
-  try {
-    await init();
-  } finally {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed < MIN_SPLASH_MS) await new Promise((r) => setTimeout(r, MIN_SPLASH_MS - elapsed));
-    hideBootSplash();
-  }
-})();
+// A tela de abertura (splash) agora é uma janela separada e pequena,
+// controlada pelo main.js (ver renderer/splash.html) — ela já cuida do
+// tempo mínimo visível e de só mostrar a janela principal quando tudo
+// estiver pronto, então aqui é só rodar o init() normalmente.
+init();

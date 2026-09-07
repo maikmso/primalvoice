@@ -1,12 +1,53 @@
-const { app, BrowserWindow, Tray, Menu, session, desktopCapturer, ipcMain, nativeImage, globalShortcut } = require('electron');
+const { app, BrowserWindow, Tray, Menu, session, desktopCapturer, ipcMain, nativeImage, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
+let splashWindow;
 let tray;
 let localPort = 0;
+
+// Tempo mínimo que a telinha de abertura (só o cartãozinho com a logo,
+// numa janela pequena própria — sem nenhuma janela grande por trás) fica
+// visível, mesmo que o app carregue mais rápido que isso.
+const SPLASH_MIN_MS = 4500;
+const appBootStartedAt = Date.now();
+let mainWindowReadyToShow = false;
+
+function finishBootIfReady() {
+  if (!mainWindowReadyToShow) return;
+  const elapsed = Date.now() - appBootStartedAt;
+  const wait = Math.max(0, SPLASH_MIN_MS - elapsed);
+  setTimeout(() => {
+    if (mainWindow) mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  }, wait);
+}
+
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 220,
+    height: 260,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    center: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  splashWindow.once('ready-to-show', () => splashWindow.show());
+  splashWindow.loadURL(`http://127.0.0.1:${localPort}/splash.html`);
+}
 
 // Só deixa um PrimalVoice aberto por vez — abrir de novo (ex: clicou 2x no
 // atalho sem perceber que já tinha um aberto) só foca a janela existente em
@@ -96,11 +137,22 @@ function createWindow() {
     },
   });
 
+  // Não mostra na hora — só quando a splash já cumpriu o tempo mínimo dela
+  // (finishBootIfReady cuida disso), pra nunca ter duas telas de carregamento
+  // ao mesmo tempo nem a janela principal aparecendo vazia antes da hora.
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    mainWindowReadyToShow = true;
+    finishBootIfReady();
   });
 
   mainWindow.loadURL(`http://127.0.0.1:${localPort}/index.html`);
+
+  // Link clicado no chat (target="_blank") abre no navegador de verdade da
+  // pessoa, não numa janela nova do próprio PrimalVoice.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   // Fechar a janela minimiza pra bandeja, igual Discord — só sai de fato pelo menu da bandeja.
   mainWindow.on('close', (event) => {
@@ -162,6 +214,7 @@ app.whenReady().then(async () => {
   );
 
   await startLocalServer();
+  createSplashWindow();
   createWindow();
   createTray();
 

@@ -171,104 +171,10 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* tela de abertura do PrimalVoice (igual aquela do Discord quando abre
-   pela primeira vez no dia) — logo com uma respirada, faíscas piscando
-   ao redor e uma gradezinha de pontos por baixo, tudo bem sutil */
-.boot-splash {
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  transition: opacity 0.4s ease;
-}
-.boot-splash.boot-splash-hide {
-  opacity: 0;
-  pointer-events: none;
-}
-.boot-splash-card {
-  position: relative;
-  width: 220px;
-  height: 260px;
-  border-radius: 20px;
-  background: linear-gradient(160deg, var(--panel), var(--surface-deep));
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  overflow: hidden;
-}
-.boot-splash-logo {
-  width: 84px;
-  height: 84px;
-  border-radius: 20px;
-  animation: boot-logo-bounce 1.6s ease-in-out infinite;
-  position: relative;
-  z-index: 2;
-}
-.boot-splash-text {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  animation: boot-text-pulse 1.6s ease-in-out infinite;
-  position: relative;
-  z-index: 2;
-}
-@keyframes boot-logo-bounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-6px) scale(1.05); }
-}
-@keyframes boot-text-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-.boot-splash-sparkles {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-}
-.boot-splash-sparkles span {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent-2);
-  opacity: 0;
-  animation: boot-sparkle 2.2s ease-in-out infinite;
-}
-.boot-splash-sparkles span:nth-child(1) { top: 28%; left: 26%; animation-delay: 0s; }
-.boot-splash-sparkles span:nth-child(2) { top: 22%; left: 68%; animation-delay: 0.4s; }
-.boot-splash-sparkles span:nth-child(3) { top: 40%; left: 78%; animation-delay: 0.9s; }
-.boot-splash-sparkles span:nth-child(4) { top: 46%; left: 18%; animation-delay: 1.3s; }
-.boot-splash-sparkles span:nth-child(5) { top: 18%; left: 46%; animation-delay: 1.7s; }
-@keyframes boot-sparkle {
-  0%, 100% { opacity: 0; transform: scale(0.5); }
-  50% { opacity: 1; transform: scale(1.2); }
-}
-.boot-splash-grid {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -20px;
-  height: 90px;
-  background-image: radial-gradient(var(--border) 1.4px, transparent 1.4px);
-  background-size: 14px 14px;
-  opacity: 0.6;
-  -webkit-mask-image: linear-gradient(to top, black, transparent);
-  mask-image: linear-gradient(to top, black, transparent);
-  animation: boot-grid-drift 6s linear infinite;
-  z-index: 1;
-}
-@keyframes boot-grid-drift {
-  from { background-position: 0 0; }
-  to { background-position: -140px -140px; }
-}
+/* A tela de abertura (splash) agora é uma janela própria e pequena, feita
+   em renderer/splash.html e controlada pelo main.js — não tem mais nada
+   dela aqui dentro da janela principal (antes tinha uma janela grande com
+   um cartão pequeno flutuando no meio; agora só existe o cartão mesmo). */
 
 [hidden] { display: none !important; }
 
@@ -405,7 +311,9 @@ body {
   cursor: pointer;
   transition: border-radius 0.15s ease;
 }
-.server-icon:hover, .server-icon.active { border-radius: 16px; }
+/* Igual Discord: nada de mudar o formato do ícone no hover/ativo — só a
+   barrinha (::before abaixo) já mostra em qual servidor/conversa você está,
+   sem precisar de mais nenhum efeito por cima. */
 .server-icon.active::before {
   content: '';
   position: absolute;
@@ -454,19 +362,22 @@ body {
 
 .server-icon-badge {
   position: absolute;
-  bottom: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
+  /* mais pra fora do canto (era -4px) — assim a bolinha fica pendurada na
+     quina do ícone em vez de comer um pedaço grande da imagem/foto dele,
+     igual o Discord faz */
+  bottom: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
   background: var(--danger);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 16px;
   text-align: center;
-  border: 3px solid var(--surface-deep);
+  border: 2px solid var(--surface-deep);
   box-sizing: content-box;
 }
 
@@ -731,13 +642,12 @@ body {
 .resize-handle.dragging::before { background: var(--accent); }
 
 .resize-handle-left { left: calc(72px + var(--sidebar-w, 240px) - 5px); }
+/* Igual Discord: nada de bolinha/sombra/borda — só a setinha dupla mesmo,
+   bem discreta, só aparecendo quando passa o mouse em cima da faixa. */
 .resize-handle .collapse-hint {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--panel);
-  border: 1px solid var(--border);
   color: var(--text);
   display: flex;
   align-items: center;
@@ -745,12 +655,11 @@ body {
   opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
-.resize-handle .collapse-hint svg { width: 12px; height: 12px; }
+.resize-handle .collapse-hint svg { width: 14px; height: 14px; }
 .resize-handle:hover .collapse-hint,
-.resize-handle.collapsed .collapse-hint { opacity: 1; }
-.resize-handle.collapsed .collapse-hint svg { transform: rotate(180deg); }
+.resize-handle.collapsed .collapse-hint,
+.resize-handle.dragging .collapse-hint { opacity: 1; }
 .room-header {
   height: 48px;
   flex-shrink: 0;
@@ -835,7 +744,17 @@ body {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  /* dá pra selecionar/copiar o texto da mensagem (o app inteiro tem
+     user-select:none por padrão, então precisa reativar aqui) */
+  user-select: text;
+  cursor: text;
 }
+.chat-message .text .chat-link {
+  color: var(--accent-2);
+  text-decoration: none;
+  cursor: pointer;
+}
+.chat-message .text .chat-link:hover { text-decoration: underline; }
 .chat-message.self .author { color: var(--accent-2); }
 .chat-message .attachment { margin-top: 6px; }
 .chat-message .attachment img,
@@ -990,6 +909,59 @@ body {
   font-size: 12px;
   z-index: 2;
 }
+
+/* compartilhamento de tela de outra pessoa não abre sozinho — fica um botão
+   "Assistir transmissão" no meio até a pessoa clicar */
+.tile .watch-stream-prompt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 3;
+}
+.watch-stream-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font: 600 14px inherit;
+  cursor: pointer;
+}
+.watch-stream-btn svg { width: 16px; height: 16px; }
+.watch-stream-btn:hover { filter: brightness(1.1); }
+
+/* controles de quem tá assistindo uma transmissão de tela: tela cheia de
+   verdade (Fullscreen API) e um X pra parar de assistir sem mexer em nada
+   de quem está compartilhando */
+.screen-share-controls {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+.screen-share-ctrl-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+.screen-share-ctrl-btn:hover { background: rgba(0, 0, 0, 0.75); }
+.screen-share-ctrl-btn svg { width: 14px; height: 14px; }
 
 /* lista de membros, à direita de tudo */
 .member-list {
@@ -1189,8 +1161,7 @@ body {
    que cortava o topo do balão quando ele tentava "escapar" pra cima. Com
    fixed + coordenadas calculadas no JS (mouseenter), ele sempre aparece
    por cima de tudo, sem ser cortado. */
-.voice-quality-tooltip,
-.resize-tooltip {
+.voice-quality-tooltip {
   position: fixed;
   background: var(--surface-raised);
   color: var(--text);
@@ -1216,8 +1187,39 @@ body {
   border: 5px solid transparent;
   border-top-color: var(--surface-raised);
 }
-.voice-quality-tooltip.tooltip-visible,
-.resize-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
+.voice-quality-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
+
+/* mesmo balãozinho bonito do "Ping: Xms" (fixed + JS), só que pra direita —
+   usado nos ícones da barra de servidores (PrimalVoice, Mensagens diretas,
+   atalhos de DM), que antes usavam o tooltip feio/padrão do sistema (title
+   nativo do HTML) em vez de um com a cara do app. */
+.rail-tooltip {
+  position: fixed;
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  z-index: 3000;
+}
+.rail-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: var(--surface-raised);
+}
+.rail-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
 .voice-status-icon svg { width: 16px; height: 16px; }
 .voice-status-icon .quality-bar { fill: var(--quality-dim); transition: fill 0.2s ease; }
 /* excelente: 3 barrinhas verdes */
@@ -1599,6 +1601,71 @@ body {
 .profile-card-status { font-size: 13px; color: var(--text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .profile-card-actions { padding: 12px 16px 16px; }
 .profile-card-actions .secondary-btn { width: 100%; }
+
+/* ---------- efeitos sonoros (soundboard) ---------- */
+.soundboard-panel { width: 300px; min-width: 300px; padding: 10px; }
+.soundboard-hint { padding: 0 2px 10px; font-size: 12px; color: var(--muted); }
+.soundboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.soundboard-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 72px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+}
+.soundboard-tile:hover { background: var(--hover-strong); border-color: var(--accent); }
+.soundboard-tile:active { transform: scale(0.97); }
+.soundboard-tile svg { width: 20px; height: 20px; flex-shrink: 0; }
+.soundboard-tile-name {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.soundboard-tile-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 16px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.soundboard-tile:hover .soundboard-tile-remove { display: flex; }
+.soundboard-tile-remove:hover { background: var(--danger); color: white; }
+.soundboard-tile.soundboard-add {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+.soundboard-tile.soundboard-add:hover { color: var(--text); }
+.soundboard-empty { grid-column: 1 / -1; padding: 16px 4px; text-align: center; font-size: 12px; color: var(--muted); }
 
 /* ---------- selecionar o que compartilhar na tela ---------- */
 .sharepick-overlay {
