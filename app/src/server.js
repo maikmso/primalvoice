@@ -476,7 +476,7 @@ app.get('/api/messages/:channelId', requireAuth, (req, res) => {
 
 app.post('/api/messages/:channelId', requireAuth, (req, res) => {
   const { channelId } = req.params;
-  const { text, attachment } = req.body || {};
+  const { id, text, attachment } = req.body || {};
   const s = store.getState();
   const exists = s.channels.text.some((c) => c.id === channelId);
   if (!exists) return res.status(404).json({ error: 'Canal de texto não encontrado.' });
@@ -484,12 +484,32 @@ app.post('/api/messages/:channelId', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Mensagem vazia.' });
   }
   const msg = store.addMessage(channelId, {
+    id,
     identity: req.identity,
     name: resolveDisplayName(req.identity),
     text,
     attachment,
   });
   res.json({ message: msg });
+});
+
+// Editar/apagar a própria mensagem — store.editMessage/deleteMessage já
+// conferem que quem está pedindo (req.identity, vindo do token de sessão)
+// é o mesmo "dono" salvo na mensagem; nunca confia num identity que o
+// corpo da requisição diga ser.
+app.patch('/api/messages/:channelId/:messageId', requireAuth, (req, res) => {
+  const { channelId, messageId } = req.params;
+  const { text } = req.body || {};
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+  const msg = store.editMessage(channelId, messageId, req.identity, text);
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada ou não é sua.' });
+  res.json({ message: msg });
+});
+
+app.delete('/api/messages/:channelId/:messageId', requireAuth, (req, res) => {
+  const ok = store.deleteMessage(req.params.channelId, req.params.messageId, req.identity);
+  if (!ok) return res.status(404).json({ error: 'Mensagem não encontrada ou não é sua.' });
+  res.json({ ok: true });
 });
 
 app.get('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
@@ -498,18 +518,35 @@ app.get('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
 });
 
 app.post('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
-  const { text, attachment } = req.body || {};
+  const { id, text, attachment } = req.body || {};
   if ((!text || !String(text).trim()) && !attachment) {
     return res.status(400).json({ error: 'Mensagem vazia.' });
   }
   const key = store.dmKey(req.identity, req.params.peerIdentity);
   const msg = store.addMessage(key, {
+    id,
     identity: req.identity,
     name: resolveDisplayName(req.identity),
     text,
     attachment,
   });
   res.json({ message: msg });
+});
+
+app.patch('/api/dm/:peerIdentity/messages/:messageId', requireAuth, (req, res) => {
+  const { text } = req.body || {};
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+  const key = store.dmKey(req.identity, req.params.peerIdentity);
+  const msg = store.editMessage(key, req.params.messageId, req.identity, text);
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada ou não é sua.' });
+  res.json({ message: msg });
+});
+
+app.delete('/api/dm/:peerIdentity/messages/:messageId', requireAuth, (req, res) => {
+  const key = store.dmKey(req.identity, req.params.peerIdentity);
+  const ok = store.deleteMessage(key, req.params.messageId, req.identity);
+  if (!ok) return res.status(404).json({ error: 'Mensagem não encontrada ou não é sua.' });
+  res.json({ ok: true });
 });
 
 // Carrega o estado salvo (do Redis, quando configurado) antes de aceitar

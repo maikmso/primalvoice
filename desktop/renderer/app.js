@@ -97,16 +97,27 @@ voiceQualityIcon.addEventListener('mouseleave', () => {
 // usavam o "title" nativo do HTML, que é o tooltip feio/padrão do sistema
 // (demora pra aparecer, não combina com o tema do app).
 const railTooltip = document.getElementById('rail-tooltip');
-function attachRailTooltip(el, getText) {
+// dir: 'right' (padrão, usado na barra de servidores/DMs à esquerda) ou
+// 'top' (usado nos botõezinhos da barra de controles de voz, lá embaixo —
+// não cabe empurrar o popup pra direita porque é perto do canto da tela).
+function attachRailTooltip(el, getText, opts = {}) {
   if (!el) return;
+  const dir = opts.dir || 'right';
   el.addEventListener('mouseenter', () => {
     const text = typeof getText === 'function' ? getText() : getText;
     if (!text) return;
     railTooltip.textContent = text;
     const rect = el.getBoundingClientRect();
-    railTooltip.style.left = `${rect.right + 12}px`;
-    railTooltip.style.top = `${rect.top + rect.height / 2}px`;
-    railTooltip.style.transform = 'translateY(-50%)';
+    if (dir === 'top') {
+      railTooltip.style.left = `${rect.left + rect.width / 2}px`;
+      railTooltip.style.top = `${rect.top - 10}px`;
+      railTooltip.style.transform = 'translate(-50%, -100%)';
+    } else {
+      railTooltip.style.left = `${rect.right + 12}px`;
+      railTooltip.style.top = `${rect.top + rect.height / 2}px`;
+      railTooltip.style.transform = 'translateY(-50%)';
+    }
+    railTooltip.classList.toggle('tooltip-top', dir === 'top');
     railTooltip.classList.add('tooltip-visible');
   });
   el.addEventListener('mouseleave', () => {
@@ -180,6 +191,8 @@ const sharepickOverlay = document.getElementById('sharepick-overlay');
 const sharepickGrid = document.getElementById('sharepick-grid');
 const sharepickTabs = document.querySelectorAll('.sharepick-tab');
 const sharepickAudioCheckbox = document.getElementById('sharepick-audio-checkbox');
+const sharepickResolutionSelect = document.getElementById('sharepick-resolution');
+const sharepickFramerateSelect = document.getElementById('sharepick-framerate');
 const sharepickCancelBtn = document.getElementById('sharepick-cancel-btn');
 const sharepickConfirmBtn = document.getElementById('sharepick-confirm-btn');
 
@@ -826,7 +839,12 @@ async function saveDevicePrefs() {
 }
 
 async function loadPrefsFromConfig(cfg) {
-  devicePrefs = Object.assign({ micId: '', speakerId: '', cameraId: '' }, cfg.devicePrefs || {});
+  devicePrefs = Object.assign(
+    { micId: '', speakerId: '', cameraId: '', screenResolution: '1080p', screenFrameRate: 30 },
+    cfg.devicePrefs || {}
+  );
+  if (sharepickResolutionSelect) sharepickResolutionSelect.value = devicePrefs.screenResolution;
+  if (sharepickFramerateSelect) sharepickFramerateSelect.value = String(devicePrefs.screenFrameRate);
   keybinds = Object.assign({ muteSelf: '', deafen: '' }, cfg.keybinds || {});
   keybindMuteBtn.textContent = keybinds.muteSelf || 'Definir atalho';
   keybindDeafenBtn.textContent = keybinds.deafen || 'Definir atalho';
@@ -844,14 +862,163 @@ const MAX_SOUND_BYTES = 1_000_000; // ~1MB por efeito, dá uns poucos segundos d
 const MAX_SOUND_SECONDS = 12;
 const MAX_SOUNDS = 24;
 
+// Volume/mudo dos efeitos sonoros (meu, de escutar) — separado do volume por
+// pessoa que já existia, porque um efeito pode ser bem mais alto que a voz
+// de quem tocou (é justamente a reclamação: gente que sobe o áudio do efeito
+// pra gritar mais forte). Isso controla só o que EU escuto (dos outros e do
+// meu próprio preview) — não muda o que os outros recebem quando EU toco.
+let soundboardEffectsVolume = 0.6;
+let soundboardMuted = false;
+const soundboardAudioEls = new Set(); // <audio> de efeito recebidos de outros, tocando agora
+const soundboardLocalGains = new Set(); // GainNode do MEU preview local, tocando agora
+
+function effectiveSoundboardVolume() {
+  return soundboardMuted ? 0 : soundboardEffectsVolume;
+}
+
+function applySoundboardVolume() {
+  const vol = effectiveSoundboardVolume();
+  // efeito de alguém que eu silenciei (ou se eu tô ensurdecido) continua
+  // sem tocar pra mim, mesmo que o volume geral dos efeitos esteja ligado —
+  // mesma regra que já vale pra voz da pessoa.
+  soundboardAudioEls.forEach((el) => {
+    const identity = el.dataset.soundboardIdentity;
+    const blocked = isDeafened || (identity && mutedForMe.has(identity));
+    el.volume = blocked ? 0 : vol;
+  });
+  soundboardLocalGains.forEach((gain) => { gain.gain.value = vol; });
+}
+
 function loadSoundboardFromConfig(cfg) {
   mySounds = Array.isArray(cfg.soundboard) ? cfg.soundboard : [];
+  soundboardEffectsVolume = typeof cfg.soundboardVolume === 'number' ? cfg.soundboardVolume : 0.6;
+  soundboardMuted = !!cfg.soundboardMuted;
 }
 
 async function saveSoundboardToConfig() {
   const cfg = (await window.vortex.getConfig()) || {};
   cfg.soundboard = mySounds;
+  cfg.soundboardVolume = soundboardEffectsVolume;
+  cfg.soundboardMuted = soundboardMuted;
   await window.vortex.setConfig(cfg);
+}
+
+// ---------- sons padrão do PrimalVoice ----------
+// Gerados na hora por síntese (osciladores/ruído filtrado do Web Audio),
+// não são arquivos de áudio de verdade — assim não precisa embutir nenhum
+// arquivo de som de terceiros no instalador. Ficam sempre disponíveis, não
+// contam pro limite MAX_SOUNDS, e ninguém pode apagar.
+function renderSynthBuffer(ctx, durationSec, draw) {
+  return new Promise((resolve, reject) => {
+    const rate = ctx.sampleRate;
+    const off = new OfflineAudioContext(1, Math.ceil(rate * durationSec), rate);
+    draw(off);
+    off.startRendering().then(resolve, reject);
+  });
+}
+
+function synthTone(off, freq, startAt, dur, type = 'sine', peak = 0.5) {
+  const osc = off.createOscillator();
+  osc.type = type;
+  osc.frequency.value = freq;
+  const g = off.createGain();
+  g.gain.setValueAtTime(0, startAt);
+  g.gain.linearRampToValueAtTime(peak, startAt + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.001, startAt + dur);
+  osc.connect(g);
+  g.connect(off.destination);
+  osc.start(startAt);
+  osc.stop(startAt + dur + 0.02);
+}
+
+function synthNoiseBurst(off, startAt, dur, freq, q, peak = 0.6) {
+  const bufLen = Math.ceil(off.sampleRate * dur);
+  const buffer = off.createBuffer(1, bufLen, off.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+  const src = off.createBufferSource();
+  src.buffer = buffer;
+  const filter = off.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = freq;
+  filter.Q.value = q;
+  const g = off.createGain();
+  g.gain.setValueAtTime(peak, startAt);
+  g.gain.exponentialRampToValueAtTime(0.001, startAt + dur);
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(off.destination);
+  src.start(startAt);
+}
+
+const BUILTIN_SOUNDBOARD_SOUNDS = [
+  {
+    id: 'builtin-bipe',
+    name: 'Bipe',
+    duration: 0.35,
+    draw: (off) => synthTone(off, 880, 0, 0.2),
+  },
+  {
+    id: 'builtin-dingdong',
+    name: 'Ding-dong',
+    duration: 0.9,
+    draw: (off) => {
+      synthTone(off, 987.77, 0, 0.35); // Si5
+      synthTone(off, 783.99, 0.28, 0.5); // Sol5
+    },
+  },
+  {
+    id: 'builtin-vitoria',
+    name: 'Vitória',
+    duration: 1.1,
+    draw: (off) => {
+      synthTone(off, 523.25, 0, 0.22); // Dó5
+      synthTone(off, 659.25, 0.16, 0.22); // Mi5
+      synthTone(off, 783.99, 0.32, 0.5); // Sol5
+    },
+  },
+  {
+    id: 'builtin-boing',
+    name: 'Boing engraçado',
+    duration: 0.5,
+    draw: (off) => {
+      const osc = off.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(700, 0);
+      osc.frequency.exponentialRampToValueAtTime(120, 0.4);
+      const g = off.createGain();
+      g.gain.setValueAtTime(0.55, 0);
+      g.gain.exponentialRampToValueAtTime(0.001, 0.45);
+      osc.connect(g);
+      g.connect(off.destination);
+      osc.start(0);
+      osc.stop(0.46);
+    },
+  },
+  {
+    id: 'builtin-alerta',
+    name: 'Alerta',
+    duration: 0.8,
+    draw: (off) => {
+      synthTone(off, 660, 0, 0.18, 'square', 0.35);
+      synthTone(off, 660, 0.28, 0.18, 'square', 0.35);
+      synthTone(off, 660, 0.56, 0.2, 'square', 0.35);
+    },
+  },
+  {
+    id: 'builtin-aplauso',
+    name: 'Aplauso curto',
+    duration: 0.9,
+    draw: (off) => synthNoiseBurst(off, 0, 0.8, 2200, 0.7, 0.5),
+  },
+];
+BUILTIN_SOUNDBOARD_SOUNDS.forEach((sound) => { sound.builtin = true; });
+const builtinSoundBufferCache = new Map();
+async function getBuiltinSoundBuffer(ctx, sound) {
+  if (builtinSoundBufferCache.has(sound.id)) return builtinSoundBufferCache.get(sound.id);
+  const buffer = await renderSynthBuffer(ctx, sound.duration, sound.draw);
+  builtinSoundBufferCache.set(sound.id, buffer);
+  return buffer;
 }
 
 async function init() {
@@ -1577,10 +1744,22 @@ async function joinVoiceChannel(channelId) {
     },
   });
 
-  vr.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-    attachTrack(track, participant);
+  vr.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+    attachTrack(track, participant, pub);
   });
   vr.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+    // Se fomos NÓS que mandamos parar de receber esse track (cliquei no X pra
+    // "pausar" a transmissão que eu tava assistindo), não é o apresentador
+    // que parou de compartilhar — não pode apagar screenShareTracks/etc,
+    // senão nunca mais dá pra assistir de novo sem ele parar e começar a
+    // compartilhar tudo de novo. Ver stopWatchingScreenShare.
+    if (
+      (track.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShareAudio) &&
+      manualScreenUnsubscribe.has(participant?.identity)
+    ) {
+      manualScreenUnsubscribe.delete(participant.identity);
+      return;
+    }
     detachTrack(track, participant);
   });
   vr.on(RoomEvent.ParticipantConnected, () => {
@@ -1654,7 +1833,7 @@ async function joinVoiceChannel(channelId) {
 
   micBtn.dataset.on = 'true';
   micBtn.classList.remove('off');
-  micBtn.title = 'Microfone';
+  micBtn.dataset.tooltip = 'Microfone';
   userPanelControls.classList.remove('voice-disabled');
   voiceStatusTitle.textContent = 'Conectado';
   voiceStatusTitle.classList.remove('connecting');
@@ -1695,6 +1874,7 @@ async function leaveVoiceChannel(opts = {}) {
   stopLocalSpeakingDetection();
   updateVoiceOverlay();
 
+  if (cinemaTileIdentity) exitCinemaFullscreen();
   grid.innerHTML = '';
   if (grid.classList.contains('has-expanded')) exitExpandedExtras();
   grid.classList.remove('has-expanded');
@@ -1713,7 +1893,7 @@ async function leaveVoiceChannel(opts = {}) {
 function resetVoiceControlsUI() {
   micBtn.dataset.on = 'false';
   micBtn.classList.add('off');
-  micBtn.title = 'Microfone (clique num canal de voz pra entrar)';
+  micBtn.dataset.tooltip = 'Microfone (clique num canal de voz pra entrar)';
   camBtn.dataset.on = 'false';
   camBtn.classList.add('off');
   shareBtn.dataset.on = 'false';
@@ -1774,13 +1954,64 @@ function renderMessageTextWithLinks(container, text) {
   }
 }
 
-function appendChatMessageEl({ name, text, isSelf, identity, attachment, ts }) {
+const EDIT_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"></path></svg>';
+const DELETE_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+
+// Troca o texto da mensagem por um campinho editável na hora, sem abrir
+// modal nenhum — Enter salva, Esc cancela (igual renomear canal).
+function startInlineMessageEdit(textEl, channelId, id, currentText) {
+  if (textEl.querySelector('textarea')) return; // já editando
+  const original = currentText;
+  textEl.innerHTML = '';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'chat-edit-textarea';
+  textarea.value = original;
+  textEl.appendChild(textarea);
+  const hint = document.createElement('div');
+  hint.className = 'chat-edit-hint';
+  hint.textContent = 'enter para salvar • esc para cancelar';
+  textEl.appendChild(hint);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  // ajusta a altura do campinho ao conteúdo (some com a barra de rolagem)
+  const autoGrow = () => { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; };
+  autoGrow();
+  textarea.addEventListener('input', autoGrow);
+
+  let settled = false;
+  const finish = (commit) => {
+    if (settled) return;
+    settled = true;
+    const newText = textarea.value.trim();
+    if (commit && newText && newText !== original) {
+      editChatMessage(channelId, id, newText);
+      return; // applyMessageEdited já redesenha o .text certinho
+    }
+    textEl.innerHTML = '';
+    renderMessageTextWithLinks(textEl, original);
+  };
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  textarea.addEventListener('blur', () => finish(true));
+}
+
+function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
   const row = document.createElement('div');
   row.className = isSelf ? 'chat-message self' : 'chat-message';
   if (identity) row.dataset.identity = identity;
+  if (id) row.dataset.messageId = id;
 
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
@@ -1810,6 +2041,12 @@ function appendChatMessageEl({ name, text, isSelf, identity, attachment, ts }) {
   // vez que a pessoa entrava de novo no canal e o histórico era redesenhado
   time.textContent = new Date(ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   meta.appendChild(time);
+  if (editedAt) {
+    const marker = document.createElement('span');
+    marker.className = 'edited-marker';
+    marker.textContent = '(editado)';
+    meta.appendChild(marker);
+  }
   body.appendChild(meta);
 
   if (text) {
@@ -1817,6 +2054,40 @@ function appendChatMessageEl({ name, text, isSelf, identity, attachment, ts }) {
     textEl.className = 'text';
     renderMessageTextWithLinks(textEl, text);
     body.appendChild(textEl);
+
+    // só a própria pessoa pode editar/apagar a própria mensagem — e só dá
+    // pra editar mensagem de TEXTO puro (uma que só tem anexo não tem o que
+    // editar, só apagar)
+    if (isSelf && id) {
+      const actions = document.createElement('div');
+      actions.className = 'chat-message-actions';
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'chat-message-action-btn';
+      editBtn.title = 'Editar';
+      editBtn.innerHTML = EDIT_ICON_SVG;
+      editBtn.addEventListener('click', () => {
+        // busca o texto ATUAL no histórico (não o "text" capturado quando a
+        // linha foi desenhada) — senão, editar a mesma mensagem duas vezes e
+        // cancelar com Esc na segunda vez voltava pro texto original de
+        // antes da primeira edição, perdendo a edição já salva
+        const current = findMessageInHistory(activeTextChannelId, id);
+        startInlineMessageEdit(textEl, activeTextChannelId, id, current ? current.text : text);
+      });
+      actions.appendChild(editBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'chat-message-action-btn';
+      deleteBtn.title = 'Apagar';
+      deleteBtn.innerHTML = DELETE_ICON_SVG;
+      deleteBtn.addEventListener('click', () => {
+        if (confirm('Apagar essa mensagem?')) deleteChatMessage(activeTextChannelId, id);
+      });
+      actions.appendChild(deleteBtn);
+
+      row.appendChild(actions);
+    }
   }
 
   if (attachment && attachment.url) {
@@ -1888,6 +2159,7 @@ async function ensureChannelHistoryLoaded(channelId) {
         isSelf: m.identity === myIdentity,
         identity: m.identity,
         attachment: m.attachment || null,
+        editedAt: m.editedAt || null,
       }));
     chatHistoryByChannel.set(channelId, [...fromServer, ...existing]);
     if (channelId === activeTextChannelId) renderChatForActiveChannel();
@@ -1901,13 +2173,32 @@ async function ensureChannelHistoryLoaded(channelId) {
 // envio nem mostrar alerta se falhar — a entrega ao vivo pros outros já
 // aconteceu pelo canal de dados do LiveKit; isso aqui é só a parte que
 // garante que a conversa continua lá quando alguém reconectar depois).
-function persistChatMessage(channelId, { text, attachment }) {
+function persistChatMessage(channelId, { id, text, attachment }) {
   const path = isDmChannelId(channelId)
     ? `/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages`
     : `/api/messages/${encodeURIComponent(channelId)}`;
-  apiFetch(path, { method: 'POST', body: JSON.stringify({ text, attachment: attachment || null }) }).catch((err) => {
+  // manda o id JÁ GERADO no cliente — o servidor usa esse id em vez de
+  // inventar um novo, senão a mensagem "ao vivo" (que já foi desenhada com
+  // esse id) e a copia salva no servidor (recarregada depois) ficariam
+  // com ids diferentes, e editar/apagar não acharia a mensagem certa.
+  apiFetch(path, { method: 'POST', body: JSON.stringify({ id, text, attachment: attachment || null }) }).catch((err) => {
     console.warn('Não consegui salvar a mensagem no servidor:', err);
   });
+}
+
+// Manda uma mensagem direta pra alguém — usado tanto pelo campo de chat
+// normal (já estando na conversa) quanto pelo campinho rápido "Conversar com
+// @Fulano" no próprio cartão de perfil (igual Discord: dá pra mandar sem
+// nem abrir a conversa antes).
+function sendDirectMessage(peerIdentity, text) {
+  if (!text || !lobbyRoom || !peerIdentity) return;
+  const ts = Date.now();
+  const id = crypto.randomUUID();
+  const channelId = dmChannelKey(peerIdentity);
+  const payload = { type: 'dm', to: peerIdentity, from: myIdentity, name: myDisplayName || myName, text, ts, id };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  pushChatMessage(channelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
+  persistChatMessage(channelId, { id, text });
 }
 
 chatForm.addEventListener('submit', (e) => {
@@ -1916,20 +2207,96 @@ chatForm.addEventListener('submit', (e) => {
   if (!text || !lobbyRoom || !activeTextChannelId) return;
   chatInput.value = '';
 
-  const ts = Date.now();
   if (isDmChannelId(activeTextChannelId)) {
-    const to = dmPeerFromChannelId(activeTextChannelId);
-    const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts };
-    lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-    pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
-    persistChatMessage(activeTextChannelId, { text });
+    sendDirectMessage(dmPeerFromChannelId(activeTextChannelId), text);
     return;
   }
-  const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts };
+  const ts = Date.now();
+  const id = crypto.randomUUID();
+  const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, id };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-  pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
-  persistChatMessage(activeTextChannelId, { text });
+  pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
+  persistChatMessage(activeTextChannelId, { id, text });
 });
+
+// ---------- editar/apagar a própria mensagem ----------
+// O id é gerado AQUI no cliente (na hora de mandar) e usado em TODO lugar —
+// no broadcast pros outros, no histórico local e no que é salvo no
+// servidor — assim os três lados sempre concordam em qual id é qual
+// mensagem, mesmo depois de reconectar/recarregar o histórico.
+function findMessageInHistory(channelId, id) {
+  const history = chatHistoryByChannel.get(channelId);
+  return history ? history.find((m) => m.id === id) || null : null;
+}
+
+function applyMessageEdited(channelId, id, newText) {
+  const msg = findMessageInHistory(channelId, id);
+  if (msg) {
+    msg.text = newText;
+    msg.editedAt = Date.now();
+  }
+  if (channelId === activeTextChannelId && !textView.hidden) {
+    const row = chatMessages.querySelector(`.chat-message[data-message-id="${cssEscape(id)}"]`);
+    if (row) {
+      const textEl = row.querySelector('.text');
+      if (textEl) {
+        textEl.innerHTML = '';
+        renderMessageTextWithLinks(textEl, newText);
+      }
+      if (!row.querySelector('.edited-marker')) {
+        const marker = document.createElement('span');
+        marker.className = 'edited-marker';
+        marker.textContent = '(editado)';
+        row.querySelector('.meta')?.appendChild(marker);
+      }
+    }
+  }
+}
+
+function applyMessageDeleted(channelId, id) {
+  const history = chatHistoryByChannel.get(channelId);
+  if (history) {
+    const idx = history.findIndex((m) => m.id === id);
+    if (idx !== -1) history.splice(idx, 1);
+  }
+  if (channelId === activeTextChannelId && !textView.hidden) {
+    const row = chatMessages.querySelector(`.chat-message[data-message-id="${cssEscape(id)}"]`);
+    row?.remove();
+    if (!chatMessages.querySelector('.chat-message')) {
+      chatMessages.innerHTML = '<p class="chat-empty">Nenhuma mensagem ainda. Comece a conversa.</p>';
+    }
+  }
+}
+
+function chatMessageServerPath(channelId, id) {
+  return isDmChannelId(channelId)
+    ? `/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages/${encodeURIComponent(id)}`
+    : `/api/messages/${encodeURIComponent(channelId)}/${encodeURIComponent(id)}`;
+}
+
+function editChatMessage(channelId, id, newText) {
+  if (!lobbyRoom) return;
+  const payload = isDmChannelId(channelId)
+    ? { type: 'message-edited', dm: true, to: dmPeerFromChannelId(channelId), from: myIdentity, id, text: newText }
+    : { type: 'message-edited', channelId, from: myIdentity, id, text: newText };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  applyMessageEdited(channelId, id, newText);
+  apiFetch(chatMessageServerPath(channelId, id), { method: 'PATCH', body: JSON.stringify({ text: newText }) }).catch((err) => {
+    console.warn('Não consegui salvar a edição da mensagem no servidor:', err);
+  });
+}
+
+function deleteChatMessage(channelId, id) {
+  if (!lobbyRoom) return;
+  const payload = isDmChannelId(channelId)
+    ? { type: 'message-deleted', dm: true, to: dmPeerFromChannelId(channelId), from: myIdentity, id }
+    : { type: 'message-deleted', channelId, from: myIdentity, id };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  applyMessageDeleted(channelId, id);
+  apiFetch(chatMessageServerPath(channelId, id), { method: 'DELETE' }).catch((err) => {
+    console.warn('Não consegui apagar a mensagem no servidor:', err);
+  });
+}
 
 // ---------- anexos no chat (imagem/vídeo) ----------
 // O arquivo em si vai por HTTP normal pro servidor (não pelo canal de dados
@@ -1965,18 +2332,19 @@ chatAttachmentInput.addEventListener('change', async () => {
     const text = chatInput.value.trim();
     chatInput.value = '';
     const ts = Date.now();
+    const id = crypto.randomUUID();
     if (isDmChannelId(activeTextChannelId)) {
       const to = dmPeerFromChannelId(activeTextChannelId);
-      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment };
+      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id };
       lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-      pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-      persistChatMessage(activeTextChannelId, { text, attachment });
+      pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+      persistChatMessage(activeTextChannelId, { id, text, attachment });
       return;
     }
-    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment };
+    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment, id };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-    pushChatMessage(activeTextChannelId, { name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-    persistChatMessage(activeTextChannelId, { text, attachment });
+    pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+    persistChatMessage(activeTextChannelId, { id, text, attachment });
   } catch (err) {
     alert(err.message || 'Não consegui enviar o arquivo.');
   } finally {
@@ -2024,14 +2392,38 @@ function ensureTile(participant) {
 // Compartilhamento de tela de OUTRA pessoa não abre sozinho pra quem tá na
 // sala — fica só um botão "Assistir transmissão" no meio da telinha até a
 // pessoa clicar (igual pedido, pra não abrir do nada no meio de uma call).
-// screenShareTracks guarda o track de cada identidade que tá compartilhando
-// (pra poder desenhar quando clicar em assistir); watchingScreenShare guarda
-// quem JÁ clicou em assistir agora.
+// screenShareTracks guarda o track de vídeo de cada identidade que tá
+// compartilhando (pra poder desenhar quando clicar em assistir);
+// screenSharePublications guarda a publicação (pra poder pausar/retomar de
+// verdade o recebimento, não só esconder); screenShareAudioTracks guarda o
+// áudio do compartilhamento (se tiver), que também só deve tocar depois que
+// a pessoa clicar em assistir; watchingScreenShare guarda quem JÁ clicou em
+// assistir agora; manualScreenUnsubscribe marca "fui EU que mandei parar de
+// receber esse track" pra distinguir de "o apresentador parou de compartilhar
+// de verdade" no TrackUnsubscribed.
 const screenShareTracks = new Map();
+const screenSharePublications = new Map();
+const screenShareAudioTracks = new Map();
 const watchingScreenShare = new Set();
+const manualScreenUnsubscribe = new Set();
 
 function isMyIdentity(identity) {
   return !!(voiceRoom && voiceRoom.localParticipant && voiceRoom.localParticipant.identity === identity);
+}
+
+// Avisa todo mundo (canal de dados, igual voice-status/profile-update) que eu
+// comecei ou parei de assistir alguma transmissão — usado só pro "olho" que
+// aparece do lado do nome de quem está assistindo, na listinha do canal de
+// voz. É um bit só (assistindo ou não), não importa qual apresentador.
+function broadcastWatchStatus() {
+  if (!lobbyRoom) return;
+  const payload = { type: 'watch-status', identity: myIdentity, watching: watchingScreenShare.size > 0 };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+}
+
+function updateMyWatchingStatus() {
+  if (myIdentity) setVoiceMemberStatus(myIdentity, { watching: watchingScreenShare.size > 0 });
+  broadcastWatchStatus();
 }
 
 function showWatchStreamPrompt(tile, participant) {
@@ -2047,28 +2439,45 @@ function showWatchStreamPrompt(tile, participant) {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     watchingScreenShare.add(participant.identity);
+    updateMyWatchingStatus();
+    const pub = screenSharePublications.get(participant.identity);
+    if (pub && !pub.isSubscribed) {
+      // tinha sido pausado (X) antes — pede pra receber de novo; o
+      // TrackSubscribed que isso dispara é quem vai chamar attachTrack.
+      pub.setSubscribed(true);
+      return;
+    }
     const track = screenShareTracks.get(participant.identity);
-    if (track) attachTrack(track, participant);
+    if (track) attachTrack(track, participant, pub);
+    const audioTrack = screenShareAudioTracks.get(participant.identity);
+    if (audioTrack) attachTrack(audioTrack, participant);
   });
   prompt.appendChild(btn);
   tile.appendChild(prompt);
 }
 
+const SCREEN_FULLSCREEN_ICON_SVG =
+  '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
+  '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
+
 function addScreenShareControls(tile, participant) {
+  tile.classList.add('has-screen-controls');
   if (tile.querySelector('.screen-share-controls')) return;
   const bar = document.createElement('div');
   bar.className = 'screen-share-controls';
 
   const fullscreenBtn = document.createElement('button');
   fullscreenBtn.type = 'button';
-  fullscreenBtn.className = 'screen-share-ctrl-btn';
+  fullscreenBtn.className = 'screen-share-ctrl-btn screen-share-fullscreen-btn';
   fullscreenBtn.title = 'Tela cheia';
-  fullscreenBtn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>';
+  fullscreenBtn.innerHTML = SCREEN_FULLSCREEN_ICON_SVG;
   fullscreenBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const videoEl = tile.querySelector('video.screen-video');
-    if (videoEl && videoEl.requestFullscreen) videoEl.requestFullscreen().catch(() => {});
+    if (cinemaTileIdentity === participant.identity) {
+      exitCinemaFullscreen();
+    } else {
+      enterCinemaFullscreen(tile, participant);
+    }
   });
 
   const closeBtn = document.createElement('button');
@@ -2086,31 +2495,55 @@ function addScreenShareControls(tile, participant) {
   tile.appendChild(bar);
 }
 
-// Clicou no X: só para de MOSTRAR a transmissão pra essa pessoa (volta a
-// mostrar o botão de assistir) — não mexe em nada de quem está compartilhando.
+// Clicou no X: fecha E pausa de verdade — não só esconde o vídeo, também
+// manda o LiveKit parar de receber os tracks (setSubscribed(false)), então
+// para de gastar internet/CPU decodificando uma transmissão que ninguém tá
+// vendo, e nenhum áudio dela continua tocando escondido. Não mexe em nada de
+// quem está compartilhando (ele nem fica sabendo).
 function stopWatchingScreenShare(participant) {
   watchingScreenShare.delete(participant.identity);
+  updateMyWatchingStatus();
   const tile = document.getElementById(tileId(participant.identity));
+  if (cinemaTileIdentity === participant.identity) exitCinemaFullscreen();
   if (!tile) return;
   const track = screenShareTracks.get(participant.identity);
   if (track) detachTrackFromTile(track, tile, participant.identity);
+  const audioTrack = screenShareAudioTracks.get(participant.identity);
+  if (audioTrack) detachTrackFromTile(audioTrack, tile, participant.identity);
   tile.querySelector('.screen-share-controls')?.remove();
+  tile.classList.remove('has-screen-controls');
+  const pub = screenSharePublications.get(participant.identity);
+  if (pub && pub.isSubscribed) {
+    manualScreenUnsubscribe.add(participant.identity);
+    pub.setSubscribed(false);
+  }
   if (track && screenShareTracks.has(participant.identity)) {
     showWatchStreamPrompt(tile, participant);
   }
 }
 
-function attachTrack(track, participant) {
+function attachTrack(track, participant, publication) {
   const tile = ensureTile(participant);
   const isScreenShare = track.kind === 'video' && track.source === Track.Source.ScreenShare;
   const isRemoteScreenShare = isScreenShare && !isMyIdentity(participant.identity);
+  const isScreenShareAudio = track.kind === 'audio' && track.source === Track.Source.ScreenShareAudio;
+  const isRemoteScreenShareAudio = isScreenShareAudio && !isMyIdentity(participant.identity);
 
   if (isRemoteScreenShare) {
     screenShareTracks.set(participant.identity, track);
+    if (publication) screenSharePublications.set(participant.identity, publication);
     if (!watchingScreenShare.has(participant.identity)) {
       showWatchStreamPrompt(tile, participant);
       return;
     }
+  }
+
+  // Áudio do compartilhamento de tela (quando a pessoa compartilha com "som
+  // do computador"): não pode tocar escondido enquanto ninguém clicou em
+  // "Assistir transmissão" — some junto com o vídeo até lá.
+  if (isRemoteScreenShareAudio) {
+    screenShareAudioTracks.set(participant.identity, track);
+    if (!watchingScreenShare.has(participant.identity)) return;
   }
 
   const el = track.attach();
@@ -2133,13 +2566,24 @@ function attachTrack(track, participant) {
   } else {
     el.classList.add('audio-el');
     tile.appendChild(el);
-    registerAudioEl(participant.identity, el);
+    // Efeito sonoro (soundboard) de alguém: não é a voz da pessoa (não usa
+    // o volume por-pessoa nem entra na contagem de "quem tá falando"), tem
+    // volume próprio — ver soundboardEffectsVolume/applySoundboardVolume.
+    if (!isMyIdentity(participant.identity) && track.source === Track.Source.Unknown) {
+      el.dataset.soundboardIdentity = participant.identity;
+      soundboardAudioEls.add(el);
+      const blocked = isDeafened || mutedForMe.has(participant.identity);
+      el.volume = blocked ? 0 : effectiveSoundboardVolume();
+    } else {
+      registerAudioEl(participant.identity, el);
+    }
   }
 }
 
 function detachTrackFromTile(track, tile, identity) {
   const detached = track.detach();
   detached.forEach((el) => {
+    soundboardAudioEls.delete(el);
     if (identity) unregisterAudioEl(identity, el);
     el.remove();
   });
@@ -2152,13 +2596,20 @@ function detachTrack(track, participant) {
   const tile = participant ? document.getElementById(tileId(participant.identity)) : null;
   // parou de compartilhar (ou saiu do canal) antes de alguém clicar em
   // "assistir" — limpa o estado de pendência e tira o botão da tela
-  if (participant && screenShareTracks.get(participant.identity) === track) {
+  if (
+    participant &&
+    (screenShareTracks.get(participant.identity) === track || screenShareAudioTracks.get(participant.identity) === track)
+  ) {
+    if (cinemaTileIdentity === participant.identity) exitCinemaFullscreen();
     screenShareTracks.delete(participant.identity);
+    screenSharePublications.delete(participant.identity);
+    screenShareAudioTracks.delete(participant.identity);
     watchingScreenShare.delete(participant.identity);
+    updateMyWatchingStatus();
     if (tile) {
       tile.querySelector('.watch-stream-prompt')?.remove();
       tile.querySelector('.screen-share-controls')?.remove();
-      tile.classList.remove('screen-pending');
+      tile.classList.remove('screen-pending', 'has-screen-controls');
     }
   }
   detachTrackFromTile(track, tile, participant?.identity);
@@ -2170,7 +2621,10 @@ function removeTile(participant) {
     grid.classList.remove('has-expanded');
     exitExpandedExtras();
   }
+  if (cinemaTileIdentity === participant.identity) exitCinemaFullscreen();
   screenShareTracks.delete(participant.identity);
+  screenSharePublications.delete(participant.identity);
+  screenShareAudioTracks.delete(participant.identity);
   watchingScreenShare.delete(participant.identity);
   if (tile) tile.remove();
 }
@@ -2204,7 +2658,59 @@ function collapseExpandedTile() {
   grid.querySelectorAll('.tile.expanded').forEach((t) => t.classList.remove('expanded'));
   grid.classList.remove('has-expanded');
   if (wasExpanded) exitExpandedExtras();
+  if (cinemaTileIdentity) exitCinemaFullscreen();
 }
+
+// ---------- tela cheia de verdade pra compartilhamento de tela ----------
+// O botão de "tela cheia" da transmissão não usa mais a Fullscreen API do
+// próprio elemento <video> — o Chromium mostra um aviso/ícone próprio de
+// "aperte Esc pra sair" por cima do vídeo quando é usado assim (era o que
+// tava aparecendo do lado de "JOGANDO"), e some sozinho igual um popup, sem
+// dar pra tirar. Em vez disso, deixamos a JANELA DO APP inteira em tela
+// cheia de verdade (sem esse aviso do navegador) e escondemos toda a
+// interface (barra lateral, lista de membros, barra de título), sobrando só
+// a transmissão — igual apertar F11 num player de vídeo.
+let cinemaTileIdentity = null;
+
+function updateFullscreenBtnIcon(tile, isFullscreen) {
+  tile.querySelector('.screen-share-fullscreen-btn')?.classList.toggle('is-fullscreen', isFullscreen);
+}
+
+function enterCinemaFullscreen(tile, participant) {
+  if (cinemaTileIdentity && cinemaTileIdentity !== participant.identity) {
+    const oldTile = document.getElementById(tileId(cinemaTileIdentity));
+    if (oldTile) updateFullscreenBtnIcon(oldTile, false);
+  }
+  if (!tile.classList.contains('expanded')) {
+    const gridWasExpanded = grid.classList.contains('has-expanded');
+    grid.querySelectorAll('.tile.expanded').forEach((t) => t.classList.remove('expanded'));
+    tile.classList.add('expanded');
+    grid.classList.add('has-expanded');
+    if (!gridWasExpanded) enterExpandedExtras();
+  }
+  cinemaTileIdentity = participant.identity;
+  document.body.classList.add('cinema-mode');
+  window.vortex.setWindowFullscreen?.(true).catch(() => {});
+  updateFullscreenBtnIcon(tile, true);
+}
+
+function exitCinemaFullscreen() {
+  const identity = cinemaTileIdentity;
+  cinemaTileIdentity = null;
+  document.body.classList.remove('cinema-mode');
+  window.vortex.setWindowFullscreen?.(false).catch(() => {});
+  if (identity) {
+    const tile = document.getElementById(tileId(identity));
+    if (tile) updateFullscreenBtnIcon(tile, false);
+  }
+}
+
+// Se a pessoa sair da tela cheia pelo próprio Windows (ex: apertando F11 ou
+// o atalho do SO), o main process avisa aqui pra desfazer o "cinema-mode"
+// (senão a interface continuaria escondida com a janela já não-fullscreen).
+window.vortex.onWindowFullscreenChanged?.((isFullscreen) => {
+  if (!isFullscreen && cinemaTileIdentity) exitCinemaFullscreen();
+});
 
 grid.addEventListener('click', (e) => {
   const tile = e.target.closest('.tile');
@@ -2218,6 +2724,7 @@ grid.addEventListener('click', (e) => {
     // clicou de novo no mesmo vídeo que já tava em tela cheia -> sai de vez
     grid.classList.remove('has-expanded');
     exitExpandedExtras();
+    if (cinemaTileIdentity === tile.dataset.identity) exitCinemaFullscreen();
   } else {
     tile.classList.add('expanded');
     grid.classList.add('has-expanded');
@@ -2225,6 +2732,14 @@ grid.addEventListener('click', (e) => {
     // em tela cheia — trocar de vídeo expandido pra outro não deve mexer
     // nas barras de novo
     if (!gridWasExpanded) enterExpandedExtras();
+    // trocou pra outro vídeo enquanto a janela já tava em cinema mode —
+    // mantém o modo, só troca o ícone de tela cheia de dono
+    if (cinemaTileIdentity && cinemaTileIdentity !== tile.dataset.identity) {
+      const oldTile = document.getElementById(tileId(cinemaTileIdentity));
+      if (oldTile) updateFullscreenBtnIcon(oldTile, false);
+      cinemaTileIdentity = tile.dataset.identity;
+      updateFullscreenBtnIcon(tile, true);
+    }
   }
 });
 
@@ -2278,6 +2793,7 @@ function setDeafened(value, opts = {}) {
     if (!opts.silent) animateIconKick(deafenBtn);
   }
   audioElsByIdentity.forEach((_els, identity) => applyVolume(identity));
+  applySoundboardVolume();
 
   if (value) {
     // ensurdecendo: guarda se a voz já estava mutada por escolha da pessoa
@@ -2317,6 +2833,11 @@ const DEAFEN_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 const CAMERA_BADGE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>';
+// "olho" que aparece do lado de quem está assistindo uma transmissão de tela
+// agora (igual Discord) — não diz QUAL transmissão, só que a pessoa está
+// vendo alguma no momento.
+const WATCHING_BADGE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
 
 function buildMemberRow(participant, opts = {}) {
   const row = document.createElement('div');
@@ -2366,6 +2887,12 @@ function buildMemberRow(participant, opts = {}) {
     deafenBadge.innerHTML = DEAFEN_BADGE_SVG;
     badges.appendChild(deafenBadge);
 
+    const watchingBadge = document.createElement('span');
+    watchingBadge.className = 'status-badge watching-badge';
+    watchingBadge.title = 'Assistindo uma transmissão';
+    watchingBadge.innerHTML = WATCHING_BADGE_SVG;
+    badges.appendChild(watchingBadge);
+
     row.appendChild(badges);
     applyStatusBadges(row, ensureVoiceStatus(participant.identity));
   }
@@ -2375,7 +2902,7 @@ function buildMemberRow(participant, opts = {}) {
 
 function ensureVoiceStatus(identity) {
   if (!voiceMemberStatus.has(identity)) {
-    voiceMemberStatus.set(identity, { muted: false, deafened: false, camera: false, screenShare: false });
+    voiceMemberStatus.set(identity, { muted: false, deafened: false, camera: false, screenShare: false, watching: false });
   }
   return voiceMemberStatus.get(identity);
 }
@@ -2385,10 +2912,12 @@ function applyStatusBadges(row, status) {
   const liveBadge = row.querySelector('.status-badge.live-badge');
   const micBadge = row.querySelector('.status-badge.mic-badge');
   const deafenBadge = row.querySelector('.status-badge.deafen-badge');
+  const watchingBadge = row.querySelector('.status-badge.watching-badge');
   if (cameraBadge) cameraBadge.classList.toggle('badge-on', !!status.camera);
   if (liveBadge) liveBadge.classList.toggle('badge-on', !!status.screenShare);
   if (micBadge) micBadge.classList.toggle('badge-on', !!status.muted);
   if (deafenBadge) deafenBadge.classList.toggle('badge-on', !!status.deafened);
+  if (watchingBadge) watchingBadge.classList.toggle('badge-on', !!status.watching);
 }
 
 function setVoiceMemberStatus(identity, patch) {
@@ -2654,6 +3183,126 @@ function positionContextMenu(x, y, menu) {
 const SOUNDBOARD_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
 
+// Ícone de fone/volume dos efeitos (aparece no canto de cima do painel,
+// igual a cornetinha do Discord) — clica pra mutar, arrasta a barrinha do
+// lado pra ajustar. Três "estados" de ícone (mudo / baixo / alto).
+const SOUND_VOLUME_ICON_ON_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>';
+const SOUND_VOLUME_ICON_OFF_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>';
+
+function buildSoundboardTile(sound, opts = {}) {
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'soundboard-tile';
+  tile.title = sound.name;
+
+  const icon = document.createElement('span');
+  icon.innerHTML = SOUNDBOARD_ICON_SVG;
+  tile.appendChild(icon);
+
+  const name = document.createElement('span');
+  name.className = 'soundboard-tile-name';
+  name.textContent = sound.name;
+  tile.appendChild(name);
+
+  if (!sound.builtin) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'soundboard-tile-remove';
+    removeBtn.title = 'Remover';
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mySounds = mySounds.filter((s) => s.id !== sound.id);
+      saveSoundboardToConfig().catch(() => {});
+      if (opts.onChange) opts.onChange();
+    });
+    tile.appendChild(removeBtn);
+  }
+
+  tile.addEventListener('click', () => playSoundboardClip(sound));
+  return tile;
+}
+
+// Refaz só a listinha de sons (busca, "utilizados com frequência", meus
+// efeitos, sons padrão) sem reconstruir o painel inteiro — assim dá pra
+// digitar na busca sem perder o foco do campo a cada tecla.
+function renderSoundboardLists(container, searchText) {
+  container.innerHTML = '';
+  const query = (searchText || '').trim().toLowerCase();
+  const filteredMine = query ? mySounds.filter((s) => s.name.toLowerCase().includes(query)) : mySounds;
+  const filteredBuiltin = query
+    ? BUILTIN_SOUNDBOARD_SOUNDS.filter((s) => s.name.toLowerCase().includes(query))
+    : BUILTIN_SOUNDBOARD_SOUNDS;
+
+  const rerender = () => renderSoundboardLists(container, searchTextGetterCurrent());
+
+  if (!query) {
+    const frequent = mySounds
+      .concat(BUILTIN_SOUNDBOARD_SOUNDS)
+      .filter((s) => (s.useCount || 0) > 0)
+      .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
+      .slice(0, 6);
+    if (frequent.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'soundboard-section-title';
+      section.textContent = 'Utilizados com frequência';
+      container.appendChild(section);
+      const grid = document.createElement('div');
+      grid.className = 'soundboard-grid';
+      frequent.forEach((s) => grid.appendChild(buildSoundboardTile(s, { onChange: rerender })));
+      container.appendChild(grid);
+    }
+  }
+
+  const mineTitle = document.createElement('div');
+  mineTitle.className = 'soundboard-section-title';
+  mineTitle.textContent = 'Meus efeitos';
+  container.appendChild(mineTitle);
+
+  const mineGrid = document.createElement('div');
+  mineGrid.className = 'soundboard-grid';
+  if (filteredMine.length === 0 && mySounds.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'soundboard-empty';
+    empty.textContent = 'Você ainda não adicionou nenhum efeito sonoro.';
+    mineGrid.appendChild(empty);
+  } else if (filteredMine.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'soundboard-empty';
+    empty.textContent = 'Nenhum efeito seu com esse nome.';
+    mineGrid.appendChild(empty);
+  } else {
+    filteredMine.forEach((s) => mineGrid.appendChild(buildSoundboardTile(s, { onChange: rerender })));
+  }
+  if (!query && mySounds.length < MAX_SOUNDS) {
+    const addTile = document.createElement('button');
+    addTile.type = 'button';
+    addTile.className = 'soundboard-tile soundboard-add';
+    addTile.innerHTML = '<span style="font-size:20px;line-height:1;">+</span><span class="soundboard-tile-name">Adicionar</span>';
+    addTile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      soundboardFileInput.click();
+    });
+    mineGrid.appendChild(addTile);
+  }
+  container.appendChild(mineGrid);
+
+  if (filteredBuiltin.length > 0) {
+    const builtinTitle = document.createElement('div');
+    builtinTitle.className = 'soundboard-section-title';
+    builtinTitle.textContent = 'Sons do PrimalVoice';
+    container.appendChild(builtinTitle);
+    const builtinGrid = document.createElement('div');
+    builtinGrid.className = 'soundboard-grid';
+    filteredBuiltin.forEach((s) => builtinGrid.appendChild(buildSoundboardTile(s, { onChange: rerender })));
+    container.appendChild(builtinGrid);
+  }
+}
+
+let searchTextGetterCurrent = () => '';
+
 function openSoundboardPanel() {
   closeContextMenu();
   const panel = document.createElement('div');
@@ -2672,64 +3321,66 @@ function openSoundboardPanel() {
     : 'Entre num canal de voz pra poder tocar os efeitos.';
   panel.appendChild(hint);
 
-  const grid = document.createElement('div');
-  grid.className = 'soundboard-grid';
+  // Busca + volume/mudo dos efeitos (só afeta o que EU escuto)
+  const searchRow = document.createElement('div');
+  searchRow.className = 'soundboard-search-row';
 
-  if (mySounds.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'soundboard-empty';
-    empty.textContent = 'Você ainda não adicionou nenhum efeito sonoro.';
-    grid.appendChild(empty);
-  } else {
-    mySounds.forEach((sound) => {
-      const tile = document.createElement('button');
-      tile.type = 'button';
-      tile.className = 'soundboard-tile';
-      tile.title = sound.name;
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'soundboard-search';
+  searchInput.placeholder = 'Encontre o som perfeito';
+  searchRow.appendChild(searchInput);
 
-      const icon = document.createElement('span');
-      icon.innerHTML = SOUNDBOARD_ICON_SVG;
-      tile.appendChild(icon);
+  const volumeBtn = document.createElement('button');
+  volumeBtn.type = 'button';
+  volumeBtn.className = 'soundboard-volume-btn';
+  volumeBtn.title = 'Mutar/reativar efeitos sonoros';
+  const updateVolumeBtnIcon = () => {
+    volumeBtn.innerHTML = soundboardMuted ? SOUND_VOLUME_ICON_OFF_SVG : SOUND_VOLUME_ICON_ON_SVG;
+    volumeBtn.classList.toggle('muted', soundboardMuted);
+  };
+  updateVolumeBtnIcon();
+  volumeBtn.addEventListener('click', () => {
+    soundboardMuted = !soundboardMuted;
+    updateVolumeBtnIcon();
+    applySoundboardVolume();
+    saveSoundboardToConfig().catch(() => {});
+  });
+  searchRow.appendChild(volumeBtn);
+  panel.appendChild(searchRow);
 
-      const name = document.createElement('span');
-      name.className = 'soundboard-tile-name';
-      name.textContent = sound.name;
-      tile.appendChild(name);
+  const volumeSliderRow = document.createElement('div');
+  volumeSliderRow.className = 'soundboard-volume-row';
+  const volumeSlider = document.createElement('input');
+  volumeSlider.type = 'range';
+  volumeSlider.min = '0';
+  volumeSlider.max = '100';
+  volumeSlider.value = String(Math.round(soundboardEffectsVolume * 100));
+  volumeSlider.className = 'soundboard-volume-slider';
+  volumeSlider.title = 'Volume dos efeitos sonoros (só o que você escuta)';
+  volumeSlider.addEventListener('input', () => {
+    soundboardEffectsVolume = Number(volumeSlider.value) / 100;
+    if (soundboardMuted && soundboardEffectsVolume > 0) {
+      soundboardMuted = false;
+      updateVolumeBtnIcon();
+    }
+    applySoundboardVolume();
+  });
+  volumeSlider.addEventListener('change', () => saveSoundboardToConfig().catch(() => {}));
+  volumeSliderRow.appendChild(volumeSlider);
+  panel.appendChild(volumeSliderRow);
 
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'soundboard-tile-remove';
-      removeBtn.title = 'Remover';
-      removeBtn.textContent = '✕';
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        mySounds = mySounds.filter((s) => s.id !== sound.id);
-        saveSoundboardToConfig().catch(() => {});
-        openSoundboardPanel(); // reabre já atualizado, na mesma posição de antes não importa muito aqui
-      });
-      tile.appendChild(removeBtn);
+  const listContainer = document.createElement('div');
+  listContainer.className = 'soundboard-lists';
+  panel.appendChild(listContainer);
 
-      tile.addEventListener('click', () => playSoundboardClip(sound));
-      grid.appendChild(tile);
-    });
-  }
-
-  if (mySounds.length < MAX_SOUNDS) {
-    const addTile = document.createElement('button');
-    addTile.type = 'button';
-    addTile.className = 'soundboard-tile soundboard-add';
-    addTile.innerHTML = '<span style="font-size:20px;line-height:1;">+</span><span class="soundboard-tile-name">Adicionar</span>';
-    addTile.addEventListener('click', (e) => {
-      e.stopPropagation();
-      soundboardFileInput.click();
-    });
-    grid.appendChild(addTile);
-  }
-
-  panel.appendChild(grid);
+  searchTextGetterCurrent = () => searchInput.value;
+  searchInput.addEventListener('input', () => renderSoundboardLists(listContainer, searchInput.value));
+  renderSoundboardLists(listContainer, '');
 
   document.body.appendChild(panel);
   contextMenuEl = panel;
+  searchInput.focus();
   // Abre pra CIMA do botão (não pra baixo, tipo os outros menus) — o botão
   // fica no rodapé da barra lateral, então "abrir pra baixo" sairia da tela.
   const anchorRect = soundboardBtn.getBoundingClientRect();
@@ -2779,7 +3430,7 @@ soundboardFileInput.addEventListener('change', async () => {
     }
     const dataUrl = await readFileAsDataUrl(file);
     const name = file.name.replace(/\.[^./\\]+$/, '').slice(0, 32) || 'Som';
-    mySounds.push({ id: `snd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, dataUrl });
+    mySounds.push({ id: `snd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, dataUrl, useCount: 0 });
     await saveSoundboardToConfig();
     openSoundboardPanel();
   } catch (err) {
@@ -2792,47 +3443,69 @@ soundboardFileInput.addEventListener('change', async () => {
 // pilha de contextos de áudio abertos, o Chromium reclama depois de muitos).
 let soundboardAudioCtx = null;
 
-// Toca o efeito no seu PC (você também escuta) E manda ele como uma faixa de
-// áudio extra pro canal de voz — assim todo mundo que está na chamada ouve
-// junto, igual o soundboard de verdade do Discord. Continua tocando mesmo
-// que o microfone esteja mudo (é uma faixa separada, não depende do mic).
+// Toca o efeito no seu PC (você também escuta, no volume que VOCÊ ajustou
+// nos efeitos sonoros — não no volume que a pessoa gravou) E manda ele como
+// uma faixa de áudio extra pro canal de voz — assim todo mundo que está na
+// chamada ouve junto, igual o soundboard de verdade do Discord. Continua
+// tocando mesmo que o microfone esteja mudo (é uma faixa separada, não
+// depende do mic). O volume que EU escuto é só meu — o que os outros
+// recebem sempre sai "normal" (cada um ajusta o próprio volume de escuta,
+// exatamente pra evitar que quem manda um efeito estourado obrigue todo
+// mundo a ouvir no talo).
 async function playSoundboardClip(sound) {
   if (!voiceRoom) {
     alert('Entre em um canal de voz pra poder tocar efeitos sonoros.');
     return;
   }
   try {
-    const resp = await fetch(sound.dataUrl);
-    const arrayBuffer = await resp.arrayBuffer();
     if (!soundboardAudioCtx || soundboardAudioCtx.state === 'closed') {
       soundboardAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
     const ctx = soundboardAudioCtx;
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    let audioBuffer;
+    if (sound.builtin) {
+      audioBuffer = await getBuiltinSoundBuffer(ctx, sound);
+    } else {
+      const resp = await fetch(sound.dataUrl);
+      const arrayBuffer = await resp.arrayBuffer();
+      audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    }
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    const gain = ctx.createGain();
-    gain.gain.value = 1.0;
-    source.connect(gain);
 
-    // você ouve local (ligado direto na saída de som de verdade)
-    gain.connect(ctx.destination);
+    // meu preview local — respeita o volume/mudo que eu ajustei
+    const localGain = ctx.createGain();
+    localGain.gain.value = effectiveSoundboardVolume();
+    source.connect(localGain);
+    localGain.connect(ctx.destination);
+    soundboardLocalGains.add(localGain);
 
     // todo mundo na chamada ouve (faixa extra publicada só enquanto o
     // efeito está tocando — não usa Track.Source.Microphone de propósito,
     // senão o resto do app ia confundir isso com o seu microfone de verdade
-    // nos badges de "mudo"/etc.)
+    // nos badges de "mudo"/etc.) — sempre no volume "normal" (1.0), quem
+    // escuta é que decide o próprio volume de efeitos, do lado dele.
+    const networkGain = ctx.createGain();
+    networkGain.gain.value = 1.0;
+    source.connect(networkGain);
     const mixDestination = ctx.createMediaStreamDestination();
-    gain.connect(mixDestination);
+    networkGain.connect(mixDestination);
     const track = mixDestination.stream.getAudioTracks()[0];
     await voiceRoom.localParticipant.publishTrack(track, {
       name: `soundboard-${sound.id}-${Date.now()}`,
       source: Track.Source.Unknown,
     });
 
+    // conta "utilizado com frequência" — só dos MEUS efeitos (os padrão do
+    // PrimalVoice também contam, pra aparecerem ali se forem os mais usados)
+    sound.useCount = (sound.useCount || 0) + 1;
+    if (!sound.builtin) saveSoundboardToConfig().catch(() => {});
+
     source.start();
     source.onended = async () => {
+      soundboardLocalGains.delete(localGain);
       try {
         await voiceRoom?.localParticipant.unpublishTrack(track);
       } catch {
@@ -2940,23 +3613,39 @@ function openProfileCard(x, y, identity) {
 
   const actions = document.createElement('div');
   actions.className = 'profile-card-actions';
-  const actionBtn = document.createElement('button');
-  actionBtn.type = 'button';
-  actionBtn.className = 'secondary-btn';
   if (isSelf) {
+    const actionBtn = document.createElement('button');
+    actionBtn.type = 'button';
+    actionBtn.className = 'secondary-btn';
     actionBtn.textContent = 'Editar perfil';
     actionBtn.addEventListener('click', () => {
       closeContextMenu();
       openSettingsModal('profile');
     });
+    actions.appendChild(actionBtn);
   } else {
-    actionBtn.textContent = 'Conversar';
-    actionBtn.addEventListener('click', () => {
+    // Igual Discord: dá pra escrever e já mandar a mensagem direto daqui,
+    // sem precisar abrir a conversa antes — abre a conversa sozinho quando
+    // a mensagem sai, já mostrando o que acabou de ser mandado.
+    const quickDmForm = document.createElement('form');
+    quickDmForm.className = 'profile-card-quick-dm';
+    const quickDmInput = document.createElement('input');
+    quickDmInput.type = 'text';
+    quickDmInput.maxLength = 500;
+    quickDmInput.autocomplete = 'off';
+    quickDmInput.placeholder = `Conversar com @${displayNameFor(identity)}`;
+    quickDmForm.appendChild(quickDmInput);
+    quickDmForm.addEventListener('click', (e) => e.stopPropagation());
+    quickDmForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = quickDmInput.value.trim();
+      if (!text) return;
+      sendDirectMessage(identity, text);
       closeContextMenu();
       switchToDm(identity);
     });
+    actions.appendChild(quickDmForm);
   }
-  actions.appendChild(actionBtn);
   card.appendChild(actions);
 
   document.body.appendChild(card);
@@ -3021,6 +3710,7 @@ function openContextMenu(x, y, participant, opts = {}) {
     if (checked) mutedForMe.add(identity);
     else mutedForMe.delete(identity);
     applyVolume(identity);
+    applySoundboardVolume();
   });
   menu.appendChild(muteItem);
 
@@ -3030,6 +3720,7 @@ function openContextMenu(x, y, participant, opts = {}) {
     if (v > 0 && mutedForMe.has(identity)) {
       mutedForMe.delete(identity);
       muteItem.querySelector('.context-menu-checkbox').classList.remove('checked');
+      applySoundboardVolume();
     }
     applyVolume(identity);
   });
@@ -3196,6 +3887,7 @@ async function completeConnect(token, identity, st) {
     if (activeVoiceChannelId) {
       broadcastVoicePresence('join', activeVoiceChannelId);
       broadcastVoiceStatus();
+      broadcastWatchStatus();
     }
   });
   lobbyRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
@@ -3218,6 +3910,7 @@ async function completeConnect(token, identity, st) {
 
     if (msg.type === 'chat') {
       pushChatMessage(msg.channelId, {
+        id: msg.id,
         name: msg.name || participant?.name || participant?.identity,
         text: msg.text,
         ts: msg.ts,
@@ -3236,6 +3929,8 @@ async function completeConnect(token, identity, st) {
       renderChannelLists();
     } else if (msg.type === 'voice-status') {
       setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
+    } else if (msg.type === 'watch-status') {
+      setVoiceMemberStatus(msg.identity, { watching: !!msg.watching });
     } else if (msg.type === 'profile-update') {
       knownIdentities.add(msg.identity);
       memberProfiles.set(msg.identity, {
@@ -3254,6 +3949,7 @@ async function completeConnect(token, identity, st) {
       dmPeers.add(peer);
       renderDmList();
       pushChatMessage(dmChannelKey(peer), {
+        id: msg.id,
         name: msg.from === myIdentity ? (myDisplayName || myName) : (msg.name || displayNameFor(peer)),
         text: msg.text,
         ts: msg.ts,
@@ -3261,6 +3957,11 @@ async function completeConnect(token, identity, st) {
         identity: msg.from,
         attachment: msg.attachment || null,
       });
+    } else if (msg.type === 'message-edited' || msg.type === 'message-deleted') {
+      const channelId = msg.dm ? dmChannelKey(msg.from === myIdentity ? msg.to : msg.from) : msg.channelId;
+      if (!channelId || !msg.id) return;
+      if (msg.type === 'message-edited') applyMessageEdited(channelId, msg.id, msg.text);
+      else applyMessageDeleted(channelId, msg.id);
     }
   });
 
@@ -3397,6 +4098,15 @@ deafenBtn.addEventListener('click', () => {
   setDeafened(!isDeafened);
 });
 
+// Popup bonito (igual o do ping/servidor) em vez do balãozinho padrão do
+// Windows nos botões da barra de controle de voz lá embaixo.
+attachRailTooltip(camBtn, () => camBtn.dataset.tooltip, { dir: 'top' });
+attachRailTooltip(shareBtn, () => shareBtn.dataset.tooltip, { dir: 'top' });
+attachRailTooltip(soundboardBtn, () => soundboardBtn.dataset.tooltip, { dir: 'top' });
+attachRailTooltip(micBtn, () => micBtn.dataset.tooltip, { dir: 'top' });
+attachRailTooltip(deafenBtn, () => deafenBtn.dataset.tooltip, { dir: 'top' });
+attachRailTooltip(appSettingsBtn, () => appSettingsBtn.dataset.tooltip, { dir: 'top' });
+
 camBtn.addEventListener('click', async () => {
   if (!voiceRoom) return;
   const newOn = camBtn.dataset.on !== 'true';
@@ -3489,8 +4199,53 @@ sharepickOverlay.addEventListener('click', (e) => {
 });
 sharepickConfirmBtn.addEventListener('click', () => {
   if (!sharepickSelectedId) return;
-  closeSharepickModal({ sourceId: sharepickSelectedId, withAudio: sharepickAudioCheckbox.checked });
+  const resolution = sharepickResolutionSelect.value;
+  const frameRate = Number(sharepickFramerateSelect.value) || 30;
+  devicePrefs.screenResolution = resolution;
+  devicePrefs.screenFrameRate = frameRate;
+  saveDevicePrefs();
+  closeSharepickModal({
+    sourceId: sharepickSelectedId,
+    withAudio: sharepickAudioCheckbox.checked,
+    resolution,
+    frameRate,
+  });
 });
+
+// Qualidade/taxa de quadros do compartilhamento de tela (igual "Stream
+// Quality" do Discord) — resolução mais alta ou mais FPS sozinhos não
+// resolvem pixelização se o bitrate continuar baixo, então cada combinação
+// tem seu próprio teto de bitrate (mais generoso quanto maior a
+// resolução/FPS escolhidos). Isso não elimina delay/pixelização de vez —
+// isso depende também da internet de quem compartilha — mas deixa a pessoa
+// escolher um ponto de equilíbrio pra internet dela, em vez de um valor fixo
+// que tanto pode ficar borrado (se a conexão for boa) quanto travar (se não
+// for).
+const SCREEN_RESOLUTIONS = {
+  '720p': { width: 1280, height: 720 },
+  '1080p': { width: 1920, height: 1080 },
+  '1440p': { width: 2560, height: 1440 },
+  source: null, // sem forçar resolução — usa o tamanho nativo da tela/janela
+};
+const SCREEN_BITRATE_TABLE = {
+  '720p': { 15: 1_500_000, 30: 2_500_000, 60: 3_500_000 },
+  '1080p': { 15: 3_000_000, 30: 6_000_000, 60: 8_000_000 },
+  '1440p': { 15: 6_000_000, 30: 9_000_000, 60: 12_000_000 },
+  source: { 15: 6_000_000, 30: 9_000_000, 60: 12_000_000 },
+};
+function screenShareQualitySettings(resolutionKey, frameRate) {
+  // atenção: SCREEN_RESOLUTIONS.source é null DE PROPÓSITO (não é "chave
+  // não encontrada") — usar "||" aqui trataria null como se a chave não
+  // existisse e cairia sempre no 1080p, quebrando a opção "Fonte (nativa)".
+  const hasKey = Object.prototype.hasOwnProperty.call(SCREEN_RESOLUTIONS, resolutionKey);
+  const preset = hasKey ? SCREEN_RESOLUTIONS[resolutionKey] : SCREEN_RESOLUTIONS['1080p'];
+  const bitrateRow = SCREEN_BITRATE_TABLE[resolutionKey] || SCREEN_BITRATE_TABLE['1080p'];
+  const maxBitrate = bitrateRow[frameRate] || bitrateRow[30];
+  return {
+    resolution: preset ? { width: preset.width, height: preset.height, frameRate } : undefined,
+    maxBitrate,
+  };
+}
 
 async function openScreenShareModal() {
   sharepickSelectedId = null;
@@ -3526,12 +4281,14 @@ shareBtn.addEventListener('click', async () => {
   if (!choice) return;
 
   await window.vortex.chooseScreenShareSource(choice);
+  const { resolution: sizeConstraint, maxBitrate } = screenShareQualitySettings(choice.resolution, choice.frameRate);
   let publication;
   try {
     publication = await voiceRoom.localParticipant.setScreenShareEnabled(true, {
       audio: choice.withAudio,
-      resolution: { width: 1920, height: 1080, frameRate: 30 },
+      resolution: sizeConstraint,
       contentHint: 'detail',
+      screenShareEncoding: { maxBitrate, maxFramerate: choice.frameRate },
     });
   } catch (err) {
     alert('Não consegui compartilhar a tela.');

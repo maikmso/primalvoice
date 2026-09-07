@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld('vortex', {
     return () => ipcRenderer.removeListener('update-status', listener);
   },
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  // Tela cheia de verdade da janela (cinema mode do compartilhamento de tela).
+  setWindowFullscreen: (value) => ipcRenderer.invoke('window:setFullscreen', value),
+  onWindowFullscreenChanged: (callback) => {
+    const listener = (_event, value) => callback(value);
+    ipcRenderer.on('window-fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
+  },
   // status: 'none' | 'idle' | 'speaking' | 'muted' | 'deafened' — mostra uma
   // bolinha no ícone da barra de tarefas (só no Windows) igual o Discord.
   setVoiceOverlay: (status) => ipcRenderer.invoke('voiceOverlay:set', status),

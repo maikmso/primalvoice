@@ -161,6 +161,12 @@ function createWindow() {
       mainWindow.hide();
     }
   });
+
+  // Avisa o renderer se a pessoa sair da tela cheia por fora do app (atalho
+  // do Windows, ex: F11, ou o próprio SO) — usado pra desfazer o "cinema
+  // mode" (esconder barras) do compartilhamento de tela quando isso acontece.
+  mainWindow.on('enter-full-screen', () => mainWindow.webContents.send('window-fullscreen-changed', true));
+  mainWindow.on('leave-full-screen', () => mainWindow.webContents.send('window-fullscreen-changed', false));
 }
 
 function createTray() {
@@ -339,6 +345,16 @@ ipcMain.handle('update:install', () => {
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+// Tela cheia de verdade (a janela inteira, sem moldura/barra de título) pro
+// "cinema mode" de assistir compartilhamento de tela — ver enterCinemaFullscreen
+// no renderer. Não usa a Fullscreen API do elemento <video> (que mostra um
+// aviso "aperte Esc" próprio do Chromium por cima do vídeo).
+ipcMain.handle('window:setFullscreen', (_event, value) => {
+  if (!mainWindow) return false;
+  mainWindow.setFullScreen(!!value);
+  return true;
+});
 
 // ---------- indicador de voz no ícone da barra de tarefas (desativado) ----------
 // Tinha uma bolinha (cinza/verde/vermelha) sobreposta ao ícone do app na

@@ -92,6 +92,22 @@ body {
 
 .screen { flex: 1 1 auto; height: auto; min-height: 0; }
 
+/* "Cinema mode": tela cheia de VERDADE (a janela inteira, via
+   window.vortex.setWindowFullscreen — ver enterCinemaFullscreen no app.js)
+   pra assistir uma transmissão de tela, sem o aviso "aperte Esc" que o
+   Chromium mostra quando é o <video> que pede fullscreen sozinho. Esconde
+   toda a interface do PrimalVoice, sobrando só a transmissão. */
+body.cinema-mode #app-titlebar,
+body.cinema-mode .server-rail,
+body.cinema-mode .channel-sidebar,
+body.cinema-mode .resize-handle,
+body.cinema-mode .room-header,
+body.cinema-mode .hide-sidebar-fullscreen-btn {
+  display: none !important;
+}
+body.cinema-mode .grid.has-expanded { padding: 0; }
+body.cinema-mode .member-list { display: none !important; }
+
 .update-banner {
   position: fixed;
   top: 0;
@@ -125,6 +141,13 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  /* O banner fica bem em cima da faixa de título (#app-titlebar), que é
+     toda arrastável (-webkit-app-region: drag) pra mover a janela sem
+     barra de título nativa. Área arrastável "ganha" de qualquer coisa
+     desenhada por cima que não desmarque isso explicitamente — sem essa
+     linha, o clique aqui vira "arrastar a janela" em vez de clicar no
+     botão (é por isso que ele parecia travado/sem reação). */
+  -webkit-app-region: no-drag;
 }
 
 .update-banner-btn:hover { filter: brightness(1.3); }
@@ -139,6 +162,7 @@ body {
   line-height: 1;
   cursor: pointer;
   padding: 0 4px;
+  -webkit-app-region: no-drag; /* mesmo motivo do .update-banner-btn acima */
 }
 
 /* tela escura com o logo girando durante a instalação da atualização,
@@ -305,11 +329,17 @@ body {
   /* sombra neutra (antes era um brilho vermelho/laranja fixo que não
      acompanhava o tema e destoava do visual atual) */
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
+  /* overflow:hidden foi removido de propósito — o badge de não lido
+     (.server-icon-badge) fica DE PROPÓSITO parcialmente pra fora do canto
+     do ícone (bottom/right negativos), igual Discord; com overflow:hidden
+     aqui, esse pedaço pra fora ficava cortado, e o badge aparecia com uma
+     forma estranha/rasgada em vez do círculo/pílula inteiro. O logo/foto de
+     dentro não depende disso pra ficar arredondado: a imagem do servidor
+     já nasce menor que a caixa (78% + object-fit:contain) e o avatar de
+     DM já arredonda sozinho (border-radius próprio, funciona sem cortar). */
   position: relative;
   flex-shrink: 0;
   cursor: pointer;
-  transition: border-radius 0.15s ease;
 }
 /* Igual Discord: nada de mudar o formato do ícone no hover/ativo — só a
    barrinha (::before abaixo) já mostra em qual servidor/conversa você está,
@@ -544,6 +574,9 @@ body {
 .status-badge.badge-on { display: flex; }
 .status-badge svg { width: 14px; height: 14px; }
 .status-badge.camera-badge { color: var(--speaking); }
+/* "olho" de quem está assistindo uma transmissão agora — não é um alerta
+   (por isso não usa o vermelho padrão dos outros ícones), só uma informação */
+.status-badge.watching-badge { color: var(--text); }
 
 /* "AO VIVO" em vermelho — igual Discord, mais fácil de notar de longe do
    que só um ícone pequeno de tela compartilhada. */
@@ -703,6 +736,7 @@ body {
   text-align: center;
 }
 .chat-message {
+  position: relative;
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -757,6 +791,52 @@ body {
 .chat-message .text .chat-link:hover { text-decoration: underline; }
 .chat-message.self .author { color: var(--accent-2); }
 .chat-message .attachment { margin-top: 6px; }
+.edited-marker { font-size: 11px; color: var(--muted); }
+
+/* editar/apagar a própria mensagem — igual Discord: só aparecem no hover,
+   um cantinho flutuando em cima da mensagem */
+.chat-message-actions {
+  position: absolute;
+  top: -14px;
+  right: 8px;
+  display: none;
+  gap: 2px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.chat-message:hover .chat-message-actions { display: flex; }
+.chat-message-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chat-message-action-btn svg { width: 14px; height: 14px; }
+.chat-message-action-btn:hover { background: var(--hover-strong); color: var(--text); }
+.chat-edit-textarea {
+  width: 100%;
+  min-height: 20px;
+  resize: none;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.chat-edit-textarea:focus { outline: none; }
+.chat-edit-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .chat-message .attachment img,
 .chat-message .attachment video {
   max-width: 280px;
@@ -937,31 +1017,46 @@ body {
 .watch-stream-btn:hover { filter: brightness(1.1); }
 
 /* controles de quem tá assistindo uma transmissão de tela: tela cheia de
-   verdade (Fullscreen API) e um X pra parar de assistir sem mexer em nada
-   de quem está compartilhando */
+   verdade (a janela toda, sem o aviso do Chromium) e um X pra parar de
+   assistir/pausar sem mexer em nada de quem está compartilhando. Embaixo, no
+   meio — igual o Discord — em vez de no canto de cima. */
 .screen-share-controls {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 6px;
+  gap: 8px;
   z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
+.tile:hover .screen-share-controls,
+.tile.expanded .screen-share-controls { opacity: 1; }
 .screen-share-ctrl-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   border: none;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
 }
-.screen-share-ctrl-btn:hover { background: rgba(0, 0, 0, 0.75); }
-.screen-share-ctrl-btn svg { width: 14px; height: 14px; }
+.screen-share-ctrl-btn:hover { background: rgba(0, 0, 0, 0.8); }
+.screen-share-ctrl-btn svg { width: 16px; height: 16px; }
+/* mesmo truque do .expand-hint: dois ícones sobrepostos, só um visível por
+   vez, trocando pela classe (em vez de recriar o SVG na hora) */
+.screen-share-fullscreen-btn .icon-minimize { display: none; }
+.screen-share-fullscreen-btn.is-fullscreen .icon-maximize { display: none; }
+.screen-share-fullscreen-btn.is-fullscreen .icon-minimize { display: block; }
+/* enquanto tem um botão de tela cheia PRÓPRIO da transmissão, o iconezinho
+   genérico de "expandir" do canto (usado nas outras telinhas, câmera etc.)
+   fica sobrando — eram dois símbolos parecidos ao mesmo tempo */
+.tile.has-screen-controls .expand-hint { display: none; }
 
 /* lista de membros, à direita de tudo */
 .member-list {
@@ -1220,6 +1315,16 @@ body {
   border-right-color: var(--surface-raised);
 }
 .rail-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
+/* variante pros botões da barra de voz (embaixo) — seta aponta pra baixo em
+   vez de pra esquerda, porque o popup fica ACIMA do botão, não do lado */
+.rail-tooltip.tooltip-top::after {
+  top: 100%;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  border-right-color: transparent;
+  border-top-color: var(--surface-raised);
+}
 .voice-status-icon svg { width: 16px; height: 16px; }
 .voice-status-icon .quality-bar { fill: var(--quality-dim); transition: fill 0.2s ease; }
 /* excelente: 3 barrinhas verdes */
@@ -1601,16 +1706,72 @@ body {
 .profile-card-status { font-size: 13px; color: var(--text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .profile-card-actions { padding: 12px 16px 16px; }
 .profile-card-actions .secondary-btn { width: 100%; }
+.profile-card-quick-dm { display: flex; }
+.profile-card-quick-dm input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.profile-card-quick-dm input:focus { border-color: var(--accent); outline: none; }
+.profile-card-quick-dm input::placeholder { color: var(--muted); }
 
 /* ---------- efeitos sonoros (soundboard) ---------- */
-.soundboard-panel { width: 300px; min-width: 300px; padding: 10px; }
+.soundboard-panel { width: 320px; min-width: 320px; padding: 10px; }
 .soundboard-hint { padding: 0 2px 10px; font-size: 12px; color: var(--muted); }
+.soundboard-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.soundboard-search {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.soundboard-search:focus { border-color: var(--accent); outline: none; }
+.soundboard-volume-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.soundboard-volume-btn svg { width: 16px; height: 16px; }
+.soundboard-volume-btn:hover { background: var(--hover-strong); }
+.soundboard-volume-btn.muted { color: var(--danger); border-color: var(--danger); }
+.soundboard-volume-row { padding: 0 2px 10px; }
+.soundboard-volume-slider { width: 100%; accent-color: var(--accent); }
+.soundboard-lists { max-height: 320px; overflow-y: auto; }
+.soundboard-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  padding: 6px 2px;
+}
+.soundboard-lists .soundboard-section-title:first-child { padding-top: 0; }
 .soundboard-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
+  margin-bottom: 4px;
 }
 .soundboard-tile {
   position: relative;
@@ -1740,6 +1901,28 @@ body {
 .sharepick-name img { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
 .sharepick-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sharepick-empty { color: var(--muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px; }
+.sharepick-quality-row {
+  display: flex;
+  gap: 16px;
+  padding: 0 22px 14px;
+}
+.sharepick-quality-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sharepick-quality-field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.sharepick-quality-field select:focus { border-color: var(--accent); outline: none; }
 .sharepick-footer {
   padding: 14px 22px;
   border-top: 1px solid var(--border);

@@ -265,14 +265,21 @@ function getMessages(channelKey) {
   return state.messages[channelKey] || [];
 }
 
-function addMessage(channelKey, { identity, name, text, attachment }) {
+function addMessage(channelKey, { id, identity, name, text, attachment }) {
   const msg = {
-    id: crypto.randomBytes(8).toString('hex'),
+    // O cliente já manda um id gerado na hora de enviar (crypto.randomUUID
+    // no app) — usamos ESSE em vez de gerar um novo, senão a mensagem "ao
+    // vivo" (que os outros já recebem e desenham com esse id, pelo canal de
+    // dados do LiveKit) e a cópia salva aqui ficariam com ids diferentes, e
+    // editar/apagar depois não acharia a mensagem certa. Só gera um novo se
+    // por algum motivo não vier nenhum (mensagem antiga/cliente desatualizado).
+    id: typeof id === 'string' && id ? id : crypto.randomBytes(8).toString('hex'),
     identity,
     name: name || identity,
     text: typeof text === 'string' ? text.slice(0, 2000) : '',
     ts: Date.now(),
     attachment: attachment || null,
+    editedAt: null,
   };
   mutate((s) => {
     if (!s.messages[channelKey]) s.messages[channelKey] = [];
@@ -282,6 +289,37 @@ function addMessage(channelKey, { identity, name, text, attachment }) {
     }
   });
   return msg;
+}
+
+// Só quem mandou a mensagem pode editar/apagar ela — quem chama (as rotas
+// em server.js) já sabe a identidade de quem está autenticado (req.identity)
+// e passa aqui pra conferir contra o "dono" salvo na própria mensagem;
+// nunca confia soh no que o cliente afirma ser.
+function editMessage(channelKey, id, identity, newText) {
+  let result = null;
+  mutate((s) => {
+    const list = s.messages[channelKey];
+    if (!list) return;
+    const msg = list.find((m) => m.id === id);
+    if (!msg || msg.identity !== identity) return;
+    msg.text = typeof newText === 'string' ? newText.slice(0, 2000) : msg.text;
+    msg.editedAt = Date.now();
+    result = msg;
+  });
+  return result;
+}
+
+function deleteMessage(channelKey, id, identity) {
+  let deleted = false;
+  mutate((s) => {
+    const list = s.messages[channelKey];
+    if (!list) return;
+    const idx = list.findIndex((m) => m.id === id);
+    if (idx === -1 || list[idx].identity !== identity) return;
+    list.splice(idx, 1);
+    deleted = true;
+  });
+  return deleted;
 }
 
 module.exports = {
@@ -301,4 +339,6 @@ module.exports = {
   dmKey,
   getMessages,
   addMessage,
+  editMessage,
+  deleteMessage,
 };
