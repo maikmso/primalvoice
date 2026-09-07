@@ -3852,6 +3852,7 @@ function handleFullDisconnect() {
   joinSubmitBtn.disabled = false;
   joinMode = 'login';
   applyJoinMode();
+  settingsScreen.hidden = true;
   joinScreen.hidden = false;
   roomScreen.hidden = true;
   closeSettingsModal();
@@ -3980,6 +3981,7 @@ async function completeConnect(token, identity, st) {
   resetVoiceControlsUI();
   if (activeTextChannelId) switchTextChannel(activeTextChannelId);
 
+  settingsScreen.hidden = true;
   joinScreen.hidden = true;
   roomScreen.hidden = false;
   renderMemberSidebar();
