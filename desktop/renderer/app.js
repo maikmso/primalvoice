@@ -48,7 +48,6 @@ joinModeToggle.addEventListener('click', () => {
 
 const grid = document.getElementById('grid');
 const memberSidebarGroups = document.getElementById('member-sidebar-groups');
-const hideSidebarFullscreenBtn = document.getElementById('hide-sidebar-fullscreen-btn');
 const homeIconBtn = document.getElementById('home-icon-btn');
 const serverIconBtn = document.getElementById('server-icon-btn');
 const homeUnreadBadge = document.getElementById('home-unread-badge');
@@ -2649,11 +2648,70 @@ const SCREEN_FULLSCREEN_ICON_SVG =
   '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
   '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
 
+// Volume DA TRANSMISSÃO (áudio do compartilhamento de tela) — o áudio de tela
+// de alguém usa o mesmo <audio>/<video> registrado em audioElsByIdentity que
+// a voz dela (ver attachTrack/registerAudioEl), então esse controle mexe no
+// MESMO participantVolumes do menu de contexto (botão direito no nome) — só
+// que aqui, direto na telinha, porque só clicar em "Assistir transmissão" já
+// pode tocar um som alto (tiro de jogo etc.) sem aviso, e o usuário pode
+// querer abaixar na hora, sem precisar achar o nome da pessoa na lista.
+const VOLUME_ICON_SVG =
+  '<svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>';
+const VOLUME_MUTED_ICON_SVG =
+  '<svg class="icon-vol-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
+
+// Único lugar que de fato muda o volume de alguém pra mim — usado tanto por
+// esse slider da telinha quanto pelo do menu de contexto, pra os dois
+// ficarem sempre sincronizados entre si (mesma fonte de verdade).
+function setParticipantVolumeForMe(identity, v) {
+  participantVolumes.set(identity, v);
+  if (v > 0 && mutedForMe.has(identity)) mutedForMe.delete(identity);
+  applyVolume(identity);
+  applySoundboardVolume();
+  const effectivelyMuted = v === 0 || mutedForMe.has(identity);
+  document.querySelectorAll(`.screen-volume-btn[data-identity="${cssEscape(identity)}"]`).forEach((btn) => {
+    btn.classList.toggle('is-muted', effectivelyMuted);
+  });
+}
+
 function addScreenShareControls(tile, participant) {
   tile.classList.add('has-screen-controls');
   if (tile.querySelector('.screen-share-controls')) return;
   const bar = document.createElement('div');
   bar.className = 'screen-share-controls';
+
+  const volumeBtn = document.createElement('button');
+  volumeBtn.type = 'button';
+  volumeBtn.className = 'screen-share-ctrl-btn screen-volume-btn';
+  volumeBtn.dataset.identity = participant.identity;
+  volumeBtn.title = 'Volume da transmissão';
+  volumeBtn.innerHTML = VOLUME_ICON_SVG + VOLUME_MUTED_ICON_SVG;
+  volumeBtn.classList.toggle('is-muted', (participantVolumes.get(participant.identity) ?? 1) === 0 || mutedForMe.has(participant.identity));
+  volumeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (contextMenuEl && contextMenuEl.classList.contains('screen-volume-popover')) {
+      closeContextMenu();
+      return;
+    }
+    closeContextMenu();
+    const popover = document.createElement('div');
+    popover.className = 'screen-volume-popover';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = String(Math.round((participantVolumes.get(participant.identity) ?? 1) * 100));
+    slider.addEventListener('input', () => {
+      setParticipantVolumeForMe(participant.identity, Number(slider.value) / 100);
+    });
+    popover.addEventListener('click', (ev) => ev.stopPropagation());
+    popover.appendChild(slider);
+    document.body.appendChild(popover);
+    const rect = volumeBtn.getBoundingClientRect();
+    popover.style.left = `${rect.left + rect.width / 2}px`;
+    popover.style.top = `${rect.top - 10}px`;
+    contextMenuEl = popover;
+  });
 
   const fullscreenBtn = document.createElement('button');
   fullscreenBtn.type = 'button';
@@ -2679,6 +2737,7 @@ function addScreenShareControls(tile, participant) {
     stopWatchingScreenShare(participant);
   });
 
+  bar.appendChild(volumeBtn);
   bar.appendChild(fullscreenBtn);
   bar.appendChild(closeBtn);
   tile.appendChild(bar);
@@ -2819,9 +2878,8 @@ function removeTile(participant) {
 }
 
 // Ao expandir um vídeo (tela cheia dentro do app): a lista de membros da
-// direita esconde sozinha (o vídeo ganha aquele espaço), e some um botão
-// pra também esconder a barra esquerda, pra quem quiser ficar 100% sem
-// nenhuma barra. Ao sair, volta tudo exatamente como estava antes.
+// direita esconde sozinha (o vídeo ganha aquele espaço). Ao sair, volta tudo
+// exatamente como estava antes.
 let memberListStateBeforeExpand = null;
 let sidebarStateBeforeExpand = null;
 
@@ -2829,7 +2887,6 @@ function enterExpandedExtras() {
   memberListStateBeforeExpand = memberListCollapsedState;
   sidebarStateBeforeExpand = sidebarCollapsed;
   if (!memberListCollapsedState) setMemberListCollapsed(true);
-  if (hideSidebarFullscreenBtn) hideSidebarFullscreenBtn.hidden = false;
 }
 
 function exitExpandedExtras() {
@@ -2839,7 +2896,6 @@ function exitExpandedExtras() {
   }
   memberListStateBeforeExpand = null;
   sidebarStateBeforeExpand = null;
-  if (hideSidebarFullscreenBtn) hideSidebarFullscreenBtn.hidden = true;
 }
 
 function collapseExpandedTile() {
@@ -2881,6 +2937,7 @@ function enterCinemaFullscreen(tile, participant) {
   document.body.classList.add('cinema-mode');
   window.vortex.setWindowFullscreen?.(true).catch(() => {});
   updateFullscreenBtnIcon(tile, true);
+  showCinemaControlsBriefly();
 }
 
 function exitCinemaFullscreen() {
@@ -2888,11 +2945,36 @@ function exitCinemaFullscreen() {
   cinemaTileIdentity = null;
   document.body.classList.remove('cinema-mode');
   window.vortex.setWindowFullscreen?.(false).catch(() => {});
+  clearTimeout(cinemaControlsHideTimer);
   if (identity) {
     const tile = document.getElementById(tileId(identity));
-    if (tile) updateFullscreenBtnIcon(tile, false);
+    if (tile) {
+      updateFullscreenBtnIcon(tile, false);
+      tile.classList.remove('force-controls');
+    }
   }
 }
+
+// Em cinema-mode o vídeo ocupa a janela inteira, então ":hover" sozinho não
+// resolve (o mouse sempre está "em cima" do vídeo) — precisa ser tipo um
+// player de vídeo: mexeu o mouse, mostra os botões de novo por alguns
+// segundos, parou de mexer, esconde. Fora do cinema-mode (telinha grande só
+// dentro da grade, com o resto da interface do lado) isso não é necessário,
+// porque ali dá pra mesmo tirar o mouse de cima de verdade.
+let cinemaControlsHideTimer = null;
+function showCinemaControlsBriefly() {
+  if (!cinemaTileIdentity) return;
+  const tile = document.getElementById(tileId(cinemaTileIdentity));
+  if (!tile) return;
+  tile.classList.add('force-controls');
+  clearTimeout(cinemaControlsHideTimer);
+  cinemaControlsHideTimer = setTimeout(() => {
+    tile.classList.remove('force-controls');
+  }, 2500);
+}
+document.addEventListener('mousemove', () => {
+  if (cinemaTileIdentity) showCinemaControlsBriefly();
+});
 
 // Se a pessoa sair da tela cheia pelo próprio Windows (ex: apertando F11 ou
 // o atalho do SO), o main process avisa aqui pra desfazer o "cinema-mode"
@@ -2930,11 +3012,6 @@ grid.addEventListener('click', (e) => {
       updateFullscreenBtnIcon(tile, true);
     }
   }
-});
-
-hideSidebarFullscreenBtn?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  setSidebarCollapsed(!sidebarCollapsed);
 });
 
 document.addEventListener('keydown', (e) => {
@@ -3916,18 +3993,20 @@ function openContextMenu(x, y, participant, opts = {}) {
     else mutedForMe.delete(identity);
     applyVolume(identity);
     applySoundboardVolume();
+    const effectivelyMuted = (participantVolumes.get(identity) ?? 1) === 0 || mutedForMe.has(identity);
+    document.querySelectorAll(`.screen-volume-btn[data-identity="${cssEscape(identity)}"]`).forEach((btn) => {
+      btn.classList.toggle('is-muted', effectivelyMuted);
+    });
   });
   menu.appendChild(muteItem);
 
   volumeSlider.addEventListener('input', () => {
     const v = Number(volumeSlider.value) / 100;
-    participantVolumes.set(identity, v);
-    if (v > 0 && mutedForMe.has(identity)) {
-      mutedForMe.delete(identity);
+    const wasMuted = mutedForMe.has(identity);
+    setParticipantVolumeForMe(identity, v);
+    if (wasMuted && !mutedForMe.has(identity)) {
       muteItem.querySelector('.context-menu-checkbox').classList.remove('checked');
-      applySoundboardVolume();
     }
-    applyVolume(identity);
   });
 
   const videoItem = buildToggleItem('Desativar vídeo', videoHiddenForMe.has(identity), (checked) => {

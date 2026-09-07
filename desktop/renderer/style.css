@@ -132,12 +132,17 @@ body.cinema-mode #app-titlebar,
 body.cinema-mode .server-rail,
 body.cinema-mode .channel-sidebar,
 body.cinema-mode .resize-handle,
-body.cinema-mode .room-header,
-body.cinema-mode .hide-sidebar-fullscreen-btn {
+body.cinema-mode .room-header {
   display: none !important;
 }
 body.cinema-mode .grid.has-expanded { padding: 0; }
 body.cinema-mode .member-list { display: none !important; }
+
+/* mesmo sem entrar de fato no cinema-mode (só dando 2 cliques pra aumentar
+   uma telinha dentro da grade, sem deixar a janela toda em tela cheia), a
+   barrinha de cima com o nome do canal fica sobrando, flutuando por cima do
+   vídeo grande sem nenhuma função ali -- esconde nesse caso também. */
+.main-content:has(.grid.has-expanded) .room-header { display: none !important; }
 
 .update-banner {
   position: fixed;
@@ -1073,24 +1078,6 @@ body.cinema-mode .member-list { display: none !important; }
    ou fecham), então só precisava parar de recortar o vídeo pra caber */
 .tile video.video-el.screen-video { object-fit: contain; background: #000; }
 
-.hide-sidebar-fullscreen-btn {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 3;
-}
-.hide-sidebar-fullscreen-btn svg { width: 16px; height: 16px; }
-.hide-sidebar-fullscreen-btn:hover { background: rgba(0, 0, 0, 0.75); }
 .tile .initial {
   font-size: 32px;
   font-weight: 700;
@@ -1158,7 +1145,7 @@ body.cinema-mode .member-list { display: none !important; }
   transition: opacity 0.15s ease;
 }
 .tile:hover .screen-share-controls,
-.tile.expanded .screen-share-controls { opacity: 1; }
+.tile.force-controls .screen-share-controls { opacity: 1; }
 .screen-share-ctrl-btn {
   width: 34px;
   height: 34px;
@@ -1179,6 +1166,28 @@ body.cinema-mode .member-list { display: none !important; }
 .screen-share-fullscreen-btn .icon-minimize { display: none; }
 .screen-share-fullscreen-btn.is-fullscreen .icon-maximize { display: none; }
 .screen-share-fullscreen-btn.is-fullscreen .icon-minimize { display: block; }
+/* mesmo truque pro botão de volume da transmissão: ícone de alto-falante
+   normal, ou com um X quando o volume tá em 0 / silenciado */
+.screen-volume-btn .icon-vol-off { display: none; }
+.screen-volume-btn.is-muted .icon-vol-on { display: none; }
+.screen-volume-btn.is-muted .icon-vol-off { display: block; }
+/* balãozinho com o slider de volume, abre pra cima do botão (mesmo esquema
+   de posicionamento fixo do balão de ping/tooltip da barra lateral) */
+.screen-volume-popover {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: var(--surface-raised, #2b2d31);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+.screen-volume-popover input[type='range'] {
+  width: 120px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 /* enquanto tem um botão de tela cheia PRÓPRIO da transmissão, o iconezinho
    genérico de "expandir" do canto (usado nas outras telinhas, câmera etc.)
    fica sobrando — eram dois símbolos parecidos ao mesmo tempo */
