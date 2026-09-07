@@ -1919,6 +1919,10 @@ body.cinema-mode .member-list { display: none !important; }
 }
 .soundboard-tile:hover { background: var(--hover-strong); border-color: var(--accent); }
 .soundboard-tile:active { transform: scale(0.97); }
+/* contorno verde enquanto o efeito está tocando de verdade, igual Discord —
+   some sozinho quando o áudio termina (ver source.onended em
+   playSoundboardClip) */
+.soundboard-tile.playing { border-color: var(--speaking); box-shadow: 0 0 0 1px var(--speaking); }
 .soundboard-tile svg { width: 20px; height: 20px; flex-shrink: 0; }
 .soundboard-tile-name {
   width: 100%;

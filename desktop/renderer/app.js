@@ -3385,6 +3385,11 @@ function buildSoundboardTile(sound, opts = {}) {
   tile.type = 'button';
   tile.className = 'soundboard-tile';
   tile.title = sound.name;
+  // um mesmo som pode aparecer em MAIS de um cartãozinho ao mesmo tempo
+  // (em "Utilizados com frequência" e também na seção de origem dele) — esse
+  // id é o que deixa achar TODOS eles de uma vez pra acender/apagar o
+  // contorno verde de "tocando agora" nos dois ao mesmo tempo
+  tile.dataset.soundId = sound.id;
 
   const icon = document.createElement('span');
   icon.innerHTML = SOUNDBOARD_ICON_SVG;
@@ -3641,6 +3646,15 @@ let soundboardAudioCtx = null;
 // recebem sempre sai "normal" (cada um ajusta o próprio volume de escuta,
 // exatamente pra evitar que quem manda um efeito estourado obrigue todo
 // mundo a ouvir no talo).
+// Acende/apaga o contorno verde de "tocando agora" em TODOS os cartõezinhos
+// desse som (pode ter mais de um na tela ao mesmo tempo, ver
+// buildSoundboardTile acima).
+function setSoundboardTilesPlaying(soundId, isPlaying) {
+  document.querySelectorAll(`.soundboard-tile[data-sound-id="${cssEscape(soundId)}"]`).forEach((tile) => {
+    tile.classList.toggle('playing', isPlaying);
+  });
+}
+
 async function playSoundboardClip(sound) {
   if (!voiceRoom) {
     alert('Entre em um canal de voz pra poder tocar efeitos sonoros.');
@@ -3692,8 +3706,10 @@ async function playSoundboardClip(sound) {
     sound.useCount = (sound.useCount || 0) + 1;
     if (!sound.builtin) saveSoundboardToConfig().catch(() => {});
 
+    setSoundboardTilesPlaying(sound.id, true);
     source.start();
     source.onended = async () => {
+      setSoundboardTilesPlaying(sound.id, false);
       soundboardLocalGains.delete(localGain);
       try {
         await voiceRoom?.localParticipant.unpublishTrack(track);
