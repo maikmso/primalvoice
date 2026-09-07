@@ -395,6 +395,22 @@ async function fetchServerState() {
     applyProfileEverywhere(identity);
   }
 
+  // Retrato ao vivo de quem tá em qual canal de voz agora (ver
+  // store.getVoicePresenceSnapshot no servidor) — só PREENCHE o que a gente
+  // ainda não sabia, nunca sobrescreve/apaga (a fonte de verdade pro que já
+  // está na tela é o broadcast em tempo real pelo LiveKit; isso aqui só
+  // existe pra não ficar tudo vazio nos primeiros segundos depois de
+  // conectar). Nunca inclui a própria identity — a minha presença em canal
+  // de voz é sempre controlada localmente por quem eu realmente entrei.
+  const voicePresenceData = data.voicePresence || {};
+  for (const [channelId, identities] of Object.entries(voicePresenceData)) {
+    if (!voicePresence.has(channelId)) voicePresence.set(channelId, new Map());
+    const map = voicePresence.get(channelId);
+    for (const [identity, name] of Object.entries(identities)) {
+      if (identity !== myIdentity && !map.has(identity)) map.set(identity, name);
+    }
+  }
+
   renderChannelLists();
   renderPermissionGates();
 }
@@ -1846,6 +1862,10 @@ async function joinVoiceChannel(channelId) {
   if (!voicePresence.has(channelId)) voicePresence.set(channelId, new Map());
   voicePresence.get(channelId).set(myIdentity, myName);
   broadcastVoicePresence('join', channelId);
+  // também avisa o servidor (retrato ao vivo, ver getVoicePresenceSnapshot) —
+  // é isso que deixa quem conecta agora já ver na hora quem tá em cada canal,
+  // sem esperar o vaivém de mensagens do LiveKit
+  apiFetch('/api/voice-presence/join', { method: 'POST', body: JSON.stringify({ channelId }) }).catch(() => {});
 
   channelHeaderIcon.innerHTML = VOICE_ICON_SVG;
   channelHeaderName.textContent = channel.name;
@@ -1862,6 +1882,7 @@ async function leaveVoiceChannel(opts = {}) {
   broadcastVoicePresence('leave', channelId);
   voicePresence.get(channelId)?.delete(myIdentity);
   voiceMemberStatus.delete(myIdentity);
+  apiFetch('/api/voice-presence/leave', { method: 'POST' }).catch(() => {});
 
   try {
     await voiceRoom.disconnect();
@@ -1952,6 +1973,97 @@ function renderMessageTextWithLinks(container, text) {
   if (lastIndex < text.length) {
     container.appendChild(document.createTextNode(text.slice(lastIndex)));
   }
+}
+
+// Cartãozinho de prévia de vídeo do YouTube embaixo da mensagem, igual o
+// Discord — miniatura, título e nome do canal. Continua abrindo no
+// navegador padrão ao clicar (não toca o vídeo dentro do próprio app, por
+// design — igual qualquer outro link do chat), só que agora dá pra VER do
+// que se trata antes de clicar, com direito a miniatura.
+const YOUTUBE_URL_REGEX = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,15})/;
+
+function extractYoutubeVideoId(text) {
+  const match = text.match(YOUTUBE_URL_REGEX);
+  return match ? match[1] : null;
+}
+
+const YT_PLAY_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.55)"></circle><path d="M10 8.5v7l6-3.5z" fill="#fff"></path></svg>';
+const YT_EXTERNAL_ICON_SVG =
+  '<svg class="yt-embed-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>';
+
+// Guarda o resultado (ou `null` se falhou) por id de vídeo — evita buscar o
+// mesmo vídeo no oEmbed toda vez que o histórico é redesenhado (troca de
+// canal, reconexão etc.)
+const youtubeEmbedCache = new Map();
+
+async function fetchYoutubeEmbedInfo(videoId) {
+  if (youtubeEmbedCache.has(videoId)) return youtubeEmbedCache.get(videoId);
+  const promise = (async () => {
+    try {
+      const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('oembed falhou');
+      return await res.json();
+    } catch {
+      return null;
+    }
+  })();
+  youtubeEmbedCache.set(videoId, promise);
+  const resolved = await promise;
+  youtubeEmbedCache.set(videoId, resolved);
+  return resolved;
+}
+
+function buildYoutubeEmbedCard(videoId) {
+  const card = document.createElement('a');
+  card.className = 'yt-embed';
+  card.href = `https://www.youtube.com/watch?v=${videoId}`;
+  card.target = '_blank';
+  card.rel = 'noopener noreferrer';
+  card.title = 'Assistir no YouTube';
+
+  const source = document.createElement('div');
+  source.className = 'yt-embed-source';
+  source.textContent = 'YouTube';
+  card.appendChild(source);
+
+  const author = document.createElement('div');
+  author.className = 'yt-embed-author';
+  author.hidden = true;
+  card.appendChild(author);
+
+  const title = document.createElement('div');
+  title.className = 'yt-embed-title';
+  title.textContent = 'Assistir no YouTube';
+  card.appendChild(title);
+
+  const thumbWrap = document.createElement('div');
+  thumbWrap.className = 'yt-embed-thumb-wrap';
+  const thumb = document.createElement('img');
+  thumb.className = 'yt-embed-thumb';
+  thumb.alt = '';
+  // já mostra uma miniatura na hora (esse endereço sempre existe pra
+  // qualquer vídeo público, sem precisar esperar o oEmbed responder)
+  thumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  thumbWrap.appendChild(thumb);
+  const playOverlay = document.createElement('div');
+  playOverlay.className = 'yt-embed-play';
+  playOverlay.innerHTML = YT_PLAY_ICON_SVG + YT_EXTERNAL_ICON_SVG;
+  thumbWrap.appendChild(playOverlay);
+  card.appendChild(thumbWrap);
+
+  fetchYoutubeEmbedInfo(videoId).then((info) => {
+    if (!info) return;
+    if (info.author_name) {
+      author.textContent = info.author_name;
+      author.hidden = false;
+    }
+    if (info.title) title.textContent = info.title;
+    if (info.thumbnail_url) thumb.src = info.thumbnail_url;
+  });
+
+  return card;
 }
 
 const EDIT_ICON_SVG =
@@ -2088,6 +2200,13 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
 
       row.appendChild(actions);
     }
+
+    // se a mensagem tem um link do YouTube, mostra um cartãozinho de
+    // prévia embaixo (miniatura + título + canal), igual o Discord
+    const youtubeVideoId = extractYoutubeVideoId(text);
+    if (youtubeVideoId) {
+      body.appendChild(buildYoutubeEmbedCard(youtubeVideoId));
+    }
   }
 
   if (attachment && attachment.url) {
@@ -2196,7 +2315,13 @@ function sendDirectMessage(peerIdentity, text) {
   const id = crypto.randomUUID();
   const channelId = dmChannelKey(peerIdentity);
   const payload = { type: 'dm', to: peerIdentity, from: myIdentity, name: myDisplayName || myName, text, ts, id };
-  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  // manda SÓ pra quem é o destinatário (destinationIdentities) — sem isso o
+  // LiveKit distribui pra sala inteira e mensagem "privada" nenhuma é
+  // privada de verdade, mesmo o resto do app filtrando na tela
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), {
+    reliable: true,
+    destinationIdentities: [peerIdentity],
+  });
   pushChatMessage(channelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
   persistChatMessage(channelId, { id, text });
 }
@@ -2276,10 +2401,15 @@ function chatMessageServerPath(channelId, id) {
 
 function editChatMessage(channelId, id, newText) {
   if (!lobbyRoom) return;
-  const payload = isDmChannelId(channelId)
+  const isDm = isDmChannelId(channelId);
+  const payload = isDm
     ? { type: 'message-edited', dm: true, to: dmPeerFromChannelId(channelId), from: myIdentity, id, text: newText }
     : { type: 'message-edited', channelId, from: myIdentity, id, text: newText };
-  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  // edição de DM também só vai pro destinatário — mesma razão do envio
+  const options = isDm
+    ? { reliable: true, destinationIdentities: [dmPeerFromChannelId(channelId)] }
+    : { reliable: true };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), options);
   applyMessageEdited(channelId, id, newText);
   apiFetch(chatMessageServerPath(channelId, id), { method: 'PATCH', body: JSON.stringify({ text: newText }) }).catch((err) => {
     console.warn('Não consegui salvar a edição da mensagem no servidor:', err);
@@ -2288,10 +2418,14 @@ function editChatMessage(channelId, id, newText) {
 
 function deleteChatMessage(channelId, id) {
   if (!lobbyRoom) return;
-  const payload = isDmChannelId(channelId)
+  const isDm = isDmChannelId(channelId);
+  const payload = isDm
     ? { type: 'message-deleted', dm: true, to: dmPeerFromChannelId(channelId), from: myIdentity, id }
     : { type: 'message-deleted', channelId, from: myIdentity, id };
-  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+  const options = isDm
+    ? { reliable: true, destinationIdentities: [dmPeerFromChannelId(channelId)] }
+    : { reliable: true };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), options);
   applyMessageDeleted(channelId, id);
   apiFetch(chatMessageServerPath(channelId, id), { method: 'DELETE' }).catch((err) => {
     console.warn('Não consegui apagar a mensagem no servidor:', err);
@@ -2312,14 +2446,10 @@ async function uploadChatAttachment(file) {
   return data; // { url, type, name }
 }
 
-chatAttachmentBtn.addEventListener('click', () => {
-  if (!lobbyRoom || !activeTextChannelId) return;
-  chatAttachmentInput.click();
-});
-
-chatAttachmentInput.addEventListener('change', async () => {
-  const file = chatAttachmentInput.files[0];
-  chatAttachmentInput.value = '';
+// Manda um arquivo pro chat ativo (usado pelo clipezinho, por arrastar
+// arquivo pra dentro da conversa, e por colar print/imagem copiada — os
+// 3 caminhos terminam todos aqui, pra não duplicar a lógica de novo).
+async function sendChatFile(file) {
   if (!file || !lobbyRoom || !activeTextChannelId) return;
   if (file.size > 25 * 1024 * 1024) {
     alert('Arquivo muito grande (máx. 25MB).');
@@ -2336,7 +2466,10 @@ chatAttachmentInput.addEventListener('change', async () => {
     if (isDmChannelId(activeTextChannelId)) {
       const to = dmPeerFromChannelId(activeTextChannelId);
       const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id };
-      lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+      lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), {
+        reliable: true,
+        destinationIdentities: [to],
+      });
       pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
       persistChatMessage(activeTextChannelId, { id, text, attachment });
       return;
@@ -2350,6 +2483,59 @@ chatAttachmentInput.addEventListener('change', async () => {
   } finally {
     chatAttachmentBtn.disabled = false;
   }
+}
+
+chatAttachmentBtn.addEventListener('click', () => {
+  if (!lobbyRoom || !activeTextChannelId) return;
+  chatAttachmentInput.click();
+});
+
+chatAttachmentInput.addEventListener('change', () => {
+  const file = chatAttachmentInput.files[0];
+  chatAttachmentInput.value = '';
+  sendChatFile(file);
+});
+
+// Arrastar um arquivo (da área de trabalho, do explorador, de outra janela)
+// e soltar em cima da conversa manda ele igual clicar no clipezinho.
+let chatDragCounter = 0;
+textView.addEventListener('dragenter', (e) => {
+  if (!lobbyRoom || !activeTextChannelId) return;
+  e.preventDefault();
+  chatDragCounter += 1;
+  textView.classList.add('drag-over');
+});
+textView.addEventListener('dragover', (e) => {
+  if (!lobbyRoom || !activeTextChannelId) return;
+  e.preventDefault();
+});
+textView.addEventListener('dragleave', () => {
+  chatDragCounter = Math.max(0, chatDragCounter - 1);
+  if (chatDragCounter === 0) textView.classList.remove('drag-over');
+});
+textView.addEventListener('drop', (e) => {
+  e.preventDefault();
+  chatDragCounter = 0;
+  textView.classList.remove('drag-over');
+  if (!lobbyRoom || !activeTextChannelId) return;
+  const files = Array.from(e.dataTransfer?.files || []);
+  // manda um de cada vez (cada arquivo vira uma mensagem própria, igual
+  // já era quando escolhia um arquivo por vez pelo clipezinho)
+  files.reduce((chain, file) => chain.then(() => sendChatFile(file)), Promise.resolve());
+});
+
+// Colar (Ctrl+V) uma imagem copiada — print de tela (Win+Shift+S, PrtScn) ou
+// uma imagem copiada de qualquer lugar — manda ela igual um anexo. Só entra
+// nesse caminho se realmente tiver uma IMAGEM na área de transferência; colar
+// texto normal continua funcionando que nem sempre funcionou, sem mudar nada.
+chatInput.addEventListener('paste', (e) => {
+  if (!lobbyRoom || !activeTextChannelId) return;
+  const items = Array.from(e.clipboardData?.items || []);
+  const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+  if (!imageItem) return; // sem imagem colada -> deixa o colar de texto normal acontecer
+  e.preventDefault();
+  const file = imageItem.getAsFile();
+  if (file) sendChatFile(file);
 });
 
 // ---------- grade de vídeo/tela ----------
@@ -2411,18 +2597,21 @@ function isMyIdentity(identity) {
   return !!(voiceRoom && voiceRoom.localParticipant && voiceRoom.localParticipant.identity === identity);
 }
 
-// Avisa todo mundo (canal de dados, igual voice-status/profile-update) que eu
-// comecei ou parei de assistir alguma transmissão — usado só pro "olho" que
-// aparece do lado do nome de quem está assistindo, na listinha do canal de
-// voz. É um bit só (assistindo ou não), não importa qual apresentador.
+// Avisa todo mundo (canal de dados, igual voice-status/profile-update) quais
+// apresentador(es) eu estou assistindo agora — manda a LISTA de identities
+// (não só um bit sim/não), porque o olho só pode aparecer pra quem está
+// apresentando, e só sobre quem está assistindo A ELE especificamente (ver
+// setVoiceMemberStatus mais abaixo, no handler do 'watch-status').
 function broadcastWatchStatus() {
   if (!lobbyRoom) return;
-  const payload = { type: 'watch-status', identity: myIdentity, watching: watchingScreenShare.size > 0 };
+  const payload = { type: 'watch-status', identity: myIdentity, watching: Array.from(watchingScreenShare) };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
 }
 
+// Não mostra o olho em mim mesmo (quem tá assistindo já sabe que tá
+// assistindo) — o olho só deve aparecer pra quem está TRANSMITINDO, do lado
+// do nome de quem está assistindo A TRANSMISSÃO DELE.
 function updateMyWatchingStatus() {
-  if (myIdentity) setVoiceMemberStatus(myIdentity, { watching: watchingScreenShare.size > 0 });
   broadcastWatchStatus();
 }
 
@@ -3845,6 +4034,11 @@ function handleFullDisconnect() {
   resetAudioState();
   resetVoiceControlsUI();
   voicePresence.clear();
+  // se a queda foi com a pessoa dentro de um canal de voz (rede caiu, app
+  // fechou de repente etc.), avisa o servidor que ela não está mais em
+  // canal nenhum — senão o retrato ao vivo (getVoicePresenceSnapshot) fica
+  // com um "fantasma" até essa pessoa entrar de novo em algum canal
+  apiFetch('/api/voice-presence/leave', { method: 'POST' }).catch(() => {});
   chatHistoryByChannel.clear();
   activeVoiceChannelId = null;
   activeTextChannelId = null;
@@ -3931,7 +4125,13 @@ async function completeConnect(token, identity, st) {
     } else if (msg.type === 'voice-status') {
       setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
     } else if (msg.type === 'watch-status') {
-      setVoiceMemberStatus(msg.identity, { watching: !!msg.watching });
+      // msg.identity é quem mandou o aviso (quem está assistindo alguma
+      // transmissão); msg.watching é a LISTA de quem ele(a) está assistindo.
+      // Só mostro o olho no nome dele(a) se EU for um dos apresentadores
+      // dessa lista — ou seja, só quem está transmitindo enxerga esse olho,
+      // e só sobre quem está assistindo A TRANSMISSÃO DELE especificamente.
+      const watchingMe = Array.isArray(msg.watching) && myIdentity && msg.watching.includes(myIdentity);
+      setVoiceMemberStatus(msg.identity, { watching: !!watchingMe });
     } else if (msg.type === 'profile-update') {
       knownIdentities.add(msg.identity);
       memberProfiles.set(msg.identity, {
@@ -3945,6 +4145,13 @@ async function completeConnect(token, identity, st) {
     } else if (msg.type === 'state-changed') {
       fetchServerState().catch(() => {});
     } else if (msg.type === 'dm') {
+      // reforço extra: mesmo o envio já sendo direcionado só pro destinatário
+      // (destinationIdentities), só aceita processar aqui se EU realmente for
+      // uma das duas pontas dessa conversa — nunca confia só no "pra quem
+      // parece ser" sem checar. Isso é o que garante que uma DM nunca aparece
+      // pra quem não é remetente nem destinatário, mesmo que por algum motivo
+      // o pacote chegue até aqui (bug de outra versão, race, etc.).
+      if (msg.from !== myIdentity && msg.to !== myIdentity) return;
       const peer = msg.from === myIdentity ? msg.to : msg.from;
       if (!peer) return;
       dmPeers.add(peer);
@@ -3959,6 +4166,9 @@ async function completeConnect(token, identity, st) {
         attachment: msg.attachment || null,
       });
     } else if (msg.type === 'message-edited' || msg.type === 'message-deleted') {
+      // mesma checagem de privacidade do 'dm' acima: numa edição/apagada de
+      // DM, só aceita se eu for de fato remetente ou destinatário
+      if (msg.dm && msg.from !== myIdentity && msg.to !== myIdentity) return;
       const channelId = msg.dm ? dmChannelKey(msg.from === myIdentity ? msg.to : msg.from) : msg.channelId;
       if (!channelId || !msg.id) return;
       if (msg.type === 'message-edited') applyMessageEdited(channelId, msg.id, msg.text);

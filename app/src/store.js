@@ -322,6 +322,41 @@ function deleteMessage(channelKey, id, identity) {
   return deleted;
 }
 
+// ---------- presença de canal de voz (só em memória, nunca vai pro Redis) ----------
+// Quem está em qual canal de voz agora é informação "ao vivo" — não faz
+// sentido persistir isso (se o servidor reiniciar, ninguém vai estar
+// conectado mesmo). Existe só pra resolver um problema real: quando alguém
+// abre o app e entra na sala, a lista de "quem já tá em cada canal de voz"
+// ficava vazia por 1-2 segundos, porque antes disso ela só era montada por
+// mensagens que os OUTROS participantes mandavam pelo canal de dados do
+// LiveKit ao perceberem a chegada dessa pessoa — e isso demora um
+// pouquinho pra "esquentar" a conexão. Agora, assim que a pessoa conecta,
+// ela já pega esse retrato via /api/state (uma requisição HTTP comum, bem
+// mais rápida que esperar o LiveKit avisar todo mundo).
+const voicePresence = new Map(); // channelId -> Map(identity -> name)
+
+function setVoicePresence(channelId, identity, name) {
+  if (!channelId || !identity) return;
+  // uma pessoa só fica em UM canal de voz por vez — tira de qualquer outro
+  // antes de colocar no novo, pra nunca ficar "fantasma" em dois lugares
+  voicePresence.forEach((map) => map.delete(identity));
+  if (!voicePresence.has(channelId)) voicePresence.set(channelId, new Map());
+  voicePresence.get(channelId).set(identity, name || identity);
+}
+
+function clearVoicePresence(identity) {
+  if (!identity) return;
+  voicePresence.forEach((map) => map.delete(identity));
+}
+
+function getVoicePresenceSnapshot() {
+  const out = {};
+  voicePresence.forEach((map, channelId) => {
+    out[channelId] = Object.fromEntries(map);
+  });
+  return out;
+}
+
 module.exports = {
   init,
   getState,
@@ -341,4 +376,7 @@ module.exports = {
   addMessage,
   editMessage,
   deleteMessage,
+  setVoicePresence,
+  clearVoicePresence,
+  getVoicePresenceSnapshot,
 };

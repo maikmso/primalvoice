@@ -272,7 +272,26 @@ app.get('/api/state', requireAuth, (req, res) => {
     myIdentity: req.identity,
     myPermissions: store.getPermissions(req.identity),
     profiles: store.getPublicProfiles(),
+    voicePresence: store.getVoicePresenceSnapshot(),
   });
+});
+
+// Presença de canal de voz: quem está em qual canal agora, pra quem acabou
+// de conectar já saber na hora (sem esperar o vaivém de mensagens do
+// LiveKit "esquentar"). É só um retrato ao vivo — nunca persiste.
+app.post('/api/voice-presence/join', requireAuth, (req, res) => {
+  const { channelId } = req.body || {};
+  if (!channelId || typeof channelId !== 'string') {
+    return res.status(400).json({ error: 'channelId obrigatório.' });
+  }
+  const user = store.findUser(req.identity);
+  store.setVoicePresence(channelId, req.identity, user?.displayName || req.identity);
+  res.json({ ok: true });
+});
+
+app.post('/api/voice-presence/leave', requireAuth, (req, res) => {
+  store.clearVoicePresence(req.identity);
+  res.json({ ok: true });
 });
 
 // Trocar a foto do servidor (ícone que aparece na barra à esquerda) — igual

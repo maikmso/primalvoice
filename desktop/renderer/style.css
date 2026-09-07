@@ -78,6 +78,37 @@ body {
   flex-direction: column;
 }
 
+/* Barra de rolagem fina e discreta, igual o Discord: sem trilho visível
+   (só aparece a "pilulazinha" cinza quando tem o que rolar), sem os
+   botõezinhos de seta em cima/embaixo, cantos arredondados. Aplicado no
+   app inteiro (todo elemento com overflow scroll/auto usa isso). Os 3
+   temas do app são todos escuros, então uma cor branca semi-transparente
+   funciona igual nos 3 sem precisar de regra separada por tema. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Faixa que substitui a barra de título nativa do Windows (sem isso a
    janela fica sem jeito de arrastar, já que tiramos o "frame" nativo lá no
    main.js) — igual o Discord, sem ícone/nome do app escritos, só espaço
@@ -720,6 +751,26 @@ body.cinema-mode .member-list { display: none !important; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+}
+/* Arrastar um arquivo por cima da conversa pra enviar (soltar manda igual
+   escolher pelo clipezinho) — mostra um contorno tracejado por cima de
+   tudo enquanto o arquivo está "flutuando" sobre a área. */
+.text-view.drag-over::after {
+  content: 'Solte aqui para enviar';
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent-2);
+  border-radius: 8px;
+  background: rgba(88, 101, 242, 0.08);
+  color: var(--accent-2);
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
 }
 .chat-messages {
   flex: 1;
@@ -787,11 +838,86 @@ body.cinema-mode .member-list { display: none !important; }
   color: var(--accent-2);
   text-decoration: none;
   cursor: pointer;
+  /* por padrão o Chromium deixa <a> "arrastável" (pra jogar o link fora),
+     e isso ganha prioridade sobre selecionar o texto arrastando o mouse —
+     por isso só dava pra clicar, nunca selecionar/copiar o link. Desliga
+     esse arrasto nativo (mesma técnica já usada nas fotos/avatares mais
+     abaixo neste arquivo) pra selecionar texto funcionar igual no resto
+     da mensagem. */
+  -webkit-user-drag: none;
 }
 .chat-message .text .chat-link:hover { text-decoration: underline; }
 .chat-message.self .author { color: var(--accent-2); }
 .chat-message .attachment { margin-top: 6px; }
 .edited-marker { font-size: 11px; color: var(--muted); }
+
+/* cartãozinho de prévia de link do YouTube, igual o Discord: fundo mais
+   claro que o chat, barrinha vermelha na esquerda, nome do canal em
+   negrito, título em azul, miniatura com botão de play por cima */
+.yt-embed {
+  display: block;
+  max-width: 400px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  border-left: 4px solid var(--danger);
+  border-radius: 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.yt-embed-source {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.yt-embed-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+.yt-embed-title {
+  font-size: 13px;
+  color: var(--accent-2);
+  margin-top: 2px;
+  font-weight: 600;
+}
+.yt-embed-thumb-wrap {
+  position: relative;
+  margin-top: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-deep);
+  max-width: 320px;
+}
+.yt-embed-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+.yt-embed-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+.yt-embed-play svg { width: 40px; height: 40px; }
+.yt-embed-play .yt-embed-external {
+  width: 20px;
+  height: 20px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  padding: 4px;
+  box-sizing: content-box;
+}
 
 /* editar/apagar a própria mensagem — igual Discord: só aparecem no hover,
    um cantinho flutuando em cima da mensagem */
