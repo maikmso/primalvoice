@@ -821,7 +821,11 @@ async function init() {
   await loadThemeFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
-    showJoin();
+    // Se já tinha entrado antes nesse PC, tenta reconectar sozinho (sem
+    // mostrar a tela de login) — só mostra a tela de login se isso falhar
+    // (sessão inválida, servidor fora do ar, etc.) ou se nunca entrou aqui.
+    const resumed = await attemptAutoResume(cfg);
+    if (!resumed) showJoin();
   } else {
     showSettings();
   }
@@ -2705,6 +2709,161 @@ function handleFullDisconnect() {
   closeSettingsModal();
 }
 
+// Tudo que acontece depois de já ter um token da sala (token do LiveKit +
+// identity + sessionToken) — usado tanto no login/cadastro normal quanto na
+// reconexão automática (ver attemptAutoResume), que pula a tela de login
+// pra quem já entrou antes nesse PC.
+async function completeConnect(token, identity, st) {
+  sessionToken = st;
+  myIdentity = identity;
+  myName = identity;
+
+  // Guarda o sessionToken pra próxima vez que o app abrir — é isso que faz
+  // a pessoa continuar conectada na conta sem precisar digitar usuário/senha
+  // de novo, até clicar em "Sair do PrimalVoice" (que apaga isso daqui).
+  try {
+    const cfg = (await window.vortex.getConfig()) || {};
+    cfg.savedSession = { identity, sessionToken: st };
+    await window.vortex.setConfig(cfg);
+  } catch {
+    // se não conseguir salvar, sem problema — só significa que da próxima
+    // vez a pessoa vai precisar entrar de novo manualmente
+  }
+
+  lobbyRoom = new Room({ adaptiveStream: true, dynacast: true });
+
+  lobbyRoom.on(RoomEvent.ParticipantConnected, (participant) => {
+    addMember(participant);
+    renderMemberSidebar();
+    broadcastProfile();
+    if (activeVoiceChannelId) {
+      broadcastVoicePresence('join', activeVoiceChannelId);
+      broadcastVoiceStatus();
+    }
+  });
+  lobbyRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
+    removeMember(participant);
+    renderMemberSidebar();
+    voicePresence.forEach((map) => map.delete(participant.identity));
+    renderChannelLists();
+  });
+  lobbyRoom.on(RoomEvent.Disconnected, () => {
+    handleFullDisconnect();
+  });
+  lobbyRoom.on(RoomEvent.DataReceived, (payload, participant) => {
+    let msg;
+    try {
+      msg = JSON.parse(chatDecoder.decode(payload));
+    } catch {
+      return;
+    }
+    if (!msg || !msg.type) return;
+
+    if (msg.type === 'chat') {
+      pushChatMessage(msg.channelId, {
+        name: msg.name || participant?.name || participant?.identity,
+        text: msg.text,
+        ts: msg.ts,
+        isSelf: false,
+        identity: participant?.identity,
+        attachment: msg.attachment || null,
+      });
+    } else if (msg.type === 'voice-presence') {
+      if (!voicePresence.has(msg.channelId)) voicePresence.set(msg.channelId, new Map());
+      const map = voicePresence.get(msg.channelId);
+      if (msg.action === 'join') map.set(msg.identity, msg.name || msg.identity);
+      else {
+        map.delete(msg.identity);
+        voiceMemberStatus.delete(msg.identity);
+      }
+      renderChannelLists();
+    } else if (msg.type === 'voice-status') {
+      setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
+    } else if (msg.type === 'profile-update') {
+      knownIdentities.add(msg.identity);
+      memberProfiles.set(msg.identity, {
+        avatar: msg.avatar || '',
+        banner: msg.banner || '',
+        status: msg.status || '',
+        displayName: msg.displayName || '',
+      });
+      applyProfileEverywhere(msg.identity);
+      renderMemberSidebar();
+    } else if (msg.type === 'state-changed') {
+      fetchServerState().catch(() => {});
+    } else if (msg.type === 'dm') {
+      const peer = msg.from === myIdentity ? msg.to : msg.from;
+      if (!peer) return;
+      dmPeers.add(peer);
+      renderDmList();
+      pushChatMessage(dmChannelKey(peer), {
+        name: msg.from === myIdentity ? (myDisplayName || myName) : (msg.name || displayNameFor(peer)),
+        text: msg.text,
+        ts: msg.ts,
+        isSelf: msg.from === myIdentity,
+        identity: msg.from,
+        attachment: msg.attachment || null,
+      });
+    }
+  });
+
+  await lobbyRoom.connect(livekitUrl, token);
+
+  selfAvatar.textContent = identity.charAt(0).toUpperCase();
+  selfName.textContent = identity;
+  applyAvatarToEl(selfAvatar, identity);
+  addMember(lobbyRoom.localParticipant);
+  lobbyRoom.remoteParticipants.forEach((participant) => addMember(participant));
+  broadcastProfile();
+
+  await fetchServerState();
+  chatHistoryByChannel.clear();
+  activeTextChannelId = serverState.channels.text[0]?.id || null;
+  resetVoiceControlsUI();
+  if (activeTextChannelId) switchTextChannel(activeTextChannelId);
+
+  joinScreen.hidden = true;
+  roomScreen.hidden = false;
+  renderMemberSidebar();
+}
+
+// Se essa máquina já tem uma sessão salva de uma vez anterior, tenta entrar
+// sozinho (sem mostrar a tela de login) — só cai pra tela de login normal se
+// não der certo (sessão inválida, servidor fora do ar, conta não existe
+// mais, etc.). Chamado durante o init(), enquanto a tela de abertura ainda
+// está visível, então não aparece nenhum "flash" da tela de login à toa.
+async function attemptAutoResume(cfg) {
+  const saved = cfg.savedSession;
+  if (!saved || !saved.identity || !saved.sessionToken) return false;
+  try {
+    const configRes = await fetch(`${serverUrl}/api/config`);
+    if (!configRes.ok) return false;
+    const configData = await configRes.json();
+    livekitUrl = configData.livekitUrl;
+
+    const res = await fetch(`${serverUrl}/api/resume-session`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${saved.sessionToken}` },
+    });
+    if (!res.ok) throw new Error();
+    const { token, identity, sessionToken: st } = await res.json();
+    await completeConnect(token, identity, st);
+    return true;
+  } catch {
+    // sessão salva não serve mais (revogada, conta apagada, ou nem deu pra
+    // falar com o servidor) — apaga o que tava salvo e deixa a tela de
+    // login normal aparecer, sem travar o app tentando de novo pra sempre
+    try {
+      const freshCfg = (await window.vortex.getConfig()) || {};
+      delete freshCfg.savedSession;
+      await window.vortex.setConfig(freshCfg);
+    } catch {
+      // idem, sem problema
+    }
+    return false;
+  }
+}
+
 joinForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (joining) return;
@@ -2747,105 +2906,7 @@ joinForm.addEventListener('submit', async (e) => {
     }
 
     const { token, identity, sessionToken: st } = await tokenRes.json();
-    sessionToken = st;
-    myIdentity = identity;
-    myName = identity;
-
-    lobbyRoom = new Room({ adaptiveStream: true, dynacast: true });
-
-    lobbyRoom.on(RoomEvent.ParticipantConnected, (participant) => {
-      addMember(participant);
-      renderMemberSidebar();
-      broadcastProfile();
-      if (activeVoiceChannelId) {
-        broadcastVoicePresence('join', activeVoiceChannelId);
-        broadcastVoiceStatus();
-      }
-    });
-    lobbyRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      removeMember(participant);
-      renderMemberSidebar();
-      voicePresence.forEach((map) => map.delete(participant.identity));
-      renderChannelLists();
-    });
-    lobbyRoom.on(RoomEvent.Disconnected, () => {
-      handleFullDisconnect();
-    });
-    lobbyRoom.on(RoomEvent.DataReceived, (payload, participant) => {
-      let msg;
-      try {
-        msg = JSON.parse(chatDecoder.decode(payload));
-      } catch {
-        return;
-      }
-      if (!msg || !msg.type) return;
-
-      if (msg.type === 'chat') {
-        pushChatMessage(msg.channelId, {
-          name: msg.name || participant?.name || participant?.identity,
-          text: msg.text,
-          ts: msg.ts,
-          isSelf: false,
-          identity: participant?.identity,
-          attachment: msg.attachment || null,
-        });
-      } else if (msg.type === 'voice-presence') {
-        if (!voicePresence.has(msg.channelId)) voicePresence.set(msg.channelId, new Map());
-        const map = voicePresence.get(msg.channelId);
-        if (msg.action === 'join') map.set(msg.identity, msg.name || msg.identity);
-        else {
-          map.delete(msg.identity);
-          voiceMemberStatus.delete(msg.identity);
-        }
-        renderChannelLists();
-      } else if (msg.type === 'voice-status') {
-        setVoiceMemberStatus(msg.identity, { deafened: !!msg.deafened });
-      } else if (msg.type === 'profile-update') {
-        knownIdentities.add(msg.identity);
-        memberProfiles.set(msg.identity, {
-          avatar: msg.avatar || '',
-          banner: msg.banner || '',
-          status: msg.status || '',
-          displayName: msg.displayName || '',
-        });
-        applyProfileEverywhere(msg.identity);
-        renderMemberSidebar();
-      } else if (msg.type === 'state-changed') {
-        fetchServerState().catch(() => {});
-      } else if (msg.type === 'dm') {
-        const peer = msg.from === myIdentity ? msg.to : msg.from;
-        if (!peer) return;
-        dmPeers.add(peer);
-        renderDmList();
-        pushChatMessage(dmChannelKey(peer), {
-          name: msg.from === myIdentity ? (myDisplayName || myName) : (msg.name || displayNameFor(peer)),
-          text: msg.text,
-          ts: msg.ts,
-          isSelf: msg.from === myIdentity,
-          identity: msg.from,
-          attachment: msg.attachment || null,
-        });
-      }
-    });
-
-    await lobbyRoom.connect(livekitUrl, token);
-
-    selfAvatar.textContent = identity.charAt(0).toUpperCase();
-    selfName.textContent = identity;
-    applyAvatarToEl(selfAvatar, identity);
-    addMember(lobbyRoom.localParticipant);
-    lobbyRoom.remoteParticipants.forEach((participant) => addMember(participant));
-    broadcastProfile();
-
-    await fetchServerState();
-    chatHistoryByChannel.clear();
-    activeTextChannelId = serverState.channels.text[0]?.id || null;
-    resetVoiceControlsUI();
-    if (activeTextChannelId) switchTextChannel(activeTextChannelId);
-
-    joinScreen.hidden = true;
-    roomScreen.hidden = false;
-    renderMemberSidebar();
+    await completeConnect(token, identity, st);
   } catch (err) {
     joinError.textContent = err.message || 'Erro ao entrar na sala.';
     joinError.hidden = false;
@@ -3038,6 +3099,16 @@ exitAppBtn.addEventListener('click', async () => {
   if (!confirm('Sair do PrimalVoice? Você volta pra tela de login.')) return;
   if (voiceRoom) await leaveVoiceChannel({ silent: true });
   if (lobbyRoom) await lobbyRoom.disconnect();
+  sessionToken = '';
+  // Apaga a sessão salva nesse PC — sem isso o app entraria sozinho de novo
+  // na mesma conta na próxima vez que abrisse, mesmo depois de "sair".
+  try {
+    const cfg = (await window.vortex.getConfig()) || {};
+    delete cfg.savedSession;
+    await window.vortex.setConfig(cfg);
+  } catch {
+    // sem problema
+  }
   handleFullDisconnect();
 });
 

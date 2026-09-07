@@ -110,7 +110,14 @@ body {
 }
 
 .update-banner-btn {
-  background: var(--on-accent);
+  /* Antes usava var(--on-accent) (pensado pra ser um TEXTO em cima do
+     --accent, não o fundo de um botão) junto com var(--bg) no texto — nos
+     temas Escuro e Meia-noite os dois acabam sendo tons quase idênticos de
+     preto, então o botão virava uma mancha preta com o texto invisível (só
+     não quebrava no Clássico, onde --on-accent é branco por coincidência).
+     var(--text) é sempre clara e var(--bg) sempre escuro nos 3 temas, então
+     esse par garante contraste em qualquer aparência. */
+  background: var(--text);
   color: var(--bg);
   border: none;
   border-radius: 6px;
@@ -389,7 +396,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(255, 94, 58, 0.35);
+  /* sombra neutra (antes era um brilho vermelho/laranja fixo que não
+     acompanhava o tema e destoava do visual atual) */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
@@ -655,12 +664,20 @@ body {
 }
 .member-row.speaking .avatar { box-shadow: 0 0 0 2px var(--speaking); }
 
-/* Avatar com foto (aplica em qualquer .avatar/.initial do app) */
+/* Avatar com foto (aplica em qualquer .avatar/.initial do app). Usa
+   !important de propósito: essa classe é um "estado" (tem foto ou não) que
+   precisa sempre vencer o estilo específico de cada lugar onde o avatar
+   aparece (chat, lista de offline, linha de perfil, lista de DM, etc.) —
+   sem isso, qualquer regra futura que declare "color"/"background" pra um
+   `.avatar` específico corre o risco de silenciosamente voltar a mostrar a
+   letra inicial escrita em cima da foto (foi exatamente isso que aconteceu
+   com as mensagens do chat, a lista de offline, etc. antes dessa correção:
+   a foto carregava, só que cortada ou com a letrinha sobreposta por cima). */
 .avatar.has-avatar,
 .initial.has-avatar {
-  background-size: cover;
-  background-position: center;
-  color: transparent;
+  background-size: cover !important;
+  background-position: center !important;
+  color: transparent !important;
 }
 
 .user-panel {

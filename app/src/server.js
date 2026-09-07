@@ -218,6 +218,19 @@ async function issueTokenAndRespond(identity, res) {
   }
 }
 
+// Renova o token de acesso à sala pra quem já tem um sessionToken válido
+// guardado no PC, sem precisar digitar usuário/senha de novo — é o que faz
+// o app abrir já conectado na conta, direto na sala, até a pessoa clicar em
+// "Sair do PrimalVoice" (aí o app apaga o sessionToken salvo). Se a conta
+// não existir mais (ex.: perdeu os dados por causa do disco temporário do
+// plano grátis do Render), falha e o app cai de volta pra tela de login.
+app.post('/api/resume-session', requireAuth, async (req, res) => {
+  if (req.identity !== OWNER_NAME && !store.findUser(req.identity)) {
+    return res.status(401).json({ error: 'Sessão inválida. Entre de novo.' });
+  }
+  await issueTokenAndRespond(req.identity, res);
+});
+
 // Token pra entrar num canal de voz específico. Cada canal de voz vira uma
 // sala LiveKit separada de verdade (não só uma etiqueta visual) — assim
 // ninguém escuta quem está em outro canal de voz. Exige já ter feito login
