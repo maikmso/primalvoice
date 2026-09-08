@@ -216,6 +216,17 @@ function attachRailTooltip(el, getText, opts = {}) {
   });
   el.removeAttribute('title');
 }
+// Atalho pra "consertar" de uma vez qualquer botão que ainda estava usando
+// o title nativo do HTML (feio, padrão do sistema) -- pega o texto que já
+// tava no title (ou no title passado direto em opts.text, pra quando o
+// texto muda com o tempo, tipo o de mostrar/ocultar membros) e liga o
+// balãozinho bonito no lugar dele.
+function upgradeTooltip(el, opts = {}) {
+  if (!el) return;
+  const getText = opts.getText || (() => el.dataset.tooltip);
+  if (!el.dataset.tooltip) el.dataset.tooltip = opts.text || el.getAttribute('title') || '';
+  attachRailTooltip(el, getText, opts);
+}
 attachRailTooltip(homeIconBtn, () => homeIconBtn.dataset.tooltip);
 attachRailTooltip(serverIconBtn, () => serverIconBtn.dataset.tooltip);
 const channelHeaderIcon = document.getElementById('channel-header-icon');
@@ -1377,8 +1388,8 @@ function buildChannelItemEl(channel, type) {
 
     const renameBtn = document.createElement('button');
     renameBtn.className = 'channel-rename-btn';
-    renameBtn.title = 'Renomear canal';
     renameBtn.innerHTML = PENCIL_ICON_SVG;
+    upgradeTooltip(renameBtn, { text: 'Renomear canal' });
     renameBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       startInlineChannelRename(el, channel, type, label);
@@ -1387,7 +1398,7 @@ function buildChannelItemEl(channel, type) {
 
     const delBtn = document.createElement('button');
     delBtn.className = 'channel-delete-btn';
-    delBtn.title = 'Apagar canal';
+    upgradeTooltip(delBtn, { text: 'Apagar canal' });
     delBtn.textContent = '✕';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -2160,7 +2171,7 @@ function buildYoutubeEmbedCard(videoId) {
 
   const thumbWrap = document.createElement('div');
   thumbWrap.className = 'yt-embed-thumb-wrap';
-  thumbWrap.title = 'Tocar vídeo';
+  upgradeTooltip(thumbWrap, { text: 'Tocar vídeo', dir: 'top' });
   const thumb = document.createElement('img');
   thumb.className = 'yt-embed-thumb';
   thumb.alt = '';
@@ -2183,7 +2194,7 @@ function buildYoutubeEmbedCard(videoId) {
   externalBtn.href = watchUrl;
   externalBtn.target = '_blank';
   externalBtn.rel = 'noopener noreferrer';
-  externalBtn.title = 'Abrir no navegador';
+  upgradeTooltip(externalBtn, { text: 'Abrir no navegador', dir: 'top' });
   externalBtn.innerHTML = YT_EXTERNAL_ICON_SVG;
   // clicar nesse iconezinho abre no navegador — não pode também disparar o
   // clique da miniatura (que tocaria o vídeo embutido por baixo dele)
@@ -2328,7 +2339,7 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
       editBtn.className = 'chat-message-action-btn';
-      editBtn.title = 'Editar';
+      upgradeTooltip(editBtn, { text: 'Editar', dir: 'top' });
       editBtn.innerHTML = EDIT_ICON_SVG;
       editBtn.addEventListener('click', () => {
         // busca o texto ATUAL no histórico (não o "text" capturado quando a
@@ -2343,7 +2354,7 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'chat-message-action-btn';
-      deleteBtn.title = 'Apagar';
+      upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
       deleteBtn.innerHTML = DELETE_ICON_SVG;
       deleteBtn.addEventListener('click', () => {
         if (confirm('Apagar essa mensagem?')) deleteChatMessage(activeTextChannelId, id);
@@ -3376,31 +3387,31 @@ function buildMemberRow(participant, opts = {}) {
     // um ícone pequeno, dá pra ver de longe quem tá transmitindo no canal.
     const liveBadge = document.createElement('span');
     liveBadge.className = 'status-badge live-badge';
-    liveBadge.title = 'Compartilhando tela';
+    upgradeTooltip(liveBadge, { text: 'Compartilhando tela' });
     liveBadge.textContent = 'AO VIVO';
     badges.appendChild(liveBadge);
 
     const cameraBadge = document.createElement('span');
     cameraBadge.className = 'status-badge camera-badge';
-    cameraBadge.title = 'Câmera ligada';
+    upgradeTooltip(cameraBadge, { text: 'Câmera ligada' });
     cameraBadge.innerHTML = CAMERA_BADGE_SVG;
     badges.appendChild(cameraBadge);
 
     const micBadge = document.createElement('span');
     micBadge.className = 'status-badge mic-badge';
-    micBadge.title = 'Microfone mudo';
+    upgradeTooltip(micBadge, { text: 'Microfone mudo' });
     micBadge.innerHTML = MIC_OFF_BADGE_SVG;
     badges.appendChild(micBadge);
 
     const deafenBadge = document.createElement('span');
     deafenBadge.className = 'status-badge deafen-badge';
-    deafenBadge.title = 'Ensurdecido';
+    upgradeTooltip(deafenBadge, { text: 'Ensurdecido' });
     deafenBadge.innerHTML = DEAFEN_BADGE_SVG;
     badges.appendChild(deafenBadge);
 
     const watchingBadge = document.createElement('span');
     watchingBadge.className = 'status-badge watching-badge';
-    watchingBadge.title = 'Assistindo uma transmissão';
+    upgradeTooltip(watchingBadge, { text: 'Assistindo uma transmissão' });
     watchingBadge.innerHTML = WATCHING_BADGE_SVG;
     badges.appendChild(watchingBadge);
 
@@ -3706,7 +3717,7 @@ function buildSoundboardTile(sound, opts = {}) {
   const tile = document.createElement('button');
   tile.type = 'button';
   tile.className = 'soundboard-tile';
-  tile.title = sound.name;
+  upgradeTooltip(tile, { text: sound.name });
   // um mesmo som pode aparecer em MAIS de um cartãozinho ao mesmo tempo
   // (em "Utilizados com frequência" e também na seção de origem dele) — esse
   // id é o que deixa achar TODOS eles de uma vez pra acender/apagar o
@@ -3726,7 +3737,7 @@ function buildSoundboardTile(sound, opts = {}) {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'soundboard-tile-remove';
-    removeBtn.title = 'Remover';
+    upgradeTooltip(removeBtn, { text: 'Remover' });
     removeBtn.textContent = '✕';
     removeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3850,7 +3861,7 @@ function openSoundboardPanel() {
   const volumeBtn = document.createElement('button');
   volumeBtn.type = 'button';
   volumeBtn.className = 'soundboard-volume-btn';
-  volumeBtn.title = 'Mutar/reativar efeitos sonoros';
+  upgradeTooltip(volumeBtn, { text: 'Mutar/reativar efeitos sonoros' });
   const updateVolumeBtnIcon = () => {
     volumeBtn.innerHTML = soundboardMuted ? SOUND_VOLUME_ICON_OFF_SVG : SOUND_VOLUME_ICON_ON_SVG;
     volumeBtn.classList.toggle('muted', soundboardMuted);
@@ -3873,7 +3884,7 @@ function openSoundboardPanel() {
   volumeSlider.max = '100';
   volumeSlider.value = String(Math.round(soundboardEffectsVolume * 100));
   volumeSlider.className = 'soundboard-volume-slider';
-  volumeSlider.title = 'Volume dos efeitos sonoros (só o que você escuta)';
+  upgradeTooltip(volumeSlider, { text: 'Volume dos efeitos sonoros (só o que você escuta)' });
   volumeSlider.addEventListener('input', () => {
     soundboardEffectsVolume = Number(volumeSlider.value) / 100;
     if (soundboardMuted && soundboardEffectsVolume > 0) {
@@ -4704,6 +4715,26 @@ attachRailTooltip(soundboardBtn, () => soundboardBtn.dataset.tooltip, { dir: 'to
 attachRailTooltip(micBtn, () => micBtn.dataset.tooltip, { dir: 'top' });
 attachRailTooltip(deafenBtn, () => deafenBtn.dataset.tooltip, { dir: 'top' });
 attachRailTooltip(appSettingsBtn, () => appSettingsBtn.dataset.tooltip, { dir: 'top' });
+upgradeTooltip(myLiveStopBtn, { dir: 'top' });
+upgradeTooltip(hangupBtn, { dir: 'top' });
+upgradeTooltip(cinemaCamBtn, { dir: 'top' });
+upgradeTooltip(cinemaVolumeBtn, { dir: 'top' });
+upgradeTooltip(cinemaStopWatchBtn, { dir: 'top' });
+upgradeTooltip(cinemaMicBtn, { dir: 'top' });
+upgradeTooltip(cinemaHangupBtn, { dir: 'top' });
+upgradeTooltip(gearBtn);
+upgradeTooltip(addTextChannelBtn);
+upgradeTooltip(addVoiceChannelBtn);
+upgradeTooltip(selfAvatar);
+upgradeTooltip(selfNameBtn);
+upgradeTooltip(chatAttachmentBtn);
+upgradeTooltip(settingsModalClose);
+upgradeTooltip(exitAppBtn);
+upgradeTooltip(keybindMuteClearBtn);
+upgradeTooltip(keybindDeafenClearBtn);
+// texto muda (mostrar/ocultar) então usa getText em vez de fixar o
+// dataset.tooltip uma vez só
+upgradeTooltip(toggleMembersBtn, { getText: () => toggleMembersBtn.title || toggleMembersBtn.dataset.tooltip });
 
 camBtn.addEventListener('click', async () => {
   if (!voiceRoom) return;
@@ -5414,6 +5445,7 @@ const updateBannerText = document.getElementById('update-banner-text');
 const updateBannerBtn = document.getElementById('update-banner-btn');
 const updateBannerDismiss = document.getElementById('update-banner-dismiss');
 const updateInstallOverlay = document.getElementById('update-install-overlay');
+upgradeTooltip(updateBannerDismiss);
 let updateReadyToInstall = false;
 
 function showUpdateBanner(text, { showButton = false } = {}) {

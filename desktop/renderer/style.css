@@ -1200,20 +1200,31 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   background: rgba(0, 0, 0, 0.6);
   z-index: 3;
 }
+/* branco sólido de propósito, não usa var(--accent) -- em duas das três
+   temas do app esse accent é um cinza neutro, então o botão ficava
+   apagado/sem graça em cima da miniatura escura da transmissão. Branco +
+   texto escuro sempre destaca, em qualquer tema (igual o play do
+   YouTube/Netflix). */
 .watch-stream-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 18px;
+  padding: 12px 22px;
   border-radius: 999px;
   border: none;
-  background: var(--accent);
-  color: white;
-  font: 600 14px inherit;
+  background: #fff;
+  color: #0a0a0c;
+  font: 700 14px inherit;
   cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.watch-stream-btn svg { width: 16px; height: 16px; }
-.watch-stream-btn:hover { filter: brightness(1.1); }
+.watch-stream-btn svg { width: 18px; height: 18px; }
+.watch-stream-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.watch-stream-btn:active { transform: scale(0.98); }
 
 /* controles de quem tá assistindo uma transmissão de tela. Na telinha
    EXPANDIDA (com ou sem cinema de verdade) essa barrinha antiga não aparece
