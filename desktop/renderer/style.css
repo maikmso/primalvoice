@@ -1226,16 +1226,12 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 }
 .watch-stream-btn:active { transform: scale(0.98); }
 
-/* controles de quem tá assistindo uma transmissão de tela. Na telinha
-   EXPANDIDA (com ou sem cinema de verdade) essa barrinha antiga não aparece
-   mais -- foi totalmente substituída pela barra flutuante nova
-   (cinema-controls-bar), ver updateFloatingBarVisibility no app.js.
-
-   Na miniatura PEQUENA (ainda não expandida) ela fica sempre escondida --
-   volume é pelo botão direito (que também tem "Parar de assistir"), e a
-   tela cheia de verdade é por duplo-clique. Não sobrou nenhum botão pra
-   mostrar aqui, mas o elemento continua existindo (contém o botão de
-   volume/tela cheia, usados só quando expandido via outra lógica). */
+/* controles de quem tá assistindo uma transmissão de tela (volume da
+   transmissão, tela cheia de verdade, parar de assistir). Em modo cinema de
+   verdade essa barrinha some -- foi substituída pela barra flutuante
+   (cinema-controls-bar), ver updateFloatingBarVisibility no app.js. Fora
+   disso aparece ao passar o mouse na miniatura pequena, e sempre visível na
+   telinha expandida comum (dentro da grade, sem cinema de verdade). */
 .screen-share-controls {
   position: absolute;
   bottom: 14px;
@@ -1245,7 +1241,13 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   gap: 8px;
   z-index: 2;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
+}
+.tile:hover .screen-share-controls,
+.tile.expanded .screen-share-controls {
+  opacity: 1;
+  pointer-events: auto;
 }
 .screen-share-ctrl-btn {
   width: 34px;
@@ -1267,6 +1269,9 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .screen-share-fullscreen-btn .icon-minimize { display: none; }
 .screen-share-fullscreen-btn.is-fullscreen .icon-maximize { display: none; }
 .screen-share-fullscreen-btn.is-fullscreen .icon-minimize { display: block; }
+/* parar de assistir é uma ação de "sair" -- fica vermelho ao passar o mouse,
+   igual outras ações destrutivas do app (expulsar da chamada, etc.) */
+.screen-share-stopwatch-btn:hover { background: var(--danger); }
 /* mesmo truque pro botão de volume da transmissão: ícone de alto-falante
    normal, ou com um X quando o volume tá em 0 / silenciado */
 .screen-volume-btn .icon-vol-off { display: none; }

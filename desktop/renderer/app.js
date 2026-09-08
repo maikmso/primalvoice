@@ -1517,14 +1517,14 @@ function renderChannelLists() {
     el.classList.toggle('in-voice', isActiveVoice);
     el.addEventListener('click', () => {
       if (activeVoiceChannelId === ch.id) {
-        if (grid.hidden) {
-          channelHeaderIcon.innerHTML = VOICE_ICON_SVG;
-          channelHeaderName.textContent = ch.name;
-          showVoiceView();
-          renderChannelLists();
-        } else {
-          leaveVoiceChannel();
-        }
+        // Já tá NESSE canal de voz -- só volta pra visão dele (caso a
+        // pessoa tivesse navegado pro chat de texto enquanto continuava na
+        // call). Clicar de novo aqui NUNCA deve sair da chamada -- só o
+        // botão de desligar (hangup-btn) faz isso.
+        channelHeaderIcon.innerHTML = VOICE_ICON_SVG;
+        channelHeaderName.textContent = ch.name;
+        showVoiceView();
+        renderChannelLists();
       } else {
         joinVoiceChannel(ch.id);
       }
@@ -2833,6 +2833,8 @@ function showWatchStreamPrompt(tile, participant) {
 const SCREEN_FULLSCREEN_ICON_SVG =
   '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
   '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
+const STOP_WATCH_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
 
 // Volume DA TRANSMISSÃO (áudio do compartilhamento de tela: jogo/vídeo/som
 // do desktop de quem tá transmitindo) — SEPARADO do volume da voz/microfone
@@ -2893,8 +2895,8 @@ function addScreenShareControls(tile, participant) {
   volumeBtn.type = 'button';
   volumeBtn.className = 'screen-share-ctrl-btn screen-volume-btn';
   volumeBtn.dataset.identity = participant.identity;
-  volumeBtn.title = 'Volume da transmissão';
   volumeBtn.innerHTML = VOLUME_ICON_SVG + VOLUME_MUTED_ICON_SVG;
+  upgradeTooltip(volumeBtn, { text: 'Volume da transmissão', dir: 'top' });
   volumeBtn.classList.toggle('is-muted', (streamVolumes.get(participant.identity) ?? 1) === 0 || mutedForMe.has(participant.identity) || isDeafened);
   volumeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2904,8 +2906,8 @@ function addScreenShareControls(tile, participant) {
   const fullscreenBtn = document.createElement('button');
   fullscreenBtn.type = 'button';
   fullscreenBtn.className = 'screen-share-ctrl-btn screen-share-fullscreen-btn';
-  fullscreenBtn.title = 'Tela cheia';
   fullscreenBtn.innerHTML = SCREEN_FULLSCREEN_ICON_SVG;
+  upgradeTooltip(fullscreenBtn, { text: 'Tela cheia', dir: 'top' });
   fullscreenBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (cinemaTileIdentity === participant.identity) {
@@ -2915,8 +2917,22 @@ function addScreenShareControls(tile, participant) {
     }
   });
 
+  // Botão de parar de assistir, visível ao passar o mouse (igual os outros
+  // dessa barra) -- antes só dava pra fazer isso pelo menu do botão direito,
+  // que ficou escondido demais.
+  const stopWatchBtn = document.createElement('button');
+  stopWatchBtn.type = 'button';
+  stopWatchBtn.className = 'screen-share-ctrl-btn screen-share-stopwatch-btn';
+  stopWatchBtn.innerHTML = STOP_WATCH_ICON_SVG;
+  upgradeTooltip(stopWatchBtn, { text: 'Parar de assistir', dir: 'top' });
+  stopWatchBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopWatchingScreenShare(participant);
+  });
+
   bar.appendChild(volumeBtn);
   bar.appendChild(fullscreenBtn);
+  bar.appendChild(stopWatchBtn);
   tile.appendChild(bar);
 }
 
