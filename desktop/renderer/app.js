@@ -2058,6 +2058,7 @@ function resetVoiceControlsUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
   shareBtn.classList.remove('sharing');
+  shareBtn.dataset.tooltip = 'Compartilhar tela';
   currentShareChoice = null;
   // se a pessoa sair do canal de voz (ou desconectar de vez) SEM antes
   // clicar em "parar de compartilhar", o botão de compartilhar zerava aqui
@@ -4806,6 +4807,7 @@ function stopScreenShareUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
   shareBtn.classList.remove('sharing');
+  shareBtn.dataset.tooltip = 'Compartilhar tela';
   currentShareChoice = null;
   window.vortex.hideShareOverlay?.();
   if (!voiceRoom) return;
@@ -5001,6 +5003,7 @@ shareBtn.addEventListener('click', async () => {
   shareBtn.dataset.on = 'true';
   shareBtn.classList.remove('off');
   shareBtn.classList.add('sharing');
+  shareBtn.dataset.tooltip = 'Alterar configurações da tela';
   window.vortex.showShareOverlay?.();
   syncShareOverlayState();
   if (publication && publication.track) {
