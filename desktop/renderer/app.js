@@ -139,7 +139,7 @@ window.vortex.onOverlayAction?.((action) => {
   if (action === 'toggleCam') camBtn.click();
   else if (action === 'toggleMic') micBtn.click();
   else if (action === 'hangup') hangupBtn.click();
-  else if (action === 'stopShare') shareBtn.click(); // já sabe que tá compartilhando, então desliga
+  else if (action === 'stopShare') stopScreenShare();
 });
 
 // Avisinho "AO VIVO" + botão de parar, dentro do próprio painel da esquerda
@@ -154,7 +154,7 @@ function syncMyLiveShareBar() {
   myLiveShareBar.hidden = !shareBtn.classList.contains('sharing');
 }
 new MutationObserver(syncMyLiveShareBar).observe(shareBtn, { attributes: true, attributeFilter: ['class'] });
-myLiveStopBtn.addEventListener('click', () => shareBtn.click());
+myLiveStopBtn.addEventListener('click', () => stopScreenShare());
 
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
@@ -2058,6 +2058,7 @@ function resetVoiceControlsUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
   shareBtn.classList.remove('sharing');
+  currentShareChoice = null;
   // se a pessoa sair do canal de voz (ou desconectar de vez) SEM antes
   // clicar em "parar de compartilhar", o botão de compartilhar zerava aqui
   // mas o overlay por cima de outras janelas ficava esquecido, ligado --
@@ -4778,16 +4779,34 @@ let sharepickResolve = null;
 let sharepickSelectedId = null;
 let sharepickSources = [];
 let sharepickKind = 'screen';
+// Guarda a última escolha (tela/janela + áudio) enquanto a transmissão atual
+// está no ar -- serve só pra reabrir o popup de "o que compartilhar" já com
+// a mesma tela/áudio marcados quando a pessoa clica no botão de novo pra
+// TROCAR de tela/qualidade (ver shareBtn abaixo). Fica null sempre que não
+// tá compartilhando.
+let currentShareChoice = null;
 
 function stopScreenShareUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
   shareBtn.classList.remove('sharing');
+  currentShareChoice = null;
   window.vortex.hideShareOverlay?.();
   if (!voiceRoom) return;
   const tile = document.getElementById(tileId(voiceRoom.localParticipant.identity));
   tile?.querySelectorAll('video').forEach((el) => el.remove());
   if (tile && !tile.querySelector('video')) tile.classList.remove('has-video');
+}
+
+// Encerra a transmissão de verdade (desliga o track no LiveKit + zera a UI).
+// Usado pelos botões DEDICADOS de parar (X na barrinha "AO VIVO" e no
+// overlay por cima de outras janelas) -- diferente de clicar no botão
+// principal de compartilhar ENQUANTO já tá ao vivo, que agora reabre o
+// popup pra TROCAR de tela/qualidade em vez de encerrar (ver shareBtn).
+async function stopScreenShare() {
+  if (!voiceRoom) return;
+  await voiceRoom.localParticipant.setScreenShareEnabled(false);
+  stopScreenShareUI();
 }
 
 function renderSharepickGrid() {
@@ -4899,10 +4918,11 @@ function screenShareQualitySettings(resolutionKey, frameRate) {
   };
 }
 
-async function openScreenShareModal() {
+async function openScreenShareModal(opts = {}) {
+  const presetChoice = opts.presetChoice || null;
   sharepickSelectedId = null;
   sharepickKind = 'screen';
-  sharepickAudioCheckbox.checked = false;
+  sharepickAudioCheckbox.checked = presetChoice ? presetChoice.withAudio : false;
   sharepickConfirmBtn.disabled = true;
   sharepickTabs.forEach((t) => t.classList.toggle('active', t.dataset.kind === 'screen'));
   sharepickGrid.innerHTML = '<p class="sharepick-empty">Carregando...</p>';
@@ -4912,6 +4932,12 @@ async function openScreenShareModal() {
     sharepickSources = await window.vortex.listScreenShareSources();
   } catch {
     sharepickSources = [];
+  }
+  // Reabrindo pra TROCAR de tela enquanto já tá compartilhando -- já marca a
+  // mesma tela/janela de antes selecionada, se ela ainda existir na lista.
+  if (presetChoice && sharepickSources.some((s) => s.id === presetChoice.sourceId)) {
+    sharepickSelectedId = presetChoice.sourceId;
+    sharepickConfirmBtn.disabled = false;
   }
   renderSharepickGrid();
 
@@ -4923,17 +4949,24 @@ async function openScreenShareModal() {
 shareBtn.addEventListener('click', async () => {
   if (!voiceRoom) return;
 
-  if (shareBtn.dataset.on === 'true') {
-    await voiceRoom.localParticipant.setScreenShareEnabled(false);
-    stopScreenShareUI();
-    return;
-  }
+  // Já tá compartilhando: clicar aqui de novo NÃO encerra mais a
+  // transmissão -- reabre o popup pra trocar de tela/janela, qualidade ou
+  // áudio (igual o "Configurações de tela" do Discord). Pra encerrar de
+  // verdade agora é pelo X dedicado (barrinha "AO VIVO" ou overlay).
+  const alreadySharing = shareBtn.dataset.on === 'true';
 
-  const choice = await openScreenShareModal();
-  if (!choice) return;
+  const choice = await openScreenShareModal({ presetChoice: alreadySharing ? currentShareChoice : null });
+  if (!choice) return; // cancelou -- se já tava compartilhando, continua exatamente como estava
 
   await window.vortex.chooseScreenShareSource(choice);
   const { resolution: sizeConstraint, maxBitrate } = screenShareQualitySettings(choice.resolution, choice.frameRate);
+
+  if (alreadySharing) {
+    // troca a tela/qualidade por baixo dos panos -- desliga o track antigo
+    // antes de ligar o novo (LiveKit não tem "trocar sem soltar")
+    await voiceRoom.localParticipant.setScreenShareEnabled(false);
+  }
+
   let publication;
   try {
     publication = await voiceRoom.localParticipant.setScreenShareEnabled(true, {
@@ -4944,9 +4977,11 @@ shareBtn.addEventListener('click', async () => {
     });
   } catch (err) {
     alert('Não consegui compartilhar a tela.');
+    if (alreadySharing) stopScreenShareUI(); // já tinha desligado o track antigo, então zera a UI tb
     return;
   }
 
+  currentShareChoice = choice;
   shareBtn.dataset.on = 'true';
   shareBtn.classList.remove('off');
   shareBtn.classList.add('sharing');
