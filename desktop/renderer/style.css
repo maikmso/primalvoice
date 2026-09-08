@@ -138,6 +138,58 @@ body.cinema-mode .room-header {
 body.cinema-mode .grid.has-expanded { padding: 0; }
 body.cinema-mode .member-list { display: none !important; }
 
+/* barra de controles do modo cinema (câmera/mic/desligar da SUA chamada,
+   igual Discord) -- some/aparece junto com os botões de tela cheia/fechar
+   do vídeo (ver .tile.force-controls e showCinemaControlsBriefly no app.js) */
+.cinema-controls-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 30;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.cinema-controls-bar.visible { opacity: 1; pointer-events: auto; }
+.cinema-ctrl-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.cinema-ctrl-btn:hover { background: rgba(0, 0, 0, 0.8); }
+.cinema-ctrl-btn svg { width: 22px; height: 22px; }
+.cinema-ctrl-btn.off { color: var(--danger); }
+.cinema-ctrl-btn.cinema-hangup-btn { background: var(--danger); }
+.cinema-ctrl-btn.cinema-hangup-btn svg { transform: rotate(135deg); }
+.cinema-ctrl-btn.cinema-hangup-btn:hover { background: #c73437; }
+/* botão branco destacado no meio -- fecha a visualização da transmissão
+   (sai do modo cinema), igual o "parar de assistir" do Discord */
+.cinema-stop-watch-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.cinema-stop-watch-btn:hover { background: #e6e6e6; }
+.cinema-stop-watch-btn svg { width: 22px; height: 22px; }
+
 /* mesmo sem entrar de fato no cinema-mode (só dando 2 cliques pra aumentar
    uma telinha dentro da grade, sem deixar a janela toda em tela cheia), a
    barrinha de cima com o nome do canal fica sobrando, flutuando por cima do

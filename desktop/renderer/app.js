@@ -62,6 +62,36 @@ const soundboardBtn = document.getElementById('soundboard-btn');
 const soundboardFileInput = document.getElementById('soundboard-file-input');
 const hangupBtn = document.getElementById('hangup-btn');
 const exitAppBtn = document.getElementById('exit-app-btn');
+
+// Barra flutuante do modo cinema (igual Discord): repete câmera/mic/desligar
+// da barra lateral (que fica escondida em cinema mode) como botões
+// separados — clicar neles só aciona os botões DE VERDADE (camBtn.click()
+// etc.), nunca duplica a lógica, e o estado (ligado/desligado) é espelhado
+// automaticamente via MutationObserver logo abaixo.
+const cinemaControlsBar = document.getElementById('cinema-controls-bar');
+const cinemaCamBtn = document.getElementById('cinema-cam-btn');
+const cinemaStopWatchBtn = document.getElementById('cinema-stop-watch-btn');
+const cinemaMicBtn = document.getElementById('cinema-mic-btn');
+const cinemaHangupBtn = document.getElementById('cinema-hangup-btn');
+
+// Espelha a classe "off" do botão de verdade pro botão da barra do cinema —
+// via MutationObserver, então funciona não importa QUAL trecho do código
+// mudou o botão original (mic/câmera são ligados/desligados de vários
+// lugares: clique direto, ensurdecer, etc.), sem precisar caçar cada um.
+function mirrorButtonOffState(sourceBtn, mirrorBtn) {
+  const sync = () => mirrorBtn.classList.toggle('off', sourceBtn.classList.contains('off'));
+  sync();
+  new MutationObserver(sync).observe(sourceBtn, { attributes: true, attributeFilter: ['class'] });
+}
+mirrorButtonOffState(camBtn, cinemaCamBtn);
+mirrorButtonOffState(micBtn, cinemaMicBtn);
+
+cinemaCamBtn.addEventListener('click', () => camBtn.click());
+cinemaMicBtn.addEventListener('click', () => micBtn.click());
+cinemaHangupBtn.addEventListener('click', () => hangupBtn.click());
+cinemaStopWatchBtn.addEventListener('click', () => {
+  if (cinemaTileIdentity) exitCinemaFullscreen();
+});
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');
@@ -2985,6 +3015,7 @@ function enterCinemaFullscreen(tile, participant) {
   document.body.classList.add('cinema-mode');
   window.vortex.setWindowFullscreen?.(true).catch(() => {});
   updateFullscreenBtnIcon(tile, true);
+  cinemaControlsBar.hidden = false;
   showCinemaControlsBriefly();
 }
 
@@ -2994,6 +3025,8 @@ function exitCinemaFullscreen() {
   document.body.classList.remove('cinema-mode');
   window.vortex.setWindowFullscreen?.(false).catch(() => {});
   clearTimeout(cinemaControlsHideTimer);
+  cinemaControlsBar.hidden = true;
+  cinemaControlsBar.classList.remove('visible');
   if (identity) {
     const tile = document.getElementById(tileId(identity));
     if (tile) {
@@ -3015,9 +3048,11 @@ function showCinemaControlsBriefly() {
   const tile = document.getElementById(tileId(cinemaTileIdentity));
   if (!tile) return;
   tile.classList.add('force-controls');
+  cinemaControlsBar.classList.add('visible');
   clearTimeout(cinemaControlsHideTimer);
   cinemaControlsHideTimer = setTimeout(() => {
     tile.classList.remove('force-controls');
+    cinemaControlsBar.classList.remove('visible');
   }, 2500);
 }
 document.addEventListener('mousemove', () => {
