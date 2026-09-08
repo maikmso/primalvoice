@@ -1632,11 +1632,11 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   border-radius: 8px;
 }
 .ctrl-icon.feature-btn:hover { background: var(--hover-strong); }
-/* destaque verde enquanto está compartilhando a tela -- igual o Discord,
-   pra dar pra ver de relance que a transmissão está rolando sem precisar
-   abrir mais nada (ver shareBtn.classList em app.js) */
-.ctrl-icon.feature-btn.sharing { background: var(--speaking); color: #fff; }
-.ctrl-icon.feature-btn.sharing:hover { background: var(--speaking); filter: brightness(1.1); }
+/* destaque vermelho enquanto está compartilhando a tela -- pra dar pra ver
+   de relance que a transmissão está rolando sem precisar abrir mais nada
+   (ver shareBtn.classList em app.js) */
+.ctrl-icon.feature-btn.sharing { background: var(--danger); color: #fff; }
+.ctrl-icon.feature-btn.sharing:hover { background: var(--danger); filter: brightness(1.1); }
 
 /* avatar + nome + microfone/fone/config, sempre visível */
 .user-info-row { display: flex; align-items: center; gap: 6px; }
