@@ -338,6 +338,15 @@ const chatDecoder = new TextDecoder();
 
 const audioElsByIdentity = new Map();
 const participantVolumes = new Map();
+// Áudio do COMPARTILHAMENTO DE TELA (o som do jogo/vídeo/desktop de quem tá
+// transmitindo) é registrado separado do áudio da VOZ dela (microfone) —
+// assim dá pra abaixar só o som do jogo sem abaixar a voz da pessoa junto
+// (ver registerStreamAudioEl/applyStreamVolume, e o slider no botão de
+// volume da telinha em addScreenShareControls). "Silenciar" no menu de
+// contexto e "Ensurdecer" continuam mudando os dois juntos (silenciar a
+// pessoa de vez é silenciar tudo dela).
+const streamAudioElsByIdentity = new Map();
+const streamVolumes = new Map();
 const mutedForMe = new Set();
 const videoHiddenForMe = new Set();
 
@@ -2648,30 +2657,24 @@ const SCREEN_FULLSCREEN_ICON_SVG =
   '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
   '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
 
-// Volume DA TRANSMISSÃO (áudio do compartilhamento de tela) — o áudio de tela
-// de alguém usa o mesmo <audio>/<video> registrado em audioElsByIdentity que
-// a voz dela (ver attachTrack/registerAudioEl), então esse controle mexe no
-// MESMO participantVolumes do menu de contexto (botão direito no nome) — só
-// que aqui, direto na telinha, porque só clicar em "Assistir transmissão" já
-// pode tocar um som alto (tiro de jogo etc.) sem aviso, e o usuário pode
-// querer abaixar na hora, sem precisar achar o nome da pessoa na lista.
+// Volume DA TRANSMISSÃO (áudio do compartilhamento de tela: jogo/vídeo/som
+// do desktop de quem tá transmitindo) — SEPARADO do volume da voz/microfone
+// dela (ver streamVolumes/applyStreamVolume/registerStreamAudioEl), pra dar
+// pra abaixar só o som do jogo sem cortar a pessoa falando. Direto na
+// telinha porque só clicar em "Assistir transmissão" já pode tocar um som
+// alto (tiro de jogo etc.) sem aviso, e o usuário pode querer abaixar na
+// hora, sem precisar achar o nome da pessoa na lista.
 const VOLUME_ICON_SVG =
   '<svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>';
 const VOLUME_MUTED_ICON_SVG =
   '<svg class="icon-vol-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
 
-// Único lugar que de fato muda o volume de alguém pra mim — usado tanto por
-// esse slider da telinha quanto pelo do menu de contexto, pra os dois
-// ficarem sempre sincronizados entre si (mesma fonte de verdade).
-function setParticipantVolumeForMe(identity, v) {
-  participantVolumes.set(identity, v);
-  if (v > 0 && mutedForMe.has(identity)) mutedForMe.delete(identity);
-  applyVolume(identity);
-  applySoundboardVolume();
-  const effectivelyMuted = v === 0 || mutedForMe.has(identity);
-  document.querySelectorAll(`.screen-volume-btn[data-identity="${cssEscape(identity)}"]`).forEach((btn) => {
-    btn.classList.toggle('is-muted', effectivelyMuted);
-  });
+// Único lugar que de fato muda o volume DA TRANSMISSÃO de alguém pra mim —
+// usado só pelo slider da telinha (o do menu de contexto mexe na voz/
+// microfone dela, ver participantVolumes/setParticipantVolumeForMe acima).
+function setStreamVolumeForMe(identity, v) {
+  streamVolumes.set(identity, v);
+  applyStreamVolume(identity); // já chama syncScreenVolumeBtnIcon
 }
 
 function addScreenShareControls(tile, participant) {
@@ -2686,7 +2689,7 @@ function addScreenShareControls(tile, participant) {
   volumeBtn.dataset.identity = participant.identity;
   volumeBtn.title = 'Volume da transmissão';
   volumeBtn.innerHTML = VOLUME_ICON_SVG + VOLUME_MUTED_ICON_SVG;
-  volumeBtn.classList.toggle('is-muted', (participantVolumes.get(participant.identity) ?? 1) === 0 || mutedForMe.has(participant.identity));
+  volumeBtn.classList.toggle('is-muted', (streamVolumes.get(participant.identity) ?? 1) === 0 || mutedForMe.has(participant.identity) || isDeafened);
   volumeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (contextMenuEl && contextMenuEl.classList.contains('screen-volume-popover')) {
@@ -2700,9 +2703,9 @@ function addScreenShareControls(tile, participant) {
     slider.type = 'range';
     slider.min = '0';
     slider.max = '100';
-    slider.value = String(Math.round((participantVolumes.get(participant.identity) ?? 1) * 100));
+    slider.value = String(Math.round((streamVolumes.get(participant.identity) ?? 1) * 100));
     slider.addEventListener('input', () => {
-      setParticipantVolumeForMe(participant.identity, Number(slider.value) / 100);
+      setStreamVolumeForMe(participant.identity, Number(slider.value) / 100);
     });
     popover.addEventListener('click', (ev) => ev.stopPropagation());
     popover.appendChild(slider);
@@ -2822,6 +2825,10 @@ function attachTrack(track, participant, publication) {
       soundboardAudioEls.add(el);
       const blocked = isDeafened || mutedForMe.has(participant.identity);
       el.volume = blocked ? 0 : effectiveSoundboardVolume();
+    } else if (isRemoteScreenShareAudio) {
+      // som do jogo/desktop de quem compartilha tela: volume PRÓPRIO,
+      // separado da voz dela (ver streamVolumes/registerStreamAudioEl)
+      registerStreamAudioEl(participant.identity, el);
     } else {
       registerAudioEl(participant.identity, el);
     }
@@ -2832,7 +2839,10 @@ function detachTrackFromTile(track, tile, identity) {
   const detached = track.detach();
   detached.forEach((el) => {
     soundboardAudioEls.delete(el);
-    if (identity) unregisterAudioEl(identity, el);
+    if (identity) {
+      unregisterAudioEl(identity, el);
+      unregisterStreamAudioEl(identity, el);
+    }
     el.remove();
   });
   if (tile && track.kind === 'video' && !tile.querySelector('video')) {
@@ -3038,9 +3048,52 @@ function applyVolume(identity) {
   });
 }
 
+// Volume DA VOZ/microfone de alguém pra mim (menu de contexto, botão direito
+// no nome) — separado do volume da transmissão de tela dela (ver
+// setStreamVolumeForMe/streamVolumes lá em cima, perto de addScreenShareControls).
+function setParticipantVolumeForMe(identity, v) {
+  participantVolumes.set(identity, v);
+  if (v > 0 && mutedForMe.has(identity)) mutedForMe.delete(identity);
+  applyVolume(identity);
+  applySoundboardVolume();
+}
+
+// Mesma ideia do registerAudioEl/applyVolume acima, só que pro áudio da
+// TRANSMISSÃO DE TELA (não o microfone) — tem seu próprio volume
+// (streamVolumes), mas "Silenciar"/"Ensurdecer" ainda zeram os dois juntos.
+function registerStreamAudioEl(identity, el) {
+  if (!streamAudioElsByIdentity.has(identity)) streamAudioElsByIdentity.set(identity, new Set());
+  streamAudioElsByIdentity.get(identity).add(el);
+  applyStreamVolume(identity);
+}
+
+function unregisterStreamAudioEl(identity, el) {
+  streamAudioElsByIdentity.get(identity)?.delete(el);
+}
+
+function applyStreamVolume(identity) {
+  const volume = mutedForMe.has(identity) || isDeafened ? 0 : streamVolumes.get(identity) ?? 1;
+  streamAudioElsByIdentity.get(identity)?.forEach((el) => {
+    el.volume = volume;
+  });
+  syncScreenVolumeBtnIcon(identity);
+}
+
+// Ícone do botão de volume na telinha da transmissão reflete o volume DA
+// TRANSMISSÃO especificamente (não o do microfone) — mudo se o slider da
+// transmissão tá em 0, se a pessoa foi silenciada, ou se eu tô ensurdecido.
+function syncScreenVolumeBtnIcon(identity) {
+  const effectivelyMuted = (streamVolumes.get(identity) ?? 1) === 0 || mutedForMe.has(identity) || isDeafened;
+  document.querySelectorAll(`.screen-volume-btn[data-identity="${cssEscape(identity)}"]`).forEach((btn) => {
+    btn.classList.toggle('is-muted', effectivelyMuted);
+  });
+}
+
 function resetAudioState() {
   audioElsByIdentity.clear();
   participantVolumes.clear();
+  streamAudioElsByIdentity.clear();
+  streamVolumes.clear();
   mutedForMe.clear();
   videoHiddenForMe.clear();
 }
@@ -3059,6 +3112,7 @@ function setDeafened(value, opts = {}) {
     if (!opts.silent) animateIconKick(deafenBtn);
   }
   audioElsByIdentity.forEach((_els, identity) => applyVolume(identity));
+  streamAudioElsByIdentity.forEach((_els, identity) => applyStreamVolume(identity));
   applySoundboardVolume();
 
   if (value) {
@@ -3991,12 +4045,11 @@ function openContextMenu(x, y, participant, opts = {}) {
   const muteItem = buildToggleItem('Silenciar', mutedForMe.has(identity), (checked) => {
     if (checked) mutedForMe.add(identity);
     else mutedForMe.delete(identity);
+    // silenciar a pessoa de vez corta tudo dela: voz E o áudio da
+    // transmissão de tela que ela estiver compartilhando
     applyVolume(identity);
+    applyStreamVolume(identity); // já sincroniza o ícone da telinha
     applySoundboardVolume();
-    const effectivelyMuted = (participantVolumes.get(identity) ?? 1) === 0 || mutedForMe.has(identity);
-    document.querySelectorAll(`.screen-volume-btn[data-identity="${cssEscape(identity)}"]`).forEach((btn) => {
-      btn.classList.toggle('is-muted', effectivelyMuted);
-    });
   });
   menu.appendChild(muteItem);
 
