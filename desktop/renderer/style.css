@@ -1457,6 +1457,11 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   100% { transform: scale(1) rotate(0deg); }
 }
 .ctrl-icon.off { color: var(--danger); }
+/* câmera e compartilhar tela desligados são o estado normal/de repouso, não
+   um alerta -- diferente do mic/fone mudo, que é aviso de verdade e por
+   isso continua vermelho. Fica igual a cor neutra do resto (ex: o de
+   efeitos sonoros, que nunca vira vermelho). */
+.ctrl-icon.feature-btn.off { color: var(--muted); }
 .ctrl-icon.leave { color: var(--danger); }
 .ctrl-icon.leave:hover { background: var(--danger); color: white; }
 /* botão de configurações no rodapé: continua clicável mesmo fora de uma
