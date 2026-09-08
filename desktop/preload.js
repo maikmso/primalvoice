@@ -35,4 +35,19 @@ contextBridge.exposeInMainWorld('vortex', {
   // status: 'none' | 'idle' | 'speaking' | 'muted' | 'deafened' — mostra uma
   // bolinha no ícone da barra de tarefas (só no Windows) igual o Discord.
   setVoiceOverlay: (status) => ipcRenderer.invoke('voiceOverlay:set', status),
+  // Overlay por cima de OUTRAS janelas/jogos enquanto compartilha a tela
+  // (câmera/mic/parar de compartilhar/desligar, mais o aviso "AO VIVO") --
+  // igual o "Discord Overlay". showShareOverlay/hideShareOverlay ligam e
+  // desligam a janela separada; setShareOverlayState manda o estado atual
+  // (câmera/mic ligado ou não) pra ela refletir nos ícones; onOverlayAction
+  // escuta os cliques que acontecem NELA (câmera/mic/parar/desligar), que
+  // precisam ser tratados aqui porque é aqui que mora o LiveKit de verdade.
+  showShareOverlay: () => ipcRenderer.invoke('overlay:show'),
+  hideShareOverlay: () => ipcRenderer.invoke('overlay:hide'),
+  setShareOverlayState: (state) => ipcRenderer.send('overlay:state-update', state),
+  onOverlayAction: (callback) => {
+    const listener = (_event, action) => callback(action);
+    ipcRenderer.on('overlay-action', listener);
+    return () => ipcRenderer.removeListener('overlay-action', listener);
+  },
 });

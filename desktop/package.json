@@ -23,6 +23,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "preload-overlay.js",
       "renderer/**/*",
       "build/icon.png",
       "build/overlay/**/*"

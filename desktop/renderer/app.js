@@ -112,6 +112,31 @@ cinemaVolumeBtn.addEventListener('click', (e) => {
   if (!cinemaTileIdentity) return;
   openStreamVolumePopover(cinemaVolumeBtn, cinemaTileIdentity);
 });
+
+// ---------- overlay por cima de outras janelas/jogos, enquanto VOCÊ compartilha a tela ----------
+// Igual o "Discord Overlay": mostra um aviso "AO VIVO" + os mesmos
+// controles (câmera/mic/parar de compartilhar/desligar) flutuando por cima
+// de QUALQUER outro programa/jogo, não só dentro da janela do PrimalVoice
+// (ver createShareOverlayWindow no main.js). O overlay em si não sabe nada
+// de LiveKit — só manda o "pedido" de volta pra cá (onOverlayAction), que é
+// onde mora a lógica de verdade: delega pros mesmos botões reais, igual já
+// fazemos com a barra do modo cinema.
+function syncShareOverlayState() {
+  window.vortex.setShareOverlayState?.({
+    camOff: camBtn.classList.contains('off'),
+    micOff: micBtn.classList.contains('off'),
+  });
+}
+new MutationObserver(syncShareOverlayState).observe(camBtn, { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(syncShareOverlayState).observe(micBtn, { attributes: true, attributeFilter: ['class'] });
+
+window.vortex.onOverlayAction?.((action) => {
+  if (action === 'toggleCam') camBtn.click();
+  else if (action === 'toggleMic') micBtn.click();
+  else if (action === 'hangup') hangupBtn.click();
+  else if (action === 'stopShare') shareBtn.click(); // já sabe que tá compartilhando, então desliga
+});
+
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');
@@ -4664,6 +4689,8 @@ let sharepickKind = 'screen';
 function stopScreenShareUI() {
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
+  shareBtn.classList.remove('sharing');
+  window.vortex.hideShareOverlay?.();
   if (!voiceRoom) return;
   const tile = document.getElementById(tileId(voiceRoom.localParticipant.identity));
   tile?.querySelectorAll('video').forEach((el) => el.remove());
@@ -4829,6 +4856,9 @@ shareBtn.addEventListener('click', async () => {
 
   shareBtn.dataset.on = 'true';
   shareBtn.classList.remove('off');
+  shareBtn.classList.add('sharing');
+  window.vortex.showShareOverlay?.();
+  syncShareOverlayState();
   if (publication && publication.track) {
     attachTrack(publication.track, voiceRoom.localParticipant);
     const mst = publication.track.mediaStreamTrack;

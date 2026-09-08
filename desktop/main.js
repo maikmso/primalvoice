@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, session, desktopCapturer, ipcMain, nativeImage, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, session, desktopCapturer, ipcMain, nativeImage, globalShortcut, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -305,6 +305,7 @@ ipcMain.handle('screenshare:choose', (_event, choice) => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) shareOverlayWindow.destroy();
 });
 
 // Atualização automática, igual ao Discord: o app confere sozinho se tem uma
@@ -354,6 +355,94 @@ ipcMain.handle('window:setFullscreen', (_event, value) => {
   if (!mainWindow) return false;
   mainWindow.setFullScreen(!!value);
   return true;
+});
+
+// ---------- overlay por cima de OUTRAS janelas/jogos enquanto compartilha a tela ----------
+// Igual o "Discord Overlay": uma janela própria, transparente, sem borda e
+// sempre no topo, do tamanho da tela inteira, é a única forma de mostrar
+// algo por cima de outro programa/jogo (mesmo com o PrimalVoice minimizado).
+// Limitação real, do próprio Windows, não tem como contornar: não aparece
+// por cima de jogos em tela cheia EXCLUSIVA (só em modo janela ou tela
+// cheia sem borda) -- é a mesma limitação que o Discord tem.
+let shareOverlayWindow = null;
+
+function createShareOverlayWindow() {
+  if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) return;
+  // usa a tela onde está o cursor no momento (aproximação razoável de "qual
+  // tela a pessoa está usando agora"; não temos como saber com certeza qual
+  // tela específica está sendo compartilhada quando ela escolhe uma janela
+  // em vez da tela toda)
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  shareOverlayWindow = new BrowserWindow({
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-overlay.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  // nível mais alto que o Electron permite no Windows -- dá a melhor chance
+  // de ficar visível por cima de jogos/outros programas (sem garantia em
+  // 100% dos casos, ver limitação acima)
+  shareOverlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  shareOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // clique atravessa a janela por padrão (senão bloquearia o jogo por baixo
+  // o tempo todo) -- só os botões desativam isso quando o mouse passa em
+  // cima deles, via overlay:ignore-mouse abaixo
+  shareOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  shareOverlayWindow.loadURL(`http://127.0.0.1:${localPort}/overlay.html`);
+}
+
+function showShareOverlay() {
+  createShareOverlayWindow();
+  shareOverlayWindow.showInactive(); // nunca rouba o foco de quem estiver jogando
+}
+
+function hideShareOverlay() {
+  if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) shareOverlayWindow.hide();
+}
+
+ipcMain.handle('overlay:show', () => {
+  showShareOverlay();
+  return true;
+});
+ipcMain.handle('overlay:hide', () => {
+  hideShareOverlay();
+  return true;
+});
+// Mouse passou em cima de um botão do overlay (ou saiu de cima) -- só troca
+// se o clique atravessa a janela ou não, não afeta mais nada.
+ipcMain.on('overlay:ignore-mouse', (_event, ignore) => {
+  if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) {
+    shareOverlayWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
+  }
+});
+// Clicou num botão do overlay -- o overlay não tem a lógica de verdade
+// (LiveKit, etc), só repassa o pedido pra janela principal fazer.
+ipcMain.on('overlay:action', (_event, action) => {
+  if (mainWindow) mainWindow.webContents.send('overlay-action', action);
+});
+// Janela principal avisando que o estado (câmera/mic ligado ou não) mudou
+// -- repassa pro overlay refletir os mesmos ícones.
+ipcMain.on('overlay:state-update', (_event, state) => {
+  if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) {
+    shareOverlayWindow.webContents.send('overlay-state', state);
+  }
 });
 
 // ---------- indicador de voz no ícone da barra de tarefas (desativado) ----------
