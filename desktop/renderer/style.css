@@ -2198,14 +2198,25 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   font-size: 12px;
   color: var(--muted);
 }
+/* appearance:none tira a setinha/caixa feia e padrão do sistema operacional
+   (era isso que dava aquela sensação de "sem CSS") -- desenha uma seta
+   própria, no mesmo estilo escuro do resto do modal. */
 .sharepick-quality-field select {
-  background: var(--bg);
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 16px;
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 6px;
-  padding: 7px 9px;
+  padding: 8px 30px 8px 10px;
   font-size: 13px;
+  cursor: pointer;
 }
+.sharepick-quality-field select:hover { border-color: var(--accent); }
 .sharepick-quality-field select:focus { border-color: var(--accent); outline: none; }
 .sharepick-footer {
   padding: 14px 22px;
@@ -2217,6 +2228,34 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 }
 .sharepick-audio-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .sharepick-actions { display: flex; gap: 10px; }
+/* botões do rodapé -- "Cancelar" discreto, "Compartilhar" é a ação
+   principal e precisa se destacar (antes os dois pareciam do mesmo peso,
+   sem hierarquia visual clara) */
+.sharepick-actions #sharepick-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sharepick-actions #sharepick-cancel-btn:hover { border-color: var(--muted); background: var(--hover-strong); }
+.sharepick-actions #sharepick-confirm-btn {
+  /* var(--link-color) em vez de var(--accent) -- accent é cinza neutro em
+     duas das três temas, o que deixava o botão principal sem destaque */
+  background: var(--link-color);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sharepick-actions #sharepick-confirm-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.sharepick-actions #sharepick-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .manage-channels-group .manage-channel-row {
   display: flex;
