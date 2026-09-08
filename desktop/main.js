@@ -364,13 +364,26 @@ ipcMain.handle('window:setFullscreen', (_event, value) => {
   return true;
 });
 
-// ---------- overlay por cima de OUTRAS janelas/jogos enquanto compartilha a tela ----------
+// ---------- overlay por cima de OUTRAS janelas/jogos enquanto compartilha a tela (DESATIVADO) ----------
 // Igual o "Discord Overlay": uma janela própria, transparente, sem borda e
 // sempre no topo, do tamanho da tela inteira, é a única forma de mostrar
 // algo por cima de outro programa/jogo (mesmo com o PrimalVoice minimizado).
 // Limitação real, do próprio Windows, não tem como contornar: não aparece
 // por cima de jogos em tela cheia EXCLUSIVA (só em modo janela ou tela
 // cheia sem borda) -- é a mesma limitação que o Discord tem.
+//
+// DESATIVADO a pedido do usuário: a janela do overlay cobre a TELA INTEIRA
+// (não só a área da janela do PrimalVoice), então se outra janela (ex.:
+// Chrome) não estiver maximizada/cobrindo tudo, a janela do PrimalVoice
+// continuava aparecendo do lado E o overlay (aviso "AO VIVO" + barra de
+// controles) aparecia por cima de tudo igual, duplicado -- além da barra de
+// controles flutuar por cima de QUALQUER coisa que a pessoa estivesse
+// clicando/mexendo em outro programa, atrapalhando. showShareOverlay() abaixo
+// virou um no-op (não cria nem mostra mais a janela); o resto da
+// infraestrutura (createShareOverlayWindow, syncShareOverlayVisibility, os
+// canais IPC) continua aqui intacto, só não é mais chamado -- dá pra
+// reativar no futuro revisando o design (por exemplo, só mostrar quando
+// outra janela cobrir a tela inteira de verdade).
 let shareOverlayWindow = null;
 // true enquanto a pessoa estiver compartilhando a tela de verdade (entre um
 // showShareOverlay() e o hideShareOverlay() correspondente). Serve pra saber
@@ -421,9 +434,8 @@ function createShareOverlayWindow() {
 }
 
 function showShareOverlay() {
-  isSharingScreen = true;
-  createShareOverlayWindow();
-  syncShareOverlayVisibility();
+  // Desativado -- ver comentário completo lá em cima, perto de
+  // "let shareOverlayWindow = null". Não cria nem mostra mais a janela.
 }
 
 function hideShareOverlay() {
