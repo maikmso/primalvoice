@@ -137,6 +137,20 @@ window.vortex.onOverlayAction?.((action) => {
   else if (action === 'stopShare') shareBtn.click(); // já sabe que tá compartilhando, então desliga
 });
 
+// Avisinho "AO VIVO" + botão de parar, dentro do próprio painel da esquerda
+// -- como o overlay por cima de outras janelas só aparece quando a janela do
+// PrimalVoice está fora de foco (ver main.js), enquanto você está OLHANDO
+// pro próprio app (compartilhando a tela) não sobra nenhum aviso visível de
+// que você está ao vivo, só o ícone pequeno ficando verde. Esse avisinho
+// aqui resolve isso, sempre visível ali em cima do "Conectado".
+const myLiveShareBar = document.getElementById('my-live-share-bar');
+const myLiveStopBtn = document.getElementById('my-live-stop-btn');
+function syncMyLiveShareBar() {
+  myLiveShareBar.hidden = !shareBtn.classList.contains('sharing');
+}
+new MutationObserver(syncMyLiveShareBar).observe(shareBtn, { attributes: true, attributeFilter: ['class'] });
+myLiveStopBtn.addEventListener('click', () => shareBtn.click());
+
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');

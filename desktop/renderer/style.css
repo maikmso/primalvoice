@@ -1474,6 +1474,27 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   border-radius: 8px;
   padding: 8px 8px 8px 10px;
 }
+/* avisinho "AO VIVO" + botão de parar, sempre visível ali em cima do
+   "Conectado" enquanto VOCÊ está compartilhando a tela — ver
+   syncMyLiveShareBar no app.js. */
+.my-live-share-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(237, 66, 69, 0.12);
+  border-radius: 8px;
+  padding: 8px 8px 8px 10px;
+}
+.my-live-stop-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: var(--danger);
+  color: #fff;
+}
+.my-live-stop-btn:hover { filter: brightness(1.1); }
+.my-live-stop-btn svg { width: 16px; height: 16px; }
 .voice-status-icon { display: flex; flex-shrink: 0; cursor: default; position: relative; }
 /* position:fixed (não absolute) de propósito — a barra de voz fica dentro
    de um painel com overflow:hidden (pro redimensionar/recolher funcionar),
