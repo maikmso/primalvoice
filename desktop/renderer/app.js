@@ -2002,6 +2002,14 @@ function resetVoiceControlsUI() {
   camBtn.classList.add('off');
   shareBtn.dataset.on = 'false';
   shareBtn.classList.add('off');
+  shareBtn.classList.remove('sharing');
+  // se a pessoa sair do canal de voz (ou desconectar de vez) SEM antes
+  // clicar em "parar de compartilhar", o botão de compartilhar zerava aqui
+  // mas o overlay por cima de outras janelas ficava esquecido, ligado --
+  // preso na tela dela pra sempre até fechar o app de vez pela bandeja.
+  // isso tem que ser desligado sempre que a chamada acaba, não só quando
+  // a pessoa clica pra parar de compartilhar.
+  window.vortex.hideShareOverlay?.();
   setDeafened(false, { silent: true });
   micMutedBeforeDeafen = false;
   userPanelControls.classList.add('voice-disabled');

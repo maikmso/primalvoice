@@ -167,6 +167,13 @@ function createWindow() {
   // mode" (esconder barras) do compartilhamento de tela quando isso acontece.
   mainWindow.on('enter-full-screen', () => mainWindow.webContents.send('window-fullscreen-changed', true));
   mainWindow.on('leave-full-screen', () => mainWindow.webContents.send('window-fullscreen-changed', false));
+
+  // Esconde/mostra o overlay de compartilhamento conforme a janela principal
+  // ganha/perde foco (ou é minimizada pra bandeja) -- ver syncShareOverlayVisibility.
+  mainWindow.on('focus', () => syncShareOverlayVisibility());
+  mainWindow.on('blur', () => syncShareOverlayVisibility());
+  mainWindow.on('show', () => syncShareOverlayVisibility());
+  mainWindow.on('hide', () => syncShareOverlayVisibility());
 }
 
 function createTray() {
@@ -365,6 +372,11 @@ ipcMain.handle('window:setFullscreen', (_event, value) => {
 // por cima de jogos em tela cheia EXCLUSIVA (só em modo janela ou tela
 // cheia sem borda) -- é a mesma limitação que o Discord tem.
 let shareOverlayWindow = null;
+// true enquanto a pessoa estiver compartilhando a tela de verdade (entre um
+// showShareOverlay() e o hideShareOverlay() correspondente). Serve pra saber
+// se o overlay PRECISA reaparecer quando a janela principal perde o foco --
+// ver syncShareOverlayVisibility abaixo.
+let isSharingScreen = false;
 
 function createShareOverlayWindow() {
   if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) return;
@@ -409,12 +421,31 @@ function createShareOverlayWindow() {
 }
 
 function showShareOverlay() {
+  isSharingScreen = true;
   createShareOverlayWindow();
-  shareOverlayWindow.showInactive(); // nunca rouba o foco de quem estiver jogando
+  syncShareOverlayVisibility();
 }
 
 function hideShareOverlay() {
+  isSharingScreen = false;
   if (shareOverlayWindow && !shareOverlayWindow.isDestroyed()) shareOverlayWindow.hide();
+}
+
+// O overlay só faz sentido em cima de OUTRAS janelas/jogos -- enquanto a
+// própria janela do PrimalVoice estiver em foco (ou seja, é ela mesma que a
+// pessoa está olhando), os controles já aparecem normais ali dentro, então
+// mostrar o overlay por cima só duplicava tudo (badge "AO VIVO" e barra de
+// controles repetidos por cima da própria janela do app). Por isso o overlay
+// só fica visível de fato quando: está compartilhando E a janela principal
+// não está em foco (minimizada, na bandeja, ou outra janela/jogo em primeiro plano).
+function syncShareOverlayVisibility() {
+  if (!shareOverlayWindow || shareOverlayWindow.isDestroyed()) return;
+  const mainIsFocused = mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused() && mainWindow.isVisible();
+  if (isSharingScreen && !mainIsFocused) {
+    shareOverlayWindow.showInactive(); // nunca rouba o foco de quem estiver jogando
+  } else {
+    shareOverlayWindow.hide();
+  }
 }
 
 ipcMain.handle('overlay:show', () => {
