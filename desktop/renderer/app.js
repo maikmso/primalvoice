@@ -2024,12 +2024,15 @@ async function fetchYoutubeEmbedInfo(videoId) {
 }
 
 function buildYoutubeEmbedCard(videoId) {
-  const card = document.createElement('a');
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+  // O card em si não é mais um link único (igual Discord: cada parte tem
+  // seu próprio comportamento) — o TÍTULO abre no navegador, a MINIATURA
+  // toca o vídeo embutido ali mesmo na conversa, e o iconezinho de "abrir
+  // externo" em cima da miniatura sempre abre no navegador, mesmo clicando
+  // nele por cima da miniatura.
+  const card = document.createElement('div');
   card.className = 'yt-embed';
-  card.href = `https://www.youtube.com/watch?v=${videoId}`;
-  card.target = '_blank';
-  card.rel = 'noopener noreferrer';
-  card.title = 'Assistir no YouTube';
 
   const source = document.createElement('div');
   source.className = 'yt-embed-source';
@@ -2041,13 +2044,17 @@ function buildYoutubeEmbedCard(videoId) {
   author.hidden = true;
   card.appendChild(author);
 
-  const title = document.createElement('div');
+  const title = document.createElement('a');
   title.className = 'yt-embed-title';
+  title.href = watchUrl;
+  title.target = '_blank';
+  title.rel = 'noopener noreferrer';
   title.textContent = 'Assistir no YouTube';
   card.appendChild(title);
 
   const thumbWrap = document.createElement('div');
   thumbWrap.className = 'yt-embed-thumb-wrap';
+  thumbWrap.title = 'Tocar vídeo';
   const thumb = document.createElement('img');
   thumb.className = 'yt-embed-thumb';
   thumb.alt = '';
@@ -2055,10 +2062,41 @@ function buildYoutubeEmbedCard(videoId) {
   // qualquer vídeo público, sem precisar esperar o oEmbed responder)
   thumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   thumbWrap.appendChild(thumb);
+
+  // ícone de play (só decorativo — clicar em QUALQUER parte da miniatura já
+  // toca o vídeo, ver o listener no thumbWrap logo abaixo) e o iconezinho de
+  // "abrir externo" lado a lado, centralizados por cima da miniatura, igual
+  // o Discord.
   const playOverlay = document.createElement('div');
   playOverlay.className = 'yt-embed-play';
-  playOverlay.innerHTML = YT_PLAY_ICON_SVG + YT_EXTERNAL_ICON_SVG;
+  playOverlay.innerHTML = YT_PLAY_ICON_SVG;
   thumbWrap.appendChild(playOverlay);
+
+  const externalBtn = document.createElement('a');
+  externalBtn.className = 'yt-embed-external-btn';
+  externalBtn.href = watchUrl;
+  externalBtn.target = '_blank';
+  externalBtn.rel = 'noopener noreferrer';
+  externalBtn.title = 'Abrir no navegador';
+  externalBtn.innerHTML = YT_EXTERNAL_ICON_SVG;
+  // clicar nesse iconezinho abre no navegador — não pode também disparar o
+  // clique da miniatura (que tocaria o vídeo embutido por baixo dele)
+  externalBtn.addEventListener('click', (e) => e.stopPropagation());
+  playOverlay.appendChild(externalBtn);
+
+  // Clicar em qualquer parte da miniatura (menos o iconezinho de abrir
+  // externo, tratado acima) troca ela por um player de verdade do YouTube,
+  // tocando ali mesmo dentro da conversa, sem sair do PrimalVoice.
+  thumbWrap.addEventListener('click', () => {
+    const iframe = document.createElement('iframe');
+    iframe.className = 'yt-embed-iframe';
+    iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    iframe.allowFullscreen = true;
+    iframe.frameBorder = '0';
+    thumbWrap.replaceWith(iframe);
+  });
+
   card.appendChild(thumbWrap);
 
   fetchYoutubeEmbedInfo(videoId).then((info) => {
