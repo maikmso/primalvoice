@@ -1289,10 +1289,6 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   accent-color: var(--accent);
   cursor: pointer;
 }
-/* enquanto tem um botão de tela cheia PRÓPRIO da transmissão, o iconezinho
-   genérico de "expandir" do canto (usado nas outras telinhas, câmera etc.)
-   fica sobrando — eram dois símbolos parecidos ao mesmo tempo */
-.tile.has-screen-controls .expand-hint { display: none; }
 
 /* lista de membros, à direita de tudo */
 .member-list {
