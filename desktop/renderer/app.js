@@ -2859,19 +2859,8 @@ function addScreenShareControls(tile, participant) {
     }
   });
 
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'screen-share-ctrl-btn';
-  closeBtn.title = 'Fechar transmissão';
-  closeBtn.textContent = '✕';
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    stopWatchingScreenShare(participant);
-  });
-
   bar.appendChild(volumeBtn);
   bar.appendChild(fullscreenBtn);
-  bar.appendChild(closeBtn);
   tile.appendChild(bar);
 }
 
@@ -4269,6 +4258,25 @@ function openContextMenu(x, y, participant, opts = {}) {
     applyVideoVisibility(identity);
   });
   menu.appendChild(videoItem);
+
+  // Clicou com botão direito em cima da transmissão de tela dela -- dá pra
+  // parar de assistir por aqui também, sem precisar passar o mouse pra ver
+  // o X (que só aparece na miniatura pequena ao passar o mouse em cima).
+  if (opts.showStreamVolume) {
+    menu.appendChild(dividerEl());
+    const stopWatchItem = document.createElement('div');
+    stopWatchItem.className = 'context-menu-item';
+    const stopWatchLabel = document.createElement('span');
+    stopWatchLabel.className = 'label';
+    stopWatchLabel.textContent = 'Parar de assistir';
+    stopWatchItem.appendChild(stopWatchLabel);
+    stopWatchItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      stopWatchingScreenShare(participant);
+    });
+    menu.appendChild(stopWatchItem);
+  }
 
   if (opts.allowKick && myPermissions.kickMembers && activeVoiceChannelId) {
     menu.appendChild(dividerEl());

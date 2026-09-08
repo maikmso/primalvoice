@@ -1214,10 +1214,16 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .watch-stream-btn svg { width: 16px; height: 16px; }
 .watch-stream-btn:hover { filter: brightness(1.1); }
 
-/* controles de quem tá assistindo uma transmissão de tela: tela cheia de
-   verdade (a janela toda, sem o aviso do Chromium) e um X pra parar de
-   assistir/pausar sem mexer em nada de quem está compartilhando. Embaixo, no
-   meio — igual o Discord — em vez de no canto de cima. */
+/* controles de quem tá assistindo uma transmissão de tela. Na telinha
+   EXPANDIDA (com ou sem cinema de verdade) essa barrinha antiga não aparece
+   mais -- foi totalmente substituída pela barra flutuante nova
+   (cinema-controls-bar), ver updateFloatingBarVisibility no app.js.
+
+   Na miniatura PEQUENA (ainda não expandida) ela fica sempre escondida --
+   volume é pelo botão direito (que também tem "Parar de assistir"), e a
+   tela cheia de verdade é por duplo-clique. Não sobrou nenhum botão pra
+   mostrar aqui, mas o elemento continua existindo (contém o botão de
+   volume/tela cheia, usados só quando expandido via outra lógica). */
 .screen-share-controls {
   position: absolute;
   bottom: 14px;
@@ -1228,24 +1234,6 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   z-index: 2;
   opacity: 0;
   transition: opacity 0.15s ease;
-}
-/* na telinha EXPANDIDA (com ou sem cinema de verdade) essa barrinha antiga
-   não aparece mais -- foi totalmente substituída pela barra flutuante nova
-   (cinema-controls-bar), ver updateFloatingBarVisibility no app.js.
-
-   Mas na miniatura PEQUENA (ainda não expandida) precisa continuar dando
-   pra fechar a transmissão sem precisar expandir primeiro -- então só o
-   botão de fechar (X) aparece ali de novo, ao passar o mouse, do jeito de
-   sempre. Os outros dois (volume/tela cheia) continuam escondidos mesmo
-   aqui: volume já dá pra pegar pelo botão direito, e a tela cheia de
-   verdade agora é por duplo-clique. */
-.tile:not(.expanded):hover .screen-share-controls,
-.tile:not(.expanded).force-controls .screen-share-controls {
-  opacity: 1;
-}
-.tile:not(.expanded) .screen-share-controls .screen-volume-btn,
-.tile:not(.expanded) .screen-share-controls .screen-share-fullscreen-btn {
-  display: none;
 }
 .screen-share-ctrl-btn {
   width: 34px;
