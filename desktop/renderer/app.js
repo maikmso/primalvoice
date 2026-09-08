@@ -90,8 +90,18 @@ mirrorButtonOffState(micBtn, cinemaMicBtn);
 cinemaCamBtn.addEventListener('click', () => camBtn.click());
 cinemaMicBtn.addEventListener('click', () => micBtn.click());
 cinemaHangupBtn.addEventListener('click', () => hangupBtn.click());
+// Botão branco "parar de assistir" -- fecha a transmissão de vez (mesma
+// coisa que o antigo X da barrinha antiga fazia: para de receber o track,
+// mostra de novo o botão de "Assistir transmissão"), não só sai do modo
+// cinema. cinemaVolumeBtn.dataset.identity é sempre mantido em dia por
+// updateFloatingBarVisibility, então serve pra saber de quem é a
+// transmissão sendo mostrada agora na barra, com ou sem cinema de verdade.
 cinemaStopWatchBtn.addEventListener('click', () => {
-  if (cinemaTileIdentity) exitCinemaFullscreen();
+  const identity = cinemaVolumeBtn.dataset.identity;
+  if (!identity) return;
+  const tile = document.getElementById(tileId(identity));
+  if (!tile) return;
+  stopWatchingScreenShare(participantFromRow(tile));
 });
 // volume DA TRANSMISSÃO de quem está sendo assistido em modo cinema agora —
 // o data-identity (e o ícone ligado/mutado, via classe .is-muted que ele
@@ -2842,6 +2852,7 @@ function stopWatchingScreenShare(participant) {
   updateMyWatchingStatus();
   const tile = document.getElementById(tileId(participant.identity));
   if (cinemaTileIdentity === participant.identity) exitCinemaFullscreen();
+  updateFloatingBarVisibility();
   if (!tile) return;
   const track = screenShareTracks.get(participant.identity);
   if (track) detachTrackFromTile(track, tile, participant.identity);
@@ -2966,6 +2977,7 @@ function removeTile(participant) {
     exitExpandedExtras();
   }
   if (cinemaTileIdentity === participant.identity) exitCinemaFullscreen();
+  updateFloatingBarVisibility();
   screenShareTracks.delete(participant.identity);
   screenSharePublications.delete(participant.identity);
   screenShareAudioTracks.delete(participant.identity);
@@ -3000,6 +3012,7 @@ function collapseExpandedTile() {
   grid.classList.remove('has-expanded');
   if (wasExpanded) exitExpandedExtras();
   if (cinemaTileIdentity) exitCinemaFullscreen();
+  updateFloatingBarVisibility();
 }
 
 // ---------- tela cheia de verdade pra compartilhamento de tela ----------
@@ -3015,6 +3028,32 @@ let cinemaTileIdentity = null;
 
 function updateFullscreenBtnIcon(tile, isFullscreen) {
   tile.querySelector('.screen-share-fullscreen-btn')?.classList.toggle('is-fullscreen', isFullscreen);
+}
+
+// A barra flutuante nova (câmera/volume/parar de assistir/mic/desligar)
+// agora aparece SEMPRE que a telinha expandida é de uma transmissão de
+// tela — não só no modo cinema de verdade (tela cheia da janela). Essa
+// função central decide isso: olha qual telinha tá expandida agora e se
+// ela é uma transmissão que a pessoa está assistindo; chamada toda vez que
+// esse estado pode ter mudado (expandir/recolher telinha, trocar de vídeo
+// expandido, parar de assistir, entrar/sair do modo cinema de verdade,
+// participante sair da sala).
+function updateFloatingBarVisibility() {
+  const expandedTile = grid.querySelector('.tile.expanded');
+  const identity = expandedTile && watchingScreenShare.has(expandedTile.dataset.identity) ? expandedTile.dataset.identity : null;
+  if (identity) {
+    cinemaControlsBar.hidden = false;
+    cinemaVolumeBtn.dataset.identity = identity;
+    syncScreenVolumeBtnIcon(identity);
+    // fora do modo cinema de verdade a barra fica sempre visível (a tela
+    // não tá toda tomada pelo vídeo, então não atrapalha) -- o esquema de
+    // sumir sozinha depois de alguns segundos parado (showCinemaControlsBriefly)
+    // só faz sentido de verdade em cinema-mode, com o vídeo ocupando tudo
+    if (!cinemaTileIdentity) cinemaControlsBar.classList.add('visible');
+  } else {
+    cinemaControlsBar.hidden = true;
+    cinemaControlsBar.classList.remove('visible');
+  }
 }
 
 function enterCinemaFullscreen(tile, participant) {
@@ -3033,9 +3072,7 @@ function enterCinemaFullscreen(tile, participant) {
   document.body.classList.add('cinema-mode');
   window.vortex.setWindowFullscreen?.(true).catch(() => {});
   updateFullscreenBtnIcon(tile, true);
-  cinemaControlsBar.hidden = false;
-  cinemaVolumeBtn.dataset.identity = participant.identity;
-  syncScreenVolumeBtnIcon(participant.identity);
+  updateFloatingBarVisibility();
   showCinemaControlsBriefly();
 }
 
@@ -3045,8 +3082,6 @@ function exitCinemaFullscreen() {
   document.body.classList.remove('cinema-mode');
   window.vortex.setWindowFullscreen?.(false).catch(() => {});
   clearTimeout(cinemaControlsHideTimer);
-  cinemaControlsBar.hidden = true;
-  cinemaControlsBar.classList.remove('visible');
   if (identity) {
     const tile = document.getElementById(tileId(identity));
     if (tile) {
@@ -3054,6 +3089,11 @@ function exitCinemaFullscreen() {
       tile.classList.remove('force-controls');
     }
   }
+  // a telinha continua expandida mesmo saindo do modo cinema de verdade
+  // (só deixa de ser tela cheia da janela) -- se ela ainda for uma
+  // transmissão, a barra flutuante continua aparecendo, só que sempre
+  // visível em vez do esquema de sumir sozinha
+  updateFloatingBarVisibility();
 }
 
 // Em cinema-mode o vídeo ocupa a janela inteira, então ":hover" sozinho não
@@ -3113,10 +3153,21 @@ grid.addEventListener('click', (e) => {
       if (oldTile) updateFullscreenBtnIcon(oldTile, false);
       cinemaTileIdentity = tile.dataset.identity;
       updateFullscreenBtnIcon(tile, true);
-      cinemaVolumeBtn.dataset.identity = cinemaTileIdentity;
-      syncScreenVolumeBtnIcon(cinemaTileIdentity);
     }
   }
+  updateFloatingBarVisibility();
+});
+
+// Duplo-clique numa telinha de transmissão JÁ expandida entra direto no
+// modo cinema de verdade (tela cheia da janela) -- como agora a barra
+// antiga (que tinha o botão de "tela cheia") não aparece mais em lugar
+// nenhum, precisa de um jeito de chegar lá; um clique só continua servindo
+// só pra expandir/recolher dentro da grade, igual sempre foi.
+grid.addEventListener('dblclick', (e) => {
+  const tile = e.target.closest('.tile');
+  if (!tile || !tile.dataset.identity) return;
+  if (!watchingScreenShare.has(tile.dataset.identity)) return;
+  enterCinemaFullscreen(tile, participantFromRow(tile));
 });
 
 document.addEventListener('keydown', (e) => {

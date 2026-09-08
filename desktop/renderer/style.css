@@ -142,6 +142,11 @@ body.cinema-mode .room-header {
 }
 body.cinema-mode .grid.has-expanded { padding: 0; }
 body.cinema-mode .member-list { display: none !important; }
+/* a barrinha antiga da telinha (volume/tela cheia/fechar) fica redundante no
+   modo cinema -- a barra flutuante nova (cinema-controls-bar) já cobre tudo
+   isso (inclusive o volume da transmissão, ver cinema-volume-btn). Continua
+   aparecendo normal fora do modo cinema, na tela expandida comum. */
+body.cinema-mode .screen-share-controls { display: none !important; }
 
 /* barra de controles do modo cinema (câmera/mic/desligar da SUA chamada,
    igual Discord) -- some/aparece junto com os botões de tela cheia/fechar
@@ -1218,8 +1223,12 @@ body.cinema-mode .member-list { display: none !important; }
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-.tile:hover .screen-share-controls,
-.tile.force-controls .screen-share-controls { opacity: 1; }
+/* essa barrinha antiga não aparece mais em lugar nenhum -- foi totalmente
+   substituída pela barra flutuante nova (cinema-controls-bar), tanto na
+   telinha expandida comum quanto no modo cinema de verdade (ver
+   updateFloatingBarVisibility no app.js). Fica só opacity:0 sempre; o
+   elemento continua existindo no DOM (alguns trechos do código ainda
+   procuram por ele pra limpeza, ver stopWatchingScreenShare). */
 .screen-share-ctrl-btn {
   width: 34px;
   height: 34px;
