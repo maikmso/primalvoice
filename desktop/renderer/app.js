@@ -70,6 +70,7 @@ const exitAppBtn = document.getElementById('exit-app-btn');
 // automaticamente via MutationObserver logo abaixo.
 const cinemaControlsBar = document.getElementById('cinema-controls-bar');
 const cinemaCamBtn = document.getElementById('cinema-cam-btn');
+const cinemaVolumeBtn = document.getElementById('cinema-volume-btn');
 const cinemaStopWatchBtn = document.getElementById('cinema-stop-watch-btn');
 const cinemaMicBtn = document.getElementById('cinema-mic-btn');
 const cinemaHangupBtn = document.getElementById('cinema-hangup-btn');
@@ -91,6 +92,15 @@ cinemaMicBtn.addEventListener('click', () => micBtn.click());
 cinemaHangupBtn.addEventListener('click', () => hangupBtn.click());
 cinemaStopWatchBtn.addEventListener('click', () => {
   if (cinemaTileIdentity) exitCinemaFullscreen();
+});
+// volume DA TRANSMISSÃO de quem está sendo assistido em modo cinema agora —
+// o data-identity (e o ícone ligado/mutado, via classe .is-muted que ele
+// herda por já ter a classe screen-volume-btn) é mantido em dia em
+// enterCinemaFullscreen() e na troca de vídeo expandido lá embaixo.
+cinemaVolumeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!cinemaTileIdentity) return;
+  openStreamVolumePopover(cinemaVolumeBtn, cinemaTileIdentity);
 });
 const memberListItems = document.getElementById('member-list-items');
 const selfAvatar = document.getElementById('self-avatar');
@@ -2745,6 +2755,35 @@ function setStreamVolumeForMe(identity, v) {
   applyStreamVolume(identity); // já chama syncScreenVolumeBtnIcon
 }
 
+// Abre o popover com o slider de volume DA TRANSMISSÃO -- usado tanto pelo
+// botãozinho de volume da telinha quanto pelo botão de volume da barra
+// flutuante do modo cinema (ver cinemaVolumeBtn mais abaixo), pra não
+// duplicar a mesma lógica nos dois lugares.
+function openStreamVolumePopover(anchorBtn, identity) {
+  if (contextMenuEl && contextMenuEl.classList.contains('screen-volume-popover')) {
+    closeContextMenu();
+    return;
+  }
+  closeContextMenu();
+  const popover = document.createElement('div');
+  popover.className = 'screen-volume-popover';
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '0';
+  slider.max = '100';
+  slider.value = String(Math.round((streamVolumes.get(identity) ?? 1) * 100));
+  slider.addEventListener('input', () => {
+    setStreamVolumeForMe(identity, Number(slider.value) / 100);
+  });
+  popover.addEventListener('click', (ev) => ev.stopPropagation());
+  popover.appendChild(slider);
+  document.body.appendChild(popover);
+  const rect = anchorBtn.getBoundingClientRect();
+  popover.style.left = `${rect.left + rect.width / 2}px`;
+  popover.style.top = `${rect.top - 10}px`;
+  contextMenuEl = popover;
+}
+
 function addScreenShareControls(tile, participant) {
   tile.classList.add('has-screen-controls');
   if (tile.querySelector('.screen-share-controls')) return;
@@ -2760,28 +2799,7 @@ function addScreenShareControls(tile, participant) {
   volumeBtn.classList.toggle('is-muted', (streamVolumes.get(participant.identity) ?? 1) === 0 || mutedForMe.has(participant.identity) || isDeafened);
   volumeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (contextMenuEl && contextMenuEl.classList.contains('screen-volume-popover')) {
-      closeContextMenu();
-      return;
-    }
-    closeContextMenu();
-    const popover = document.createElement('div');
-    popover.className = 'screen-volume-popover';
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '100';
-    slider.value = String(Math.round((streamVolumes.get(participant.identity) ?? 1) * 100));
-    slider.addEventListener('input', () => {
-      setStreamVolumeForMe(participant.identity, Number(slider.value) / 100);
-    });
-    popover.addEventListener('click', (ev) => ev.stopPropagation());
-    popover.appendChild(slider);
-    document.body.appendChild(popover);
-    const rect = volumeBtn.getBoundingClientRect();
-    popover.style.left = `${rect.left + rect.width / 2}px`;
-    popover.style.top = `${rect.top - 10}px`;
-    contextMenuEl = popover;
+    openStreamVolumePopover(volumeBtn, participant.identity);
   });
 
   const fullscreenBtn = document.createElement('button');
@@ -3016,6 +3034,8 @@ function enterCinemaFullscreen(tile, participant) {
   window.vortex.setWindowFullscreen?.(true).catch(() => {});
   updateFullscreenBtnIcon(tile, true);
   cinemaControlsBar.hidden = false;
+  cinemaVolumeBtn.dataset.identity = participant.identity;
+  syncScreenVolumeBtnIcon(participant.identity);
   showCinemaControlsBriefly();
 }
 
@@ -3093,6 +3113,8 @@ grid.addEventListener('click', (e) => {
       if (oldTile) updateFullscreenBtnIcon(oldTile, false);
       cinemaTileIdentity = tile.dataset.identity;
       updateFullscreenBtnIcon(tile, true);
+      cinemaVolumeBtn.dataset.identity = cinemaTileIdentity;
+      syncScreenVolumeBtnIcon(cinemaTileIdentity);
     }
   }
 });
@@ -4099,11 +4121,14 @@ function openContextMenu(x, y, participant, opts = {}) {
     return;
   }
 
+  // Se o menu foi aberto em cima da transmissão de tela dela (não só a
+  // câmera), diferencia os dois volumes -- senão "Volume" sozinho ficaria
+  // ambíguo (voz ou transmissão?).
   const volumeWrap = document.createElement('div');
   volumeWrap.className = 'context-menu-volume';
   const volumeLabel = document.createElement('span');
   volumeLabel.className = 'label';
-  volumeLabel.textContent = 'Volume';
+  volumeLabel.textContent = opts.showStreamVolume ? 'Volume (voz)' : 'Volume';
   volumeWrap.appendChild(volumeLabel);
   const volumeSlider = document.createElement('input');
   volumeSlider.type = 'range';
@@ -4112,6 +4137,25 @@ function openContextMenu(x, y, participant, opts = {}) {
   volumeSlider.value = String(Math.round((participantVolumes.get(identity) ?? 1) * 100));
   volumeWrap.appendChild(volumeSlider);
   menu.appendChild(volumeWrap);
+
+  if (opts.showStreamVolume) {
+    const streamVolumeWrap = document.createElement('div');
+    streamVolumeWrap.className = 'context-menu-volume';
+    const streamVolumeLabel = document.createElement('span');
+    streamVolumeLabel.className = 'label';
+    streamVolumeLabel.textContent = 'Volume (transmissão)';
+    streamVolumeWrap.appendChild(streamVolumeLabel);
+    const streamVolumeSlider = document.createElement('input');
+    streamVolumeSlider.type = 'range';
+    streamVolumeSlider.min = '0';
+    streamVolumeSlider.max = '100';
+    streamVolumeSlider.value = String(Math.round((streamVolumes.get(identity) ?? 1) * 100));
+    streamVolumeSlider.addEventListener('input', () => {
+      setStreamVolumeForMe(identity, Number(streamVolumeSlider.value) / 100);
+    });
+    streamVolumeWrap.appendChild(streamVolumeSlider);
+    menu.appendChild(streamVolumeWrap);
+  }
 
   menu.appendChild(dividerEl());
 
@@ -4234,7 +4278,11 @@ grid.addEventListener('contextmenu', (e) => {
   const tile = e.target.closest('.tile');
   if (!tile || !tile.dataset.identity) return;
   e.preventDefault();
-  openContextMenu(e.clientX, e.clientY, participantFromRow(tile), { allowKick: true });
+  // se for em cima da transmissão de tela dessa pessoa (não só a câmera
+  // dela), o menu ganha também um controle de volume DA TRANSMISSÃO —
+  // ver isso em openContextMenu
+  const isScreenShareTile = watchingScreenShare.has(tile.dataset.identity);
+  openContextMenu(e.clientX, e.clientY, participantFromRow(tile), { allowKick: true, showStreamVolume: isScreenShareTile });
 });
 
 // ---------- entrar/sair do app ----------

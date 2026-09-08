@@ -218,6 +218,14 @@
     <button type="button" id="cinema-cam-btn" class="cinema-ctrl-btn" title="Câmera">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
     </button>
+    <!-- volume DA TRANSMISSÃO de quem você está assistindo agora (não é o seu
+         mic) -- reaproveita a classe screen-volume-btn (mesma da telinha) só
+         pra herdar de graça a troca de ícone ligado/mutado via CSS/data-identity,
+         ver syncScreenVolumeBtnIcon no app.js -->
+    <button type="button" id="cinema-volume-btn" class="cinema-ctrl-btn screen-volume-btn" title="Volume da transmissão">
+      <svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+      <svg class="icon-vol-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+    </button>
     <button type="button" id="cinema-stop-watch-btn" class="cinema-stop-watch-btn" title="Fechar transmissão">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line><line x1="7" y1="7" x2="17" y2="13"></line><line x1="17" y1="7" x2="7" y2="13"></line></svg>
     </button>

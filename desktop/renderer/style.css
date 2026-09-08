@@ -19,6 +19,11 @@
   --on-accent: #16171a;
   --sidebar-w: 240px;
   --memberlist-w: 240px;
+  /* azul de link, igual o Discord -- fixo, não muda com o tema (nos 3 temas
+     do app --accent-2 é usado pra outras coisas também, tipo o nome de quem
+     é você mesmo no chat, e em 2 dos 3 temas ele é cinza, não azul, então
+     não dava pra reaproveitar ele aqui pros links/título do embed) */
+  --link-color: #00aff4;
 }
 
 /* tema "Meia-noite": preto puro (AMOLED), mas com uma escada de contraste
@@ -892,7 +897,7 @@ body.cinema-mode .member-list { display: none !important; }
   cursor: text;
 }
 .chat-message .text .chat-link {
-  color: var(--accent-2);
+  color: var(--link-color);
   text-decoration: none;
   cursor: pointer;
   /* por padrão o Chromium deixa <a> "arrastável" (pra jogar o link fora),
@@ -935,7 +940,7 @@ body.cinema-mode .member-list { display: none !important; }
 .yt-embed-title {
   display: block;
   font-size: 13px;
-  color: var(--accent-2);
+  color: var(--link-color);
   margin-top: 2px;
   font-weight: 600;
   text-decoration: none;
