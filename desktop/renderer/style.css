@@ -1437,6 +1437,35 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 }
 .context-menu-checkbox.checked svg { visibility: visible; }
 
+/* Popover de dispositivo de entrada/saída (setinha do lado do mic/fone,
+   igual o Discord) — reaproveita .context-menu, só acrescenta o "rádio"
+   de seleção e o iconezinho de engrenagem da linha "Configurações de voz" */
+.device-popover { min-width: 240px; }
+.device-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  flex-shrink: 0;
+  position: relative;
+}
+.device-radio.checked { border-color: var(--accent); }
+.device-radio.checked::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.device-popover-gear {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.device-popover-gear svg { width: 100%; height: 100%; }
+.context-menu-item:hover .device-popover-gear { color: var(--text); }
+
 /* vídeo escondido localmente (menu "Desativar vídeo") — não afeta a
    pessoa, só a própria tela de quem escolheu isso */
 .tile.video-hidden-for-me .video-el { display: none; }
@@ -1651,6 +1680,15 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 
 /* avatar + nome + microfone/fone/config, sempre visível */
 .user-info-row { display: flex; align-items: center; gap: 6px; }
+/* setinha pequena colada no mic/fone -- abre o popover de dispositivo de
+   entrada/saída, igual o Discord. Mais estreita que os ícones normais e
+   puxada pra mais perto do vizinho (margin negativa) pra parecer "grudada"
+   nele, não mais um botão igual separado. */
+.user-info-row .caret-btn {
+  width: 14px;
+  margin-left: -6px;
+}
+.user-info-row .caret-btn svg { width: 12px; height: 12px; }
 .user-info-row .avatar {
   width: 32px;
   height: 32px;

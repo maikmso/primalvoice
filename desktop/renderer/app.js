@@ -56,6 +56,8 @@ const dmQuickList = document.getElementById('dm-quick-list');
 const sidebarTitleEl = document.getElementById('sidebar-title');
 const serverIconInput = document.getElementById('server-icon-input');
 const micBtn = document.getElementById('mic-btn');
+const micOptionsBtn = document.getElementById('mic-options-btn');
+const outputOptionsBtn = document.getElementById('output-options-btn');
 const camBtn = document.getElementById('cam-btn');
 const shareBtn = document.getElementById('share-btn');
 const soundboardBtn = document.getElementById('soundboard-btn');
@@ -452,6 +454,11 @@ const streamAudioElsByIdentity = new Map();
 const streamVolumes = new Map();
 const mutedForMe = new Set();
 const videoHiddenForMe = new Set();
+
+// Volume geral de SAÍDA (multiplica em cima do volume por pessoa, do stream
+// e dos efeitos sonoros) — é o equivalente ao "Volume de saída" do Discord,
+// controlado pelo popover de saída (ver openOutputOptionsPopover).
+let masterOutputVolume = 1;
 
 let devicePrefs = { micId: '', speakerId: '', cameraId: '' };
 let keybinds = { muteSelf: '', deafen: '' };
@@ -967,9 +974,10 @@ async function saveDevicePrefs() {
 
 async function loadPrefsFromConfig(cfg) {
   devicePrefs = Object.assign(
-    { micId: '', speakerId: '', cameraId: '', screenResolution: '1080p', screenFrameRate: 30 },
+    { micId: '', speakerId: '', cameraId: '', screenResolution: '1080p', screenFrameRate: 30, outputVolume: 1 },
     cfg.devicePrefs || {}
   );
+  masterOutputVolume = devicePrefs.outputVolume;
   if (sharepickResolutionSelect) sharepickResolutionSelect.value = devicePrefs.screenResolution;
   if (sharepickFramerateSelect) sharepickFramerateSelect.value = String(devicePrefs.screenFrameRate);
   keybinds = Object.assign({ muteSelf: '', deafen: '' }, cfg.keybinds || {});
@@ -1000,7 +1008,7 @@ const soundboardAudioEls = new Set(); // <audio> de efeito recebidos de outros, 
 const soundboardLocalGains = new Set(); // GainNode do MEU preview local, tocando agora
 
 function effectiveSoundboardVolume() {
-  return soundboardMuted ? 0 : soundboardEffectsVolume;
+  return soundboardMuted ? 0 : soundboardEffectsVolume * masterOutputVolume;
 }
 
 function applySoundboardVolume() {
@@ -1014,6 +1022,19 @@ function applySoundboardVolume() {
     el.volume = blocked ? 0 : vol;
   });
   soundboardLocalGains.forEach((gain) => { gain.gain.value = vol; });
+}
+
+// Volume geral de SAÍDA (equivalente ao "Volume de saída" do Discord) — mexe
+// em cima do volume de cada pessoa/transmissão/efeito sonoro, sem apagar as
+// preferências individuais (por isso reaplica applyVolume/applyStreamVolume/
+// applySoundboardVolume em vez de mexer direto nos <audio>).
+function setMasterOutputVolume(v) {
+  masterOutputVolume = v;
+  audioElsByIdentity.forEach((_, identity) => applyVolume(identity));
+  streamAudioElsByIdentity.forEach((_, identity) => applyStreamVolume(identity));
+  applySoundboardVolume();
+  devicePrefs.outputVolume = v;
+  saveDevicePrefs();
 }
 
 function loadSoundboardFromConfig(cfg) {
@@ -3244,7 +3265,7 @@ function unregisterAudioEl(identity, el) {
 }
 
 function applyVolume(identity) {
-  const volume = mutedForMe.has(identity) || isDeafened ? 0 : participantVolumes.get(identity) ?? 1;
+  const volume = mutedForMe.has(identity) || isDeafened ? 0 : (participantVolumes.get(identity) ?? 1) * masterOutputVolume;
   audioElsByIdentity.get(identity)?.forEach((el) => {
     el.volume = volume;
   });
@@ -3274,7 +3295,7 @@ function unregisterStreamAudioEl(identity, el) {
 }
 
 function applyStreamVolume(identity) {
-  const volume = mutedForMe.has(identity) || isDeafened ? 0 : streamVolumes.get(identity) ?? 1;
+  const volume = mutedForMe.has(identity) || isDeafened ? 0 : (streamVolumes.get(identity) ?? 1) * masterOutputVolume;
   streamAudioElsByIdentity.get(identity)?.forEach((el) => {
     el.volume = volume;
   });
@@ -5116,6 +5137,160 @@ speakerSelect.addEventListener('change', async () => {
   devicePrefs.speakerId = speakerSelect.value;
   await saveDevicePrefs();
   await setOutputDeviceForRoom();
+});
+
+// ---------- popovers de entrada/saída (setinha do lado do mic/fone,
+// igual o Discord) ----------
+// Não tem "Perfil de entrada" (isolamento de voz/estúdio) nem "Volume de
+// entrada" (ganho do mic) igual o Discord porque o PrimalVoice não tem
+// processamento de áudio de verdade por trás disso ainda — melhor não ter
+// o controle do que ter um de mentirinha que não faz nada.
+const DEVICE_POPOVER_GEAR_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+
+function buildDeviceRow(label, isSelected, onClick) {
+  const item = document.createElement('div');
+  item.className = 'context-menu-item';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'label';
+  labelEl.textContent = label;
+  item.appendChild(labelEl);
+  const radio = document.createElement('span');
+  radio.className = 'device-radio';
+  radio.classList.toggle('checked', isSelected);
+  item.appendChild(radio);
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+    closeContextMenu();
+  });
+  return item;
+}
+
+function buildVoiceSettingsRow() {
+  const item = document.createElement('div');
+  item.className = 'context-menu-item';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'label';
+  labelEl.textContent = 'Configurações de voz';
+  item.appendChild(labelEl);
+  const gear = document.createElement('span');
+  gear.className = 'device-popover-gear';
+  gear.innerHTML = DEVICE_POPOVER_GEAR_SVG;
+  item.appendChild(gear);
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeContextMenu();
+    openSettingsModal('voice');
+  });
+  return item;
+}
+
+// Abre pra CIMA do botão que foi clicado (mesma ideia do soundboard: esses
+// botões ficam no rodapé da barra lateral, "abrir pra baixo" sairia da tela).
+function positionPopoverAboveAnchor(anchorBtn, panel) {
+  const anchorRect = anchorBtn.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  let left = anchorRect.left;
+  if (left + panelRect.width > window.innerWidth) left = window.innerWidth - panelRect.width - 8;
+  let top = anchorRect.top - panelRect.height - 10;
+  panel.style.left = `${Math.max(8, left)}px`;
+  panel.style.top = `${Math.max(8, top)}px`;
+}
+
+async function openInputOptionsPopover(anchorBtn) {
+  closeContextMenu();
+  await populateDeviceSelects();
+
+  const panel = document.createElement('div');
+  panel.className = 'context-menu device-popover';
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  const header = document.createElement('div');
+  header.className = 'context-menu-header';
+  header.textContent = 'Dispositivo de entrada';
+  panel.appendChild(header);
+
+  Array.from(micSelect.options).forEach((opt) => {
+    panel.appendChild(
+      buildDeviceRow(opt.textContent, opt.value === micSelect.value, () => {
+        micSelect.value = opt.value;
+        micSelect.dispatchEvent(new Event('change'));
+      })
+    );
+  });
+
+  panel.appendChild(dividerEl());
+  panel.appendChild(buildVoiceSettingsRow());
+
+  document.body.appendChild(panel);
+  contextMenuEl = panel;
+  positionPopoverAboveAnchor(anchorBtn, panel);
+}
+
+async function openOutputOptionsPopover(anchorBtn) {
+  closeContextMenu();
+  await populateDeviceSelects();
+
+  const panel = document.createElement('div');
+  panel.className = 'context-menu device-popover';
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  const header = document.createElement('div');
+  header.className = 'context-menu-header';
+  header.textContent = 'Dispositivo de saída';
+  panel.appendChild(header);
+
+  if (speakerSelect.disabled) {
+    const info = document.createElement('div');
+    info.className = 'context-menu-info';
+    info.textContent = 'Não suportado neste sistema';
+    panel.appendChild(info);
+  } else {
+    Array.from(speakerSelect.options).forEach((opt) => {
+      panel.appendChild(
+        buildDeviceRow(opt.textContent, opt.value === speakerSelect.value, () => {
+          speakerSelect.value = opt.value;
+          speakerSelect.dispatchEvent(new Event('change'));
+        })
+      );
+    });
+  }
+
+  panel.appendChild(dividerEl());
+
+  const volumeWrap = document.createElement('div');
+  volumeWrap.className = 'context-menu-volume';
+  const volumeLabel = document.createElement('span');
+  volumeLabel.className = 'label';
+  volumeLabel.textContent = 'Volume de saída';
+  volumeWrap.appendChild(volumeLabel);
+  const volumeSlider = document.createElement('input');
+  volumeSlider.type = 'range';
+  volumeSlider.min = '0';
+  volumeSlider.max = '100';
+  volumeSlider.value = String(Math.round(masterOutputVolume * 100));
+  volumeWrap.appendChild(volumeSlider);
+  volumeSlider.addEventListener('input', () => {
+    setMasterOutputVolume(Number(volumeSlider.value) / 100);
+  });
+  panel.appendChild(volumeWrap);
+
+  panel.appendChild(dividerEl());
+  panel.appendChild(buildVoiceSettingsRow());
+
+  document.body.appendChild(panel);
+  contextMenuEl = panel;
+  positionPopoverAboveAnchor(anchorBtn, panel);
+}
+
+micOptionsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openInputOptionsPopover(micOptionsBtn);
+});
+outputOptionsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openOutputOptionsPopover(outputOptionsBtn);
 });
 
 // ---------- modal de configurações ----------
