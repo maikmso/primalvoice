@@ -103,14 +103,17 @@ cinemaStopWatchBtn.addEventListener('click', () => {
   if (!tile) return;
   stopWatchingScreenShare(participantFromRow(tile));
 });
-// volume DA TRANSMISSÃO de quem está sendo assistido em modo cinema agora —
-// o data-identity (e o ícone ligado/mutado, via classe .is-muted que ele
-// herda por já ter a classe screen-volume-btn) é mantido em dia em
-// enterCinemaFullscreen() e na troca de vídeo expandido lá embaixo.
+// volume DA TRANSMISSÃO de quem está sendo assistida agora — usa
+// cinemaVolumeBtn.dataset.identity (igual o botão de parar de assistir
+// acima), não cinemaTileIdentity, porque esse último só fica preenchido em
+// modo cinema DE VERDADE (tela cheia); a barra também aparece na tela
+// expandida sem cinema, e nesse estado cinemaTileIdentity fica vazio —
+// antes disso fazia o clique não fazer nada nesse caso.
 cinemaVolumeBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  if (!cinemaTileIdentity) return;
-  openStreamVolumePopover(cinemaVolumeBtn, cinemaTileIdentity);
+  const identity = cinemaVolumeBtn.dataset.identity;
+  if (!identity) return;
+  openStreamVolumePopover(cinemaVolumeBtn, identity);
 });
 
 // ---------- overlay por cima de outras janelas/jogos, enquanto VOCÊ compartilha a tela ----------
@@ -1996,6 +1999,12 @@ async function leaveVoiceChannel(opts = {}) {
   grid.innerHTML = '';
   if (grid.classList.contains('has-expanded')) exitExpandedExtras();
   grid.classList.remove('has-expanded');
+  watchingScreenShare.clear();
+  // sem isso a barra flutuante (câmera/volume/parar/mic/desligar) ficava
+  // presa na tela mesmo depois de sair da chamada -- inclusive aparecendo
+  // por cima de outras telas do app, tipo o chat -- porque nada mais aqui
+  // reavaliava se ela deveria continuar visível.
+  updateFloatingBarVisibility();
   resetAudioState();
   resetVoiceControlsUI();
   playSound(leaveSound);
@@ -4405,6 +4414,8 @@ function handleFullDisconnect() {
   updateVoiceOverlay();
   grid.innerHTML = '';
   grid.classList.remove('has-expanded');
+  watchingScreenShare.clear();
+  updateFloatingBarVisibility();
   clearMembers();
   resetAudioState();
   resetVoiceControlsUI();
