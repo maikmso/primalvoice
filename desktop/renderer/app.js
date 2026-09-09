@@ -463,6 +463,13 @@ let masterOutputVolume = 1;
 let devicePrefs = { micId: '', speakerId: '', cameraId: '' };
 let keybinds = { muteSelf: '', deafen: '' };
 
+// Notas privadas sobre membros -- igual devicePrefs/keybinds acima, só ficam
+// salvas neste PC (não sincronizam com a conta nem com o servidor). Mapa
+// identity -> texto da nota. É o "Adicionar nota" do menu de contexto de um
+// membro, que no Discord é visível só pra quem escreveu.
+let memberNotes = {};
+let saveMemberNotesTimer = null;
+
 const joinSound = new Audio('assets/sound-join.wav');
 const leaveSound = new Audio('assets/sound-leave.wav');
 const muteSound = new Audio('assets/sound-mute.wav');
@@ -987,6 +994,22 @@ async function loadPrefsFromConfig(cfg) {
   if (keybinds.deafen) await window.vortex.setShortcut('deafen', keybinds.deafen);
 }
 
+function loadMemberNotesFromConfig(cfg) {
+  memberNotes = Object.assign({}, cfg.memberNotes || {});
+}
+
+// Salva as notas com um delayzinho (debounce) pra não gravar o config.json a
+// cada tecla digitada -- só grava de fato uns instantes depois que a pessoa
+// para de digitar.
+function scheduleSaveMemberNotes() {
+  clearTimeout(saveMemberNotesTimer);
+  saveMemberNotesTimer = setTimeout(async () => {
+    const cfg = (await window.vortex.getConfig()) || {};
+    cfg.memberNotes = memberNotes;
+    await window.vortex.setConfig(cfg);
+  }, 500);
+}
+
 // ---------- efeitos sonoros (soundboard) ----------
 // Guardado só neste PC (não segue a conta pra outros dispositivos, diferente
 // do perfil) — cada som vira um data URL (base64) dentro do config.json,
@@ -1179,6 +1202,7 @@ async function init() {
 
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
+  loadMemberNotesFromConfig(cfg);
   loadProfileFromConfig(cfg);
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
@@ -1741,6 +1765,23 @@ function switchToDm(peerIdentity) {
   renderDmList();
   renderChatForActiveChannel();
   ensureChannelHistoryLoaded(activeTextChannelId);
+}
+
+// Insere "@Fulano " no campo de mensagem da conversa que a pessoa está --
+// igual Discord: clicar em "Mencionar" no menu de um membro não abre nada
+// novo, só joga o @ dela no meio do que você já tava escrevendo (ou no
+// começo, se o campo tava vazio). Se a pessoa estava na visão de voz (sem
+// o chat aparecendo), troca pra visão de texto primeiro.
+function insertMention(identity) {
+  if (!activeTextChannelId) return;
+  showTextView();
+  const mention = `@${displayNameFor(identity)} `;
+  const start = chatInput.selectionStart ?? chatInput.value.length;
+  const end = chatInput.selectionEnd ?? chatInput.value.length;
+  chatInput.value = chatInput.value.slice(0, start) + mention + chatInput.value.slice(end);
+  chatInput.focus();
+  const cursor = start + mention.length;
+  chatInput.setSelectionRange(cursor, cursor);
 }
 
 function renderDmHeader() {
@@ -4272,19 +4313,7 @@ function openContextMenu(x, y, participant, opts = {}) {
   // pra quem pode gerenciar cargos, atribuir cargo mesmo assim (isso não
   // depende da pessoa estar online).
   if (opts.isOffline) {
-    const profileItem = document.createElement('div');
-    profileItem.className = 'context-menu-item';
-    const profileLabel = document.createElement('span');
-    profileLabel.className = 'label';
-    profileLabel.textContent = 'Ver perfil';
-    profileItem.appendChild(profileLabel);
-    profileItem.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeContextMenu();
-      openProfileCard(x, y, identity);
-    });
-    menu.appendChild(profileItem);
-
+    appendSocialSection(menu, identity, x, y);
     appendRolesSection(menu, identity);
 
     document.body.appendChild(menu);
@@ -4292,6 +4321,9 @@ function openContextMenu(x, y, participant, opts = {}) {
     positionContextMenu(x, y, menu);
     return;
   }
+
+  appendSocialSection(menu, identity, x, y);
+  menu.appendChild(dividerEl());
 
   // Se o menu foi aberto em cima da transmissão de tela dela (não só a
   // câmera), diferencia os dois volumes -- senão "Volume" sozinho ficaria
@@ -4407,6 +4439,103 @@ function openContextMenu(x, y, participant, opts = {}) {
   document.body.appendChild(menu);
   contextMenuEl = menu;
   positionContextMenu(x, y, menu);
+}
+
+// Monta a seção "social" do menu de contexto de um membro -- Ver perfil,
+// Mencionar, Mensagem e Adicionar/Editar nota, igual Discord. Reaproveitada
+// tanto pro menu normal (gente online) quanto pro de gente offline: nenhuma
+// dessas 4 ações depende da pessoa estar conectada agora (ver perfil, mandar
+// mensagem, mencionar no chat ou anotar algo sobre ela funcionam do mesmo
+// jeito). "Iniciar chamada" fica de fora por enquanto -- ainda não existe
+// nenhum sistema de chamada privada no app, é um projeto maior à parte.
+function appendSocialSection(menu, identity, x, y) {
+  const profileItem = document.createElement('div');
+  profileItem.className = 'context-menu-item';
+  const profileLabel = document.createElement('span');
+  profileLabel.className = 'label';
+  profileLabel.textContent = 'Ver perfil';
+  profileItem.appendChild(profileLabel);
+  profileItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeContextMenu();
+    openProfileCard(x, y, identity);
+  });
+  menu.appendChild(profileItem);
+
+  const mentionItem = document.createElement('div');
+  mentionItem.className = 'context-menu-item';
+  const mentionLabel = document.createElement('span');
+  mentionLabel.className = 'label';
+  mentionLabel.textContent = 'Mencionar';
+  mentionItem.appendChild(mentionLabel);
+  mentionItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeContextMenu();
+    insertMention(identity);
+  });
+  menu.appendChild(mentionItem);
+
+  const messageItem = document.createElement('div');
+  messageItem.className = 'context-menu-item';
+  const messageLabel = document.createElement('span');
+  messageLabel.className = 'label';
+  messageLabel.textContent = 'Mensagem';
+  messageItem.appendChild(messageLabel);
+  messageItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeContextMenu();
+    switchToDm(identity);
+  });
+  menu.appendChild(messageItem);
+
+  appendMemberNoteSection(menu, identity);
+}
+
+// Item "Adicionar nota"/"Editar nota" expansível (igual "Cargos": clica pra
+// abrir uma caixinha de texto embaixo, sem fechar o menu). A nota é só
+// local -- guardada no config.json deste PC via memberNotes, nunca vai pro
+// servidor nem aparece pra mais ninguém, exatamente o "visível apenas para
+// você" do Discord.
+function appendMemberNoteSection(menu, identity) {
+  const hasNote = !!(memberNotes[identity] || '').trim();
+
+  const noteToggleItem = document.createElement('div');
+  noteToggleItem.className = 'context-menu-item';
+  const noteLabel = document.createElement('span');
+  noteLabel.className = 'label';
+  noteLabel.textContent = hasNote ? 'Editar nota' : 'Adicionar nota';
+  noteToggleItem.appendChild(noteLabel);
+  const chevron = document.createElement('span');
+  chevron.className = 'context-menu-chevron';
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+  noteToggleItem.appendChild(chevron);
+  menu.appendChild(noteToggleItem);
+
+  const noteWrap = document.createElement('div');
+  noteWrap.className = 'context-menu-submenu context-menu-note';
+  noteWrap.hidden = true;
+  const noteTextarea = document.createElement('textarea');
+  noteTextarea.className = 'context-menu-note-textarea';
+  noteTextarea.maxLength = 300;
+  noteTextarea.placeholder = 'Só você vê essa nota';
+  noteTextarea.value = memberNotes[identity] || '';
+  noteTextarea.addEventListener('click', (e) => e.stopPropagation());
+  noteTextarea.addEventListener('input', () => {
+    const text = noteTextarea.value;
+    if (text.trim()) memberNotes[identity] = text;
+    else delete memberNotes[identity];
+    scheduleSaveMemberNotes();
+  });
+  noteWrap.appendChild(noteTextarea);
+  menu.appendChild(noteWrap);
+
+  noteToggleItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    noteWrap.hidden = !noteWrap.hidden;
+    chevron.classList.toggle('open', !noteWrap.hidden);
+    if (!noteWrap.hidden) noteTextarea.focus();
+  });
 }
 
 // Monta a seção "Cargos" (expansível, clica pra abrir/fechar) dentro de um

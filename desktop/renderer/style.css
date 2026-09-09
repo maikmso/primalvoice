@@ -1462,6 +1462,28 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 }
 .context-menu-submenu .context-menu-item { padding-left: 26px; }
 
+/* Caixinha de texto da nota privada de um membro ("Adicionar nota" no menu
+   de contexto) -- some abaixo do item ao expandir, igual a lista de Cargos,
+   só que com um textarea em vez de itens clicáveis. */
+.context-menu-note { padding: 2px 12px 8px; }
+.context-menu-note-textarea {
+  width: 100%;
+  min-height: 52px;
+  resize: vertical;
+  background: var(--surface-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+.context-menu-note-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* Popover de dispositivo de entrada/saída (setinha do lado do mic/fone,
    igual o Discord) — reaproveita .context-menu, só acrescenta o "rádio"
    de seleção e o iconezinho de engrenagem da linha "Configurações de voz" */
