@@ -921,6 +921,9 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   -webkit-user-drag: none;
 }
 .chat-message .text .chat-link:hover { text-decoration: underline; }
+/* "@Nome" reconhecido dentro de uma mensagem -- mesma cor de link, igual o
+   usuário pediu ("destacado em azul igual o link"). */
+.chat-mention { color: var(--link-color); font-weight: 600; }
 .chat-message.self .author { color: var(--accent-2); }
 .chat-message .attachment { margin-top: 6px; }
 .edited-marker { font-size: 11px; color: var(--muted); }
@@ -1503,6 +1506,34 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   border-color: var(--accent);
 }
 .context-menu-nickname-form input::placeholder { color: var(--muted); }
+
+/* Listinha de autocomplete que abre ao digitar "@" no campo de mensagem —
+   flutua colada em cima do campo (posição calculada em JS via left/width/
+   bottom, ver renderMentionAutocomplete), mesmo visual do .context-menu. */
+.mention-autocomplete {
+  position: fixed;
+  z-index: 100;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.mention-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.mention-autocomplete-item .avatar { width: 22px; height: 22px; font-size: 11px; flex-shrink: 0; }
+.mention-autocomplete-item.active,
+.mention-autocomplete-item:hover { background: var(--hover-strong); }
 
 /* Popover de dispositivo de entrada/saída (setinha do lado do mic/fone,
    igual o Discord) — reaproveita .context-menu, só acrescenta o "rádio"

@@ -397,6 +397,11 @@ const historyLoadedFor = new Set();
 // Contagem de mensagens não lidas por canal/DM (channelId -> quantidade),
 // tipo Discord — some assim que a pessoa abre aquela conversa.
 const unreadCounts = new Map();
+// Quais desses canais/DMs têm, entre as não lidas, alguma mensagem que me
+// @mencionou — nesse caso o badge mostra "@" em vez do número (ver
+// messageMentionsMe/badgeText). Some junto com o unreadCounts, na mesma
+// hora (abrir a conversa == ler a menção também).
+const mentionedChannels = new Set();
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
 const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName }
@@ -443,6 +448,51 @@ function displayNameFor(identity) {
   if (nickname) return nickname;
   if (identity === myIdentity) return myDisplayName || myName || identity;
   return memberProfiles.get(identity)?.displayName || identity;
+}
+
+// Todo mundo que já apareceu de algum jeito (perfil público, mensagem
+// antiga, presença ao vivo, dono do servidor) -- usado tanto pra reconhecer
+// "@Nome" dentro de uma mensagem quanto pra montar a lista de sugestões do
+// autocomplete de menção (ver buildMentionRegex/openMentionAutocomplete).
+function allKnownMemberIdentities() {
+  const known = new Set(Object.keys(serverState.profiles || {}));
+  knownIdentities.forEach((id) => known.add(id));
+  if (serverState.ownerIdentity) known.add(serverState.ownerIdentity);
+  known.add(myIdentity);
+  return Array.from(known);
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Regex que reconhece "@Nome" de qualquer um conhecido dentro de um texto —
+// nomes mais longos primeiro (senão "@Ana Maria" bateria só com "@Ana" se
+// "Ana" também existisse) e nunca no meio de uma palavra maior (o "(?!\w)"
+// no final evita "@Maik" bater dentro de "@Maikzinho").
+function buildMentionRegex() {
+  const names = Array.from(new Set(allKnownMemberIdentities().map(displayNameFor).filter(Boolean))).sort(
+    (a, b) => b.length - a.length
+  );
+  if (!names.length) return null;
+  return new RegExp(`@(?:${names.map(escapeRegExp).join('|')})(?!\\w)`, 'g');
+}
+
+// Essa mensagem me @menciona? (usado pra decidir se o badge de não lida
+// mostra "@" em vez do número — ver pushChatMessage/badgeText)
+function messageMentionsMe(text) {
+  if (!text) return false;
+  const myName = displayNameFor(myIdentity);
+  if (!myName) return false;
+  const re = new RegExp(`@${escapeRegExp(myName)}(?!\\w)`, 'i');
+  return re.test(text);
+}
+
+// Texto do badge de não lida: "@" quando tem menção esperando, senão o
+// número de mensagens não lidas (com um teto em "99+", igual Discord).
+function badgeText(count, hasMention) {
+  if (hasMention) return '@';
+  return count > 99 ? '99+' : String(count);
 }
 
 const chatEncoder = new TextEncoder();
@@ -1425,7 +1475,7 @@ function buildChannelItemEl(channel, type) {
       el.classList.add('has-unread');
       const badge = document.createElement('span');
       badge.className = 'channel-badge';
-      badge.textContent = unread > 99 ? '99+' : String(unread);
+      badge.textContent = badgeText(unread, mentionedChannels.has(channel.id));
       el.appendChild(badge);
     }
   }
@@ -1738,6 +1788,7 @@ function switchTextChannel(channelId) {
   lastServerTextChannelId = channelId;
   showServerView();
   unreadCounts.delete(channelId);
+  mentionedChannels.delete(channelId);
   const channel = serverState.channels.text.find((c) => c.id === channelId);
   channelHeaderIcon.innerHTML = HASH_ICON_SVG;
   channelHeaderName.textContent = channel ? channel.name : '';
@@ -1764,6 +1815,7 @@ function switchToDm(peerIdentity) {
   activeTextChannelId = dmChannelKey(peerIdentity);
   showDmsView();
   unreadCounts.delete(activeTextChannelId);
+  mentionedChannels.delete(activeTextChannelId);
   channelHeaderIcon.innerHTML = DM_ICON_SVG;
   channelHeaderName.textContent = displayNameFor(peerIdentity);
   chatInput.placeholder = `Conversar com @${displayNameFor(peerIdentity)}`;
@@ -1824,7 +1876,7 @@ function renderDmList() {
         row.classList.add('has-unread');
         const badge = document.createElement('span');
         badge.className = 'channel-badge';
-        badge.textContent = unread > 99 ? '99+' : String(unread);
+        badge.textContent = badgeText(unread, mentionedChannels.has(dmChannelKey(identity)));
         row.appendChild(badge);
       }
 
@@ -1868,7 +1920,7 @@ function updateRailBadges() {
         if (unread > 0) {
           const badge = document.createElement('span');
           badge.className = 'server-icon-badge';
-          badge.textContent = unread > 99 ? '99+' : String(unread);
+          badge.textContent = badgeText(unread, mentionedChannels.has(dmChannelKey(identity)));
           icon.appendChild(badge);
         }
 
@@ -1878,21 +1930,25 @@ function updateRailBadges() {
   }
 
   let homeUnread = 0;
+  let homeHasMention = false;
   dmPeers.forEach((identity) => {
     homeUnread += unreadCounts.get(dmChannelKey(identity)) || 0;
+    if (mentionedChannels.has(dmChannelKey(identity))) homeHasMention = true;
   });
   if (homeUnreadBadge) {
     homeUnreadBadge.hidden = homeUnread <= 0;
-    homeUnreadBadge.textContent = homeUnread > 99 ? '99+' : String(homeUnread);
+    homeUnreadBadge.textContent = badgeText(homeUnread, homeHasMention);
   }
 
   let serverUnread = 0;
+  let serverHasMention = false;
   serverState.channels.text.forEach((ch) => {
     serverUnread += unreadCounts.get(ch.id) || 0;
+    if (mentionedChannels.has(ch.id)) serverHasMention = true;
   });
   if (serverUnreadBadge) {
     serverUnreadBadge.hidden = serverUnread <= 0;
-    serverUnreadBadge.textContent = serverUnread > 99 ? '99+' : String(serverUnread);
+    serverUnreadBadge.textContent = badgeText(serverUnread, serverHasMention);
   }
 }
 
@@ -2146,7 +2202,7 @@ function renderMessageTextWithLinks(container, text) {
   let match;
   while ((match = CHAT_URL_REGEX.exec(text))) {
     if (match.index > lastIndex) {
-      container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      appendTextWithMentions(container, text.slice(lastIndex, match.index));
     }
     // tira pontuação de fechamento que normalmente não faz parte do link em
     // si (ex: "olha isso: https://x.com/y." ou "(https://x.com/y)")
@@ -2167,8 +2223,31 @@ function renderMessageTextWithLinks(container, text) {
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) {
-    container.appendChild(document.createTextNode(text.slice(lastIndex)));
+    appendTextWithMentions(container, text.slice(lastIndex));
   }
+}
+
+// Escreve um pedaço de texto (sem nenhum link já identificado ali dentro),
+// destacando em azul qualquer "@Nome" que bata com alguém conhecido —
+// exatamente igual um link (mesma cor), só que sem abrir nada ao clicar.
+function appendTextWithMentions(container, segment) {
+  const mentionRe = buildMentionRegex();
+  if (!mentionRe) {
+    container.appendChild(document.createTextNode(segment));
+    return;
+  }
+  let last = 0;
+  let m;
+  mentionRe.lastIndex = 0;
+  while ((m = mentionRe.exec(segment))) {
+    if (m.index > last) container.appendChild(document.createTextNode(segment.slice(last, m.index)));
+    const span = document.createElement('span');
+    span.className = 'chat-mention';
+    span.textContent = m[0];
+    container.appendChild(span);
+    last = m.index + m[0].length;
+  }
+  if (last < segment.length) container.appendChild(document.createTextNode(segment.slice(last)));
 }
 
 // Cartãozinho de prévia de vídeo do YouTube embaixo da mensagem, igual o
@@ -2478,6 +2557,7 @@ function pushChatMessage(channelId, msg) {
     appendChatMessageEl(msg);
   } else if (!msg.isSelf) {
     unreadCounts.set(channelId, (unreadCounts.get(channelId) || 0) + 1);
+    if (messageMentionsMe(msg.text)) mentionedChannels.add(channelId);
     renderChannelLists();
     renderDmList();
   }
@@ -2562,6 +2642,7 @@ function sendDirectMessage(peerIdentity, text) {
 
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
+  closeMentionAutocomplete();
   const text = chatInput.value.trim();
   if (!text || !lobbyRoom || !activeTextChannelId) return;
   chatInput.value = '';
@@ -2576,6 +2657,140 @@ chatForm.addEventListener('submit', (e) => {
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
   pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
   persistChatMessage(activeTextChannelId, { id, text });
+});
+
+// ---------- autocomplete de @menção no campo de mensagem ----------
+// Igual Discord: digitar "@" no meio da mensagem abre uma listinha de quem
+// dá pra mencionar, filtrando conforme continua digitando; Enter/Tab ou
+// clicar escolhe alguém, ArrowUp/ArrowDown navega, Esc fecha. O texto final
+// inserido é sempre "@NomeDeExibição " puro (mesmo formato que insertMention
+// já usa vindo do menu de contexto) -- é o que buildMentionRegex reconhece
+// depois pra destacar em azul, e o que messageMentionsMe usa pra saber se
+// alguém foi mencionado.
+let mentionAutocompleteEl = null;
+let mentionAutocompleteMatches = [];
+let mentionAutocompleteIndex = 0;
+let mentionAutocompleteRange = null; // { start, end } dentro de chatInput.value
+
+function closeMentionAutocomplete() {
+  if (mentionAutocompleteEl) mentionAutocompleteEl.remove();
+  mentionAutocompleteEl = null;
+  mentionAutocompleteMatches = [];
+  mentionAutocompleteRange = null;
+}
+
+// Acha o "@fragmento" que está sendo digitado bem antes do cursor, se
+// houver -- só conta como "em andamento" quando não tem espaço nenhum entre
+// o @ e o cursor, e o próprio @ está no começo do texto ou logo depois de
+// um espaço (senão "fulano@dominio.com" ia abrir a listinha no meio de um
+// e-mail, por exemplo).
+function findMentionTrigger() {
+  const cursor = chatInput.selectionStart;
+  if (cursor == null) return null;
+  const text = chatInput.value;
+  let at = -1;
+  for (let i = cursor - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === '@') {
+      at = i;
+      break;
+    }
+    if (/\s/.test(ch)) break;
+  }
+  if (at === -1) return null;
+  if (at > 0 && !/\s/.test(text[at - 1])) return null;
+  return { start: at, end: cursor, fragment: text.slice(at + 1, cursor) };
+}
+
+function renderMentionAutocomplete() {
+  if (mentionAutocompleteEl) mentionAutocompleteEl.remove();
+
+  const menu = document.createElement('div');
+  menu.className = 'mention-autocomplete';
+  mentionAutocompleteMatches.forEach((m, idx) => {
+    const item = document.createElement('div');
+    item.className = 'mention-autocomplete-item';
+    item.classList.toggle('active', idx === mentionAutocompleteIndex);
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar';
+    avatar.textContent = m.name.charAt(0).toUpperCase();
+    applyAvatarToEl(avatar, m.identity);
+    item.appendChild(avatar);
+    const label = document.createElement('span');
+    label.textContent = m.name;
+    item.appendChild(label);
+    // mousedown (não click) + preventDefault pra não roubar o foco do campo
+    // de digitação antes da gente conseguir usar a seleção atual dele
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectMentionCandidate(idx);
+    });
+    menu.appendChild(item);
+  });
+
+  document.body.appendChild(menu);
+  const rect = chatInput.getBoundingClientRect();
+  menu.style.left = `${rect.left}px`;
+  menu.style.width = `${rect.width}px`;
+  menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  mentionAutocompleteEl = menu;
+}
+
+function updateMentionAutocomplete() {
+  const trigger = findMentionTrigger();
+  if (!trigger) {
+    closeMentionAutocomplete();
+    return;
+  }
+  const query = trigger.fragment.toLowerCase();
+  const matches = allKnownMemberIdentities()
+    .map((identity) => ({ identity, name: displayNameFor(identity) }))
+    .filter((m) => m.name && m.name.toLowerCase().startsWith(query))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 8);
+
+  if (matches.length === 0) {
+    closeMentionAutocomplete();
+    return;
+  }
+  mentionAutocompleteMatches = matches;
+  mentionAutocompleteRange = { start: trigger.start, end: trigger.end };
+  mentionAutocompleteIndex = Math.min(mentionAutocompleteIndex, matches.length - 1);
+  renderMentionAutocomplete();
+}
+
+function selectMentionCandidate(idx) {
+  const candidate = mentionAutocompleteMatches[idx];
+  if (!candidate || !mentionAutocompleteRange) return;
+  const { start, end } = mentionAutocompleteRange;
+  const inserted = `@${candidate.name} `;
+  chatInput.value = chatInput.value.slice(0, start) + inserted + chatInput.value.slice(end);
+  const cursor = start + inserted.length;
+  closeMentionAutocomplete();
+  chatInput.focus();
+  chatInput.setSelectionRange(cursor, cursor);
+}
+
+chatInput.addEventListener('input', updateMentionAutocomplete);
+
+chatInput.addEventListener('keydown', (e) => {
+  if (!mentionAutocompleteEl || mentionAutocompleteMatches.length === 0) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    mentionAutocompleteIndex = (mentionAutocompleteIndex + 1) % mentionAutocompleteMatches.length;
+    renderMentionAutocomplete();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    mentionAutocompleteIndex =
+      (mentionAutocompleteIndex - 1 + mentionAutocompleteMatches.length) % mentionAutocompleteMatches.length;
+    renderMentionAutocomplete();
+  } else if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    selectMentionCandidate(mentionAutocompleteIndex);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeMentionAutocomplete();
+  }
 });
 
 // ---------- editar/apagar a própria mensagem ----------
