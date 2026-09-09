@@ -1227,11 +1227,13 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .watch-stream-btn:active { transform: scale(0.98); }
 
 /* controles de quem tá assistindo uma transmissão de tela (volume da
-   transmissão, tela cheia de verdade, parar de assistir). Em modo cinema de
-   verdade essa barrinha some -- foi substituída pela barra flutuante
-   (cinema-controls-bar), ver updateFloatingBarVisibility no app.js. Fora
-   disso aparece ao passar o mouse na miniatura pequena, e sempre visível na
-   telinha expandida comum (dentro da grade, sem cinema de verdade). */
+   transmissão, tela cheia de verdade, parar de assistir). Só aparece ao
+   passar o mouse na MINIATURA PEQUENA (dentro da grade, não expandida) --
+   assim que a telinha expande (cinema de verdade ou só expandida dentro da
+   grade), essa barrinha some de vez e quem assume é a barra flutuante
+   grande (cinema-controls-bar, ver updateFloatingBarVisibility no app.js).
+   Antes as duas apareciam juntas na telinha expandida comum, uma por cima
+   da outra -- ficava duplicado e confuso. */
 .screen-share-controls {
   position: absolute;
   bottom: 14px;
@@ -1244,10 +1246,13 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   pointer-events: none;
   transition: opacity 0.15s ease;
 }
-.tile:hover .screen-share-controls,
-.tile.expanded .screen-share-controls {
+.tile:hover .screen-share-controls {
   opacity: 1;
   pointer-events: auto;
+}
+.tile.expanded .screen-share-controls {
+  opacity: 0;
+  pointer-events: none;
 }
 .screen-share-ctrl-btn {
   width: 34px;
