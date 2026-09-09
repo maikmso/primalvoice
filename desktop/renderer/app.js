@@ -315,6 +315,7 @@ const PERMISSION_LABELS = {
   kickMembers: 'Expulsar membros da chamada',
   muteMembers: 'Silenciar membros (pede pro app deles mutar)',
   deafenMembers: 'Ensurdecer membros (pede pro app deles parar de ouvir)',
+  manageNicknames: 'Alterar apelido de outros membros',
 };
 const PERMISSION_KEYS = Object.keys(PERMISSION_LABELS);
 
@@ -433,7 +434,13 @@ function isDmChannelId(id) {
 function dmPeerFromChannelId(id) {
   return id.slice(3);
 }
+// O apelido definido pra essa pessoa NESTE servidor (serverState.nicknames)
+// tem prioridade sobre o nome de exibição da conta dela -- igual Discord,
+// onde o apelido do servidor é o que todo mundo vê por aqui, mas não muda o
+// nome "de verdade" da conta em nenhum outro lugar.
 function displayNameFor(identity) {
+  const nickname = serverState.nicknames?.[identity];
+  if (nickname) return nickname;
   if (identity === myIdentity) return myDisplayName || myName || identity;
   return memberProfiles.get(identity)?.displayName || identity;
 }
@@ -4488,7 +4495,71 @@ function appendSocialSection(menu, identity, x, y) {
   });
   menu.appendChild(messageItem);
 
+  appendNicknameSection(menu, identity);
   appendMemberNoteSection(menu, identity);
+}
+
+// Item "Alterar apelido" expansível -- troca como essa pessoa aparece SÓ
+// neste servidor (não mexe no nome de exibição da conta dela). Só aparece
+// pra quem tem a permissão de gerenciar apelidos (dono do servidor sempre
+// tem). Igual "Adicionar nota": clica pra abrir um campinho embaixo, dá
+// Enter pra salvar, sem fechar o menu.
+function appendNicknameSection(menu, identity) {
+  if (!myPermissions.manageNicknames) return;
+
+  const currentNickname = serverState.nicknames?.[identity] || '';
+
+  const toggleItem = document.createElement('div');
+  toggleItem.className = 'context-menu-item';
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = 'Alterar apelido';
+  toggleItem.appendChild(label);
+  const chevron = document.createElement('span');
+  chevron.className = 'context-menu-chevron';
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+  toggleItem.appendChild(chevron);
+  menu.appendChild(toggleItem);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'context-menu-submenu context-menu-nickname';
+  wrap.hidden = true;
+
+  const form = document.createElement('form');
+  form.className = 'context-menu-nickname-form';
+  form.addEventListener('click', (e) => e.stopPropagation());
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 32;
+  input.placeholder = displayNameFor(identity);
+  input.value = currentNickname;
+  form.appendChild(input);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const data = await apiFetch(`/api/members/${encodeURIComponent(identity)}/nickname`, {
+        method: 'POST',
+        body: JSON.stringify({ nickname: input.value }),
+      });
+      serverState.nicknames = data.nicknames;
+      applyProfileEverywhere(identity);
+      renderMemberSidebar();
+      broadcastStateChanged();
+      closeContextMenu();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  wrap.appendChild(form);
+  menu.appendChild(wrap);
+
+  toggleItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    wrap.hidden = !wrap.hidden;
+    chevron.classList.toggle('open', !wrap.hidden);
+    if (!wrap.hidden) input.focus();
+  });
 }
 
 // Item "Adicionar nota"/"Editar nota" expansível (igual "Cargos": clica pra

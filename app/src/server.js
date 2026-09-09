@@ -267,6 +267,7 @@ app.get('/api/state', requireAuth, (req, res) => {
     channels: s.channels,
     roles: s.roles,
     memberRoles: s.memberRoles,
+    nicknames: s.nicknames,
     ownerIdentity: s.ownerIdentity,
     serverIcon: s.serverIcon || '',
     myIdentity: req.identity,
@@ -441,6 +442,27 @@ app.post('/api/members/:identity/roles', requireAuth, requirePermission('manageR
     else delete state.memberRoles[targetIdentity];
   });
   res.json({ memberRoles: s.memberRoles });
+});
+
+// Apelido de alguém SÓ dentro deste servidor (igual "Alterar apelido" do
+// Discord) -- não mexe no nome de exibição da conta, só como aparece aqui.
+// Qualquer um pode mudar o PRÓPRIO apelido; mudar o de outra pessoa exige a
+// permissão de gerenciar apelidos (dono do servidor sempre tem, por causa
+// de getPermissions).
+app.post('/api/members/:identity/nickname', requireAuth, (req, res) => {
+  const targetIdentity = req.params.identity;
+  const { nickname } = req.body || {};
+  if (typeof nickname !== 'string') {
+    return res.status(400).json({ error: 'Requisição inválida.' });
+  }
+
+  const isSelf = targetIdentity === req.identity;
+  if (!isSelf && !store.getPermissions(req.identity).manageNicknames) {
+    return res.status(403).json({ error: 'Você não tem permissão pra fazer isso.' });
+  }
+
+  const nicknames = store.setNickname(targetIdentity, nickname);
+  res.json({ nicknames });
 });
 
 // Expulsa alguém agora (a pessoa consegue entrar de novo depois — isso não

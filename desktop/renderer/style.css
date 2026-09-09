@@ -1484,6 +1484,26 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   border-color: var(--accent);
 }
 
+/* Campinho de "Alterar apelido" -- um input só, aperta Enter pra salvar
+   (mesmo espírito do campinho de DM rápida no cartão de perfil). */
+.context-menu-nickname { padding: 2px 12px 8px; }
+.context-menu-nickname-form input {
+  width: 100%;
+  background: var(--surface-deep);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.context-menu-nickname-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.context-menu-nickname-form input::placeholder { color: var(--muted); }
+
 /* Popover de dispositivo de entrada/saída (setinha do lado do mic/fone,
    igual o Discord) — reaproveita .context-menu, só acrescenta o "rádio"
    de seleção e o iconezinho de engrenagem da linha "Configurações de voz" */

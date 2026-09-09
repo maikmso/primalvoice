@@ -30,7 +30,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   );
 }
 
-const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'muteMembers', 'deafenMembers'];
+const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'muteMembers', 'deafenMembers', 'manageNicknames'];
 
 // Tamanho máximo (em caracteres da data URL) pra foto/banner de perfil —
 // fica salvo dentro do state.json, então não pode deixar crescer sem limite.
@@ -55,6 +55,11 @@ function defaultState() {
     },
     roles: [],
     memberRoles: {},
+    // apelido de alguém SÓ dentro deste servidor (igual "Alterar apelido" do
+    // Discord) -- não mexe no nome de exibição da conta dela, só como
+    // aparece aqui pros outros membros. chave = identity, valor = string;
+    // quem não tem apelido definido simplesmente não entra neste mapa.
+    nicknames: {},
     // chave = nome de usuário em minúsculo; identity guarda a grafia original
     users: {},
     // chave = id do canal de texto, ou "dm:identityA|identityB" (ordenado)
@@ -83,6 +88,7 @@ function normalizeState(parsed) {
     },
     roles: Array.isArray(parsed.roles) ? parsed.roles : [],
     memberRoles: parsed.memberRoles && typeof parsed.memberRoles === 'object' ? parsed.memberRoles : {},
+    nicknames: parsed.nicknames && typeof parsed.nicknames === 'object' ? parsed.nicknames : {},
     users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
     messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
   };
@@ -248,6 +254,19 @@ function getPublicProfiles() {
   return out;
 }
 
+// Define (ou limpa, se vier vazio) o apelido de alguém dentro deste
+// servidor. Quem chama (a rota em server.js) já decidiu se quem está
+// pedindo pode mexer no apelido dessa identity (ou é o próprio dono do
+// apelido, ou tem a permissão de gerenciar apelidos) -- aqui só grava.
+function setNickname(identity, nickname) {
+  const clean = typeof nickname === 'string' ? nickname.trim().slice(0, 32) : '';
+  mutate((s) => {
+    if (clean) s.nicknames[identity] = clean;
+    else delete s.nicknames[identity];
+  });
+  return state.nicknames;
+}
+
 function updateServerIcon(icon) {
   mutate((s) => {
     s.serverIcon = icon || '';
@@ -369,6 +388,7 @@ module.exports = {
   verifyUserPassword,
   updateUserProfile,
   getPublicProfiles,
+  setNickname,
   updateServerIcon,
   MAX_IMAGE_LEN,
   dmKey,
