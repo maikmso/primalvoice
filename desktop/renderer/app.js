@@ -2412,6 +2412,8 @@ const EDIT_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"></path></svg>';
 const DELETE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+const EYE_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
 
 // Troca o texto da mensagem por um campinho editável na hora, sem abrir
 // modal nenhum — Enter salva, Esc cancela (igual renomear canal).
@@ -2590,45 +2592,16 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
   }
   body.appendChild(meta);
 
+  // guarda uma referência pro .text (se existir) fora do "if" -- o botão de
+  // editar (mais embaixo) precisa dele mesmo quando a mensagem só tem um
+  // anexo e nenhum texto ainda (editar aí vira "adicionar uma legenda",
+  // igual Discord permite)
+  let textEl = null;
   if (text) {
-    const textEl = document.createElement('div');
+    textEl = document.createElement('div');
     textEl.className = 'text';
     renderMessageTextWithLinks(textEl, text);
     body.appendChild(textEl);
-
-    // só a própria pessoa pode editar/apagar a própria mensagem — e só dá
-    // pra editar mensagem de TEXTO puro (uma que só tem anexo não tem o que
-    // editar, só apagar)
-    if (isSelf && id) {
-      const actions = document.createElement('div');
-      actions.className = 'chat-message-actions';
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'chat-message-action-btn';
-      upgradeTooltip(editBtn, { text: 'Editar', dir: 'top' });
-      editBtn.innerHTML = EDIT_ICON_SVG;
-      editBtn.addEventListener('click', () => {
-        // busca o texto ATUAL no histórico (não o "text" capturado quando a
-        // linha foi desenhada) — senão, editar a mesma mensagem duas vezes e
-        // cancelar com Esc na segunda vez voltava pro texto original de
-        // antes da primeira edição, perdendo a edição já salva
-        const current = findMessageInHistory(activeTextChannelId, id);
-        startInlineMessageEdit(textEl, activeTextChannelId, id, current ? current.text : text);
-      });
-      actions.appendChild(editBtn);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'chat-message-action-btn';
-      upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
-      deleteBtn.innerHTML = DELETE_ICON_SVG;
-      deleteBtn.addEventListener('click', () => {
-        if (confirm('Apagar essa mensagem?')) deleteChatMessage(activeTextChannelId, id);
-      });
-      actions.appendChild(deleteBtn);
-
-      row.appendChild(actions);
-    }
 
     // se a mensagem tem um link do YouTube, mostra um cartãozinho de
     // prévia embaixo (miniatura + título + canal), igual o Discord
@@ -2636,6 +2609,61 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
     if (youtubeVideoId) {
       body.appendChild(buildYoutubeEmbedCard(youtubeVideoId));
     }
+  }
+
+  // só a própria pessoa pode editar/apagar a própria mensagem -- aparece
+  // igual tenha texto, anexo, ou os dois (uma mensagem só com foto também
+  // pode ser editada pra ganhar uma legenda, ou apagada, igual Discord)
+  if (isSelf && id) {
+    const hasImageAttachment = attachment && attachment.url && attachment.type === 'image';
+    const actions = document.createElement('div');
+    actions.className = 'chat-message-actions';
+
+    if (hasImageAttachment) {
+      const viewBtn = document.createElement('button');
+      viewBtn.type = 'button';
+      viewBtn.className = 'chat-message-action-btn';
+      upgradeTooltip(viewBtn, { text: 'Ver imagem', dir: 'top' });
+      viewBtn.innerHTML = EYE_ICON_SVG;
+      viewBtn.addEventListener('click', () => {
+        openImageLightbox(`${serverUrl}${attachment.url}`, attachment.name || 'imagem');
+      });
+      actions.appendChild(viewBtn);
+    }
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'chat-message-action-btn';
+    upgradeTooltip(editBtn, { text: 'Editar', dir: 'top' });
+    editBtn.innerHTML = EDIT_ICON_SVG;
+    editBtn.addEventListener('click', () => {
+      // mensagem só tinha anexo, sem legenda nenhuma -- cria o campinho de
+      // texto na hora (editável), logo depois do cabeçalho autor/hora
+      if (!textEl) {
+        textEl = document.createElement('div');
+        textEl.className = 'text';
+        body.insertBefore(textEl, meta.nextSibling);
+      }
+      // busca o texto ATUAL no histórico (não o "text" capturado quando a
+      // linha foi desenhada) — senão, editar a mesma mensagem duas vezes e
+      // cancelar com Esc na segunda vez voltava pro texto original de
+      // antes da primeira edição, perdendo a edição já salva
+      const current = findMessageInHistory(activeTextChannelId, id);
+      startInlineMessageEdit(textEl, activeTextChannelId, id, current ? current.text || '' : text || '');
+    });
+    actions.appendChild(editBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'chat-message-action-btn';
+    upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
+    deleteBtn.innerHTML = DELETE_ICON_SVG;
+    deleteBtn.addEventListener('click', () => {
+      if (confirm('Apagar essa mensagem?')) deleteChatMessage(activeTextChannelId, id);
+    });
+    actions.appendChild(deleteBtn);
+
+    row.appendChild(actions);
   }
 
   if (attachment && attachment.url) {
