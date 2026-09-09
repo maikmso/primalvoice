@@ -1629,6 +1629,10 @@ function renderChannelLists() {
       presence.forEach((name, identity) => {
         const row = buildMemberRow({ identity, name }, { showStatus: true });
         row.id = channelMemberRowId(identity);
+        // grava o id do canal direto na própria linha (não só no
+        // container-pai) -- clicar no membro usa isso pra saber em qual
+        // canal de voz entrar, sem depender de subir a árvore do DOM
+        row.dataset.voiceChannelId = ch.id;
         membersEl.appendChild(row);
       });
     }
@@ -5114,8 +5118,10 @@ voiceChannelsList.addEventListener('click', (e) => {
   // Clicar no nome de alguém que já está numa chamada de voz leva direto
   // pra essa chamada -- igual clicar no próprio nome do canal. Ver o
   // perfil dela continua dando pra fazer pelo menu de contexto (botão
-  // direito -> Ver perfil).
-  const channelId = row.closest('.voice-members-list')?.dataset.channelId;
+  // direito -> Ver perfil). O id do canal vem gravado na própria linha
+  // (row.dataset.voiceChannelId); mantém o closest() como reforço pra
+  // linhas antigas/caso a linha não tenha o dataset por algum motivo.
+  const channelId = row.dataset.voiceChannelId || row.closest('.voice-members-list')?.dataset.channelId;
   if (channelId) {
     enterVoiceChannel(channelId);
     return;
