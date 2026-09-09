@@ -671,6 +671,7 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   border-radius: 4px;
   font-size: 13px;
   color: var(--muted);
+  cursor: pointer;
 }
 .voice-members-list .member-row { padding-left: 28px; }
 .member-status-badges { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
@@ -927,8 +928,8 @@ body.cinema-mode .screen-share-controls { display: none !important; }
    .chat-input-highlight) -- chip com fundo, igual o Discord de verdade
    (não só texto azul). */
 .chat-mention {
-  color: var(--accent-2);
-  background: var(--accent-soft);
+  color: var(--link-color);
+  background: rgba(0, 175, 244, 0.16);
   border-radius: 3px;
   padding: 0 2px;
   font-weight: 600;
@@ -1175,6 +1176,82 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .chat-attachment-btn svg { width: 18px; height: 18px; }
 .chat-attachment-btn:hover { color: var(--accent-2); border-color: var(--accent); }
 .chat-attachment-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Prévia do anexo "em espera", acima do campo de mensagem -- escolher,
+   arrastar ou colar um arquivo não manda na hora (ver stageAttachment no
+   app.js); fica assim até a pessoa apertar enviar (podendo ainda escrever
+   mais texto pra mandar junto) ou clicar no X pra desistir. */
+.chat-attachment-preview { padding: 10px 16px 0; flex-shrink: 0; }
+.chat-attachment-preview-card {
+  position: relative;
+  display: inline-flex;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+}
+.chat-attachment-preview-thumb {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.chat-attachment-preview-thumb-file { margin: 0; }
+.chat-attachment-preview-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger);
+  color: #fff;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.chat-attachment-preview-remove svg { width: 12px; height: 12px; }
+.chat-attachment-preview-remove:hover { filter: brightness(1.1); }
+
+/* Cartão de anexo que não é imagem/vídeo (pdf, word, zip, etc.) -- tanto
+   numa mensagem já enviada quanto na prévia antes de mandar. */
+.attachment-file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  max-width: 280px;
+}
+a.attachment-file-card:hover { border-color: var(--accent); background: var(--hover-strong); }
+.attachment-file-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--tile-bg);
+  color: var(--link-color);
+}
+.attachment-file-icon svg { width: 18px; height: 18px; }
+.attachment-file-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.attachment-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attachment-file-size { font-size: 11px; color: var(--muted); }
 
 .grid {
   flex: 1;

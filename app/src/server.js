@@ -58,8 +58,14 @@ const upload = multer({
   }),
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (/^image\/|^video\//.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Só é permitido enviar imagens ou vídeos.'));
+    // imagem/vídeo, ou um documento comum (pdf, word, excel, powerpoint,
+    // texto, zip) — igual o Discord aceita basicamente qualquer anexo
+    const isMedia = /^image\/|^video\//.test(file.mimetype);
+    const isDocument = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.|application\/vnd\.ms-excel|application\/vnd\.ms-powerpoint|text\/plain|text\/csv|application\/zip|application\/x-rar-compressed|application\/x-zip-compressed)/.test(
+      file.mimetype
+    );
+    if (isMedia || isDocument) cb(null, true);
+    else cb(new Error('Esse tipo de arquivo não é permitido.'));
   },
 });
 
@@ -494,8 +500,10 @@ app.post('/api/upload', requireAuth, (req, res) => {
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-    const type = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
-    res.json({ url: `/uploads/${req.file.filename}`, type, name: req.file.originalname });
+    let type = 'file';
+    if (req.file.mimetype.startsWith('video/')) type = 'video';
+    else if (req.file.mimetype.startsWith('image/')) type = 'image';
+    res.json({ url: `/uploads/${req.file.filename}`, type, name: req.file.originalname, size: req.file.size });
   });
 });
 

@@ -291,6 +291,7 @@ const keybindDeafenClearBtn = document.getElementById('keybind-deafen-clear-btn'
 
 const chatAttachmentBtn = document.getElementById('chat-attachment-btn');
 const chatAttachmentInput = document.getElementById('chat-attachment-input');
+const chatAttachmentPreview = document.getElementById('chat-attachment-preview');
 
 const sharepickOverlay = document.getElementById('sharepick-overlay');
 const sharepickGrid = document.getElementById('sharepick-grid');
@@ -2494,6 +2495,52 @@ function openImageLightbox(src, alt) {
   document.body.appendChild(overlay);
 }
 
+// "1.2 MB", "340 KB", "87 B" -- pro cartãozinho de anexo/documento e pra
+// prévia de anexo antes de mandar.
+function formatFileSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const FILE_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+
+// Cartão de "documento" (pdf, word, zip, etc.) -- igual Discord mostra pra
+// anexos que não dá pra prever em miniatura: ícone + nome + tamanho, clica
+// pra abrir/baixar. Usado tanto numa mensagem já enviada quanto na prévia
+// de anexo antes de mandar (ver renderAttachmentPreview).
+function buildFileAttachmentCard(src, name, size) {
+  const card = document.createElement(src ? 'a' : 'div');
+  card.className = 'attachment-file-card';
+  if (src) {
+    card.href = src;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+  }
+  const icon = document.createElement('span');
+  icon.className = 'attachment-file-icon';
+  icon.innerHTML = FILE_ICON_SVG;
+  card.appendChild(icon);
+
+  const info = document.createElement('span');
+  info.className = 'attachment-file-info';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'attachment-file-name';
+  nameEl.textContent = name || 'arquivo';
+  info.appendChild(nameEl);
+  const sizeText = formatFileSize(size);
+  if (sizeText) {
+    const sizeEl = document.createElement('span');
+    sizeEl.className = 'attachment-file-size';
+    sizeEl.textContent = sizeText;
+    info.appendChild(sizeEl);
+  }
+  card.appendChild(info);
+  return card;
+}
+
 function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
@@ -2596,13 +2643,18 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
       video.src = src;
       video.controls = true;
       wrap.appendChild(video);
-    } else {
+    } else if (attachment.type === 'image') {
       const img = document.createElement('img');
       img.src = src;
       img.alt = attachment.name || 'imagem';
       // clica na miniatura e abre em tamanho grande, igual Discord
       img.addEventListener('click', () => openImageLightbox(src, img.alt));
       wrap.appendChild(img);
+    } else {
+      // documento (pdf, word, zip, etc.) -- não dá pra mostrar miniatura,
+      // então mostra um cartãozinho com ícone + nome + tamanho, igual
+      // Discord faz com anexos que não são imagem/vídeo. Clicar abre/baixa.
+      wrap.appendChild(buildFileAttachmentCard(src, attachment.name, attachment.size));
     }
     body.appendChild(wrap);
   }
@@ -2707,24 +2759,118 @@ function sendDirectMessage(peerIdentity, text) {
   persistChatMessage(channelId, { id, text });
 }
 
+// Anexo "em espera" -- igual Discord: escolher/colar/arrastar um arquivo
+// não manda na hora. Ele fica anexado (com prévia acima do campo) e a
+// pessoa ainda pode escrever mais texto pra mandar os dois juntos, ou
+// desistir (botão de remover na prévia) antes de apertar enviar.
+let pendingAttachment = null; // { file, previewUrl } ou null
+
+function clearPendingAttachment() {
+  if (pendingAttachment && pendingAttachment.previewUrl) {
+    URL.revokeObjectURL(pendingAttachment.previewUrl);
+  }
+  pendingAttachment = null;
+  chatAttachmentPreview.hidden = true;
+  chatAttachmentPreview.innerHTML = '';
+}
+
+function stageAttachment(file) {
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) {
+    alert('Arquivo muito grande (máx. 25MB).');
+    return;
+  }
+  clearPendingAttachment();
+  const isImage = file.type.startsWith('image/');
+  const previewUrl = isImage ? URL.createObjectURL(file) : null;
+  pendingAttachment = { file, previewUrl };
+  renderAttachmentPreview();
+  chatInput.focus();
+}
+
+function renderAttachmentPreview() {
+  chatAttachmentPreview.innerHTML = '';
+  if (!pendingAttachment) {
+    chatAttachmentPreview.hidden = true;
+    return;
+  }
+  const { file, previewUrl } = pendingAttachment;
+  const card = document.createElement('div');
+  card.className = 'chat-attachment-preview-card';
+
+  if (previewUrl) {
+    const img = document.createElement('img');
+    img.className = 'chat-attachment-preview-thumb';
+    img.src = previewUrl;
+    img.alt = file.name;
+    card.appendChild(img);
+  } else {
+    const fileCard = buildFileAttachmentCard(null, file.name, file.size);
+    fileCard.classList.add('chat-attachment-preview-thumb-file');
+    card.appendChild(fileCard);
+  }
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'chat-attachment-preview-remove';
+  removeBtn.title = 'Remover anexo';
+  removeBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  removeBtn.addEventListener('click', () => clearPendingAttachment());
+  card.appendChild(removeBtn);
+
+  chatAttachmentPreview.appendChild(card);
+  chatAttachmentPreview.hidden = false;
+}
+
+// Ponto único de envio do campo de mensagem: junta texto (pode estar vazio
+// se tiver um anexo) + o anexo em espera (se tiver um) numa mensagem só,
+// igual Discord manda foto+legenda juntos.
+async function sendComposedMessage() {
+  const text = chatInput.value.trim();
+  const file = pendingAttachment ? pendingAttachment.file : null;
+  if (!text && !file) return;
+  if (!lobbyRoom || !activeTextChannelId) return;
+
+  chatAttachmentBtn.disabled = true;
+  try {
+    let attachment = null;
+    if (file) attachment = await uploadChatAttachment(file);
+
+    chatInput.value = '';
+    renderChatInputHighlight();
+    clearPendingAttachment();
+
+    if (isDmChannelId(activeTextChannelId)) {
+      const to = dmPeerFromChannelId(activeTextChannelId);
+      const ts = Date.now();
+      const id = crypto.randomUUID();
+      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id };
+      lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), {
+        reliable: true,
+        destinationIdentities: [to],
+      });
+      pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+      persistChatMessage(activeTextChannelId, { id, text, attachment });
+      return;
+    }
+    const ts = Date.now();
+    const id = crypto.randomUUID();
+    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment, id };
+    lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
+    pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
+    persistChatMessage(activeTextChannelId, { id, text, attachment });
+  } catch (err) {
+    alert(err.message || 'Não consegui enviar a mensagem.');
+  } finally {
+    chatAttachmentBtn.disabled = false;
+  }
+}
+
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
   closeMentionAutocomplete();
-  const text = chatInput.value.trim();
-  if (!text || !lobbyRoom || !activeTextChannelId) return;
-  chatInput.value = '';
-  renderChatInputHighlight();
-
-  if (isDmChannelId(activeTextChannelId)) {
-    sendDirectMessage(dmPeerFromChannelId(activeTextChannelId), text);
-    return;
-  }
-  const ts = Date.now();
-  const id = crypto.randomUUID();
-  const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, id };
-  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-  pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity });
-  persistChatMessage(activeTextChannelId, { id, text });
+  sendComposedMessage();
 });
 
 // ---------- autocomplete de @menção no campo de mensagem ----------
@@ -2973,46 +3119,6 @@ async function uploadChatAttachment(file) {
   return data; // { url, type, name }
 }
 
-// Manda um arquivo pro chat ativo (usado pelo clipezinho, por arrastar
-// arquivo pra dentro da conversa, e por colar print/imagem copiada — os
-// 3 caminhos terminam todos aqui, pra não duplicar a lógica de novo).
-async function sendChatFile(file) {
-  if (!file || !lobbyRoom || !activeTextChannelId) return;
-  if (file.size > 25 * 1024 * 1024) {
-    alert('Arquivo muito grande (máx. 25MB).');
-    return;
-  }
-
-  chatAttachmentBtn.disabled = true;
-  try {
-    const attachment = await uploadChatAttachment(file);
-    const text = chatInput.value.trim();
-    chatInput.value = '';
-    renderChatInputHighlight();
-    const ts = Date.now();
-    const id = crypto.randomUUID();
-    if (isDmChannelId(activeTextChannelId)) {
-      const to = dmPeerFromChannelId(activeTextChannelId);
-      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id };
-      lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), {
-        reliable: true,
-        destinationIdentities: [to],
-      });
-      pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-      persistChatMessage(activeTextChannelId, { id, text, attachment });
-      return;
-    }
-    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment, id };
-    lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-    pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-    persistChatMessage(activeTextChannelId, { id, text, attachment });
-  } catch (err) {
-    alert(err.message || 'Não consegui enviar o arquivo.');
-  } finally {
-    chatAttachmentBtn.disabled = false;
-  }
-}
-
 chatAttachmentBtn.addEventListener('click', () => {
   if (!lobbyRoom || !activeTextChannelId) return;
   chatAttachmentInput.click();
@@ -3021,11 +3127,13 @@ chatAttachmentBtn.addEventListener('click', () => {
 chatAttachmentInput.addEventListener('change', () => {
   const file = chatAttachmentInput.files[0];
   chatAttachmentInput.value = '';
-  sendChatFile(file);
+  if (lobbyRoom && activeTextChannelId) stageAttachment(file);
 });
 
 // Arrastar um arquivo (da área de trabalho, do explorador, de outra janela)
-// e soltar em cima da conversa manda ele igual clicar no clipezinho.
+// e soltar em cima da conversa anexa ele igual clicar no clipezinho (só um
+// por vez -- solta vários e só o primeiro fica anexado, igual Discord só
+// deixa colar/anexar um de cada vez neste app).
 let chatDragCounter = 0;
 textView.addEventListener('dragenter', (e) => {
   if (!lobbyRoom || !activeTextChannelId) return;
@@ -3046,16 +3154,15 @@ textView.addEventListener('drop', (e) => {
   chatDragCounter = 0;
   textView.classList.remove('drag-over');
   if (!lobbyRoom || !activeTextChannelId) return;
-  const files = Array.from(e.dataTransfer?.files || []);
-  // manda um de cada vez (cada arquivo vira uma mensagem própria, igual
-  // já era quando escolhia um arquivo por vez pelo clipezinho)
-  files.reduce((chain, file) => chain.then(() => sendChatFile(file)), Promise.resolve());
+  const file = e.dataTransfer?.files?.[0];
+  if (file) stageAttachment(file);
 });
 
 // Colar (Ctrl+V) uma imagem copiada — print de tela (Win+Shift+S, PrtScn) ou
-// uma imagem copiada de qualquer lugar — manda ela igual um anexo. Só entra
-// nesse caminho se realmente tiver uma IMAGEM na área de transferência; colar
-// texto normal continua funcionando que nem sempre funcionou, sem mudar nada.
+// uma imagem copiada de qualquer lugar — anexa ela igual um anexo escolhido
+// pelo clipezinho. Só entra nesse caminho se realmente tiver uma IMAGEM na
+// área de transferência; colar texto normal continua funcionando, sem mudar
+// nada.
 chatInput.addEventListener('paste', (e) => {
   if (!lobbyRoom || !activeTextChannelId) return;
   const items = Array.from(e.clipboardData?.items || []);
@@ -3063,7 +3170,7 @@ chatInput.addEventListener('paste', (e) => {
   if (!imageItem) return; // sem imagem colada -> deixa o colar de texto normal acontecer
   e.preventDefault();
   const file = imageItem.getAsFile();
-  if (file) sendChatFile(file);
+  if (file) stageAttachment(file);
 });
 
 // ---------- grade de vídeo/tela ----------
