@@ -2453,6 +2453,47 @@ function startInlineMessageEdit(textEl, channelId, id, currentText) {
   textarea.addEventListener('blur', () => finish(true));
 }
 
+// Abre uma imagem do chat em tamanho grande por cima de tudo, igual
+// Discord: clica na miniatura, aparece um fundo escuro com a foto grande no
+// meio; clica em qualquer lugar fora dela (ou no X, ou aperta Esc) fecha de
+// novo. Só imagem -- vídeo já tem os próprios controles nativos (play,
+// tela cheia), não precisa desse tratamento.
+function openImageLightbox(src, alt) {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-lightbox-overlay';
+  overlay.addEventListener('click', () => close());
+
+  const img = document.createElement('img');
+  img.className = 'image-lightbox-img';
+  img.src = src;
+  img.alt = alt || '';
+  img.addEventListener('click', (e) => e.stopPropagation());
+  overlay.appendChild(img);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'image-lightbox-close';
+  closeBtn.title = 'Fechar';
+  closeBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    close();
+  });
+  overlay.appendChild(closeBtn);
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') close();
+  }
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKeyDown);
+  }
+  document.addEventListener('keydown', onKeyDown);
+
+  document.body.appendChild(overlay);
+}
+
 function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
@@ -2559,6 +2600,8 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
       const img = document.createElement('img');
       img.src = src;
       img.alt = attachment.name || 'imagem';
+      // clica na miniatura e abre em tamanho grande, igual Discord
+      img.addEventListener('click', () => openImageLightbox(src, img.alt));
       wrap.appendChild(img);
     }
     body.appendChild(wrap);
