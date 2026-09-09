@@ -4267,6 +4267,32 @@ function openContextMenu(x, y, participant, opts = {}) {
     return;
   }
 
+  // Alguém offline: nada de volume/silenciar/vídeo/expulsar faz sentido (ela
+  // nem está conectada agora) -- menu simplificado só com ver perfil e,
+  // pra quem pode gerenciar cargos, atribuir cargo mesmo assim (isso não
+  // depende da pessoa estar online).
+  if (opts.isOffline) {
+    const profileItem = document.createElement('div');
+    profileItem.className = 'context-menu-item';
+    const profileLabel = document.createElement('span');
+    profileLabel.className = 'label';
+    profileLabel.textContent = 'Ver perfil';
+    profileItem.appendChild(profileLabel);
+    profileItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      openProfileCard(x, y, identity);
+    });
+    menu.appendChild(profileItem);
+
+    appendRolesSection(menu, identity);
+
+    document.body.appendChild(menu);
+    contextMenuEl = menu;
+    positionContextMenu(x, y, menu);
+    return;
+  }
+
   // Se o menu foi aberto em cima da transmissão de tela dela (não só a
   // câmera), diferencia os dois volumes -- senão "Volume" sozinho ficaria
   // ambíguo (voz ou transmissão?).
@@ -4376,9 +4402,66 @@ function openContextMenu(x, y, participant, opts = {}) {
     menu.appendChild(kickItem);
   }
 
+  appendRolesSection(menu, identity);
+
   document.body.appendChild(menu);
   contextMenuEl = menu;
   positionContextMenu(x, y, menu);
+}
+
+// Monta a seção "Cargos" (expansível, clica pra abrir/fechar) dentro de um
+// menu de contexto já existente -- reaproveitada tanto no menu normal
+// quanto no de gente offline. Só aparece pra quem tem permissão de
+// gerenciar cargos e só se já existir pelo menos um cargo criado no
+// servidor. Igual a lista da aba de Cargos, clicar num cargo atribui/tira
+// na hora, sem fechar o menu, pra dar pra marcar vários de uma vez.
+function appendRolesSection(menu, identity) {
+  if (!myPermissions.manageRoles || !(serverState.roles || []).length) return;
+
+  menu.appendChild(dividerEl());
+
+  const rolesToggleItem = document.createElement('div');
+  rolesToggleItem.className = 'context-menu-item';
+  const rolesLabel = document.createElement('span');
+  rolesLabel.className = 'label';
+  rolesLabel.textContent = 'Cargos';
+  rolesToggleItem.appendChild(rolesLabel);
+  const chevron = document.createElement('span');
+  chevron.className = 'context-menu-chevron';
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+  rolesToggleItem.appendChild(chevron);
+  menu.appendChild(rolesToggleItem);
+
+  const rolesSubmenu = document.createElement('div');
+  rolesSubmenu.className = 'context-menu-submenu';
+  rolesSubmenu.hidden = true;
+  serverState.roles.forEach((role) => {
+    const assigned = new Set(serverState.memberRoles[identity] || []).has(role.id);
+    const roleItem = buildToggleItem(role.name, assigned, async (checked) => {
+      try {
+        const data = await apiFetch(`/api/members/${encodeURIComponent(identity)}/roles`, {
+          method: 'POST',
+          body: JSON.stringify({ roleId: role.id, action: checked ? 'add' : 'remove' }),
+        });
+        serverState.memberRoles = data.memberRoles;
+        renderMemberSidebar();
+        refreshAllChatAuthorColors();
+        broadcastStateChanged();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    roleItem.querySelector('.label').style.color = role.color;
+    rolesSubmenu.appendChild(roleItem);
+  });
+  menu.appendChild(rolesSubmenu);
+
+  rolesToggleItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    rolesSubmenu.hidden = !rolesSubmenu.hidden;
+    chevron.classList.toggle('open', !rolesSubmenu.hidden);
+  });
 }
 
 memberListItems.addEventListener('contextmenu', (e) => {
@@ -4399,10 +4482,12 @@ memberListItems.addEventListener('click', (e) => {
 // interna acima — repete os mesmos eventos pra abrir perfil/menu funcionar
 // nela também
 memberSidebarGroups.addEventListener('contextmenu', (e) => {
-  const row = e.target.closest('.member-row');
+  const onlineRow = e.target.closest('.member-row');
+  const offlineRow = e.target.closest('.offline-member-row');
+  const row = onlineRow || offlineRow;
   if (!row || !row.dataset.identity) return;
   e.preventDefault();
-  openContextMenu(e.clientX, e.clientY, participantFromRow(row));
+  openContextMenu(e.clientX, e.clientY, participantFromRow(row), { isOffline: !!offlineRow });
 });
 
 memberSidebarGroups.addEventListener('click', (e) => {

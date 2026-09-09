@@ -1443,6 +1443,25 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 }
 .context-menu-checkbox.checked svg { visibility: visible; }
 
+/* item "Cargos" expansível no menu de contexto de um membro (clica pra abrir/
+   fechar a listinha de cargos logo abaixo, em vez de um flyout do lado —
+   mais simples e não corre risco de sair da tela) */
+.context-menu-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  flex-shrink: 0;
+  display: flex;
+  transition: transform 0.12s ease;
+}
+.context-menu-chevron.open { transform: rotate(90deg); }
+.context-menu-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.context-menu-submenu .context-menu-item { padding-left: 26px; }
+
 /* Popover de dispositivo de entrada/saída (setinha do lado do mic/fone,
    igual o Discord) — reaproveita .context-menu, só acrescenta o "rádio"
    de seleção e o iconezinho de engrenagem da linha "Configurações de voz" */
