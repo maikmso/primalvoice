@@ -1581,6 +1581,26 @@ function startInlineChannelRename(itemEl, channel, type, labelEl) {
   input.addEventListener('click', (e) => e.stopPropagation());
 }
 
+// Entra num canal de voz (ou só troca pra visão dele, se já tiver dentro) --
+// usado tanto ao clicar no NOME do canal de voz quanto ao clicar no nome de
+// alguém que já está numa chamada (ver o listener de clique em
+// voiceChannelsList logo abaixo): os dois levam pro mesmo lugar.
+function enterVoiceChannel(channelId) {
+  if (activeVoiceChannelId === channelId) {
+    // Já tá NESSE canal de voz -- só volta pra visão dele (caso a pessoa
+    // tivesse navegado pro chat de texto enquanto continuava na call).
+    // Nunca sai da chamada aqui -- só o botão de desligar (hangup-btn) faz
+    // isso.
+    const channel = serverState.channels.voice.find((c) => c.id === channelId);
+    channelHeaderIcon.innerHTML = VOICE_ICON_SVG;
+    channelHeaderName.textContent = channel ? channel.name : '';
+    showVoiceView();
+    renderChannelLists();
+  } else {
+    joinVoiceChannel(channelId);
+  }
+}
+
 function renderChannelLists() {
   textChannelsList.innerHTML = '';
   serverState.channels.text.forEach((ch) => {
@@ -1597,20 +1617,7 @@ function renderChannelLists() {
     const isActiveVoice = ch.id === activeVoiceChannelId;
     el.classList.toggle('active', isActiveVoice && !grid.hidden);
     el.classList.toggle('in-voice', isActiveVoice);
-    el.addEventListener('click', () => {
-      if (activeVoiceChannelId === ch.id) {
-        // Já tá NESSE canal de voz -- só volta pra visão dele (caso a
-        // pessoa tivesse navegado pro chat de texto enquanto continuava na
-        // call). Clicar de novo aqui NUNCA deve sair da chamada -- só o
-        // botão de desligar (hangup-btn) faz isso.
-        channelHeaderIcon.innerHTML = VOICE_ICON_SVG;
-        channelHeaderName.textContent = ch.name;
-        showVoiceView();
-        renderChannelLists();
-      } else {
-        joinVoiceChannel(ch.id);
-      }
-    });
+    el.addEventListener('click', () => enterVoiceChannel(ch.id));
     wrap.appendChild(el);
 
     const membersEl = document.createElement('div');
@@ -4954,6 +4961,15 @@ voiceChannelsList.addEventListener('click', (e) => {
   const row = e.target.closest('.member-row');
   if (!row || !row.dataset.identity) return;
   e.stopPropagation();
+  // Clicar no nome de alguém que já está numa chamada de voz leva direto
+  // pra essa chamada -- igual clicar no próprio nome do canal. Ver o
+  // perfil dela continua dando pra fazer pelo menu de contexto (botão
+  // direito -> Ver perfil).
+  const channelId = row.closest('.voice-members-list')?.dataset.channelId;
+  if (channelId) {
+    enterVoiceChannel(channelId);
+    return;
+  }
   openProfileCard(e.clientX, e.clientY, row.dataset.identity);
 });
 
