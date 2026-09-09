@@ -1,10 +1,10 @@
 require('dotenv').config();
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
 const { AccessToken, RoomServiceClient } = require('livekit-server-sdk');
 const store = require('./store');
 
@@ -16,6 +16,9 @@ const ROOM_PASSWORD = process.env.ROOM_PASSWORD;
 const OWNER_NAME = process.env.OWNER_NAME || '';
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || '';
 const ROOM_NAME = process.env.ROOM_NAME || 'galera';
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
 // Assina os "crachás" de sessão usados nas rotas de administração (canais/cargos).
 // Reaproveita o segredo do LiveKit pra não obrigar a criar mais uma variável.
 const SESSION_SECRET = process.env.SESSION_SECRET || LIVEKIT_API_SECRET;
@@ -31,6 +34,36 @@ if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET || !LIVEKIT_URL || !ROOM_PASSWORD) {
 const roomServiceUrl = LIVEKIT_URL.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
 const roomService = new RoomServiceClient(roomServiceUrl, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
+// Anexos do chat (imagem/vídeo/documento) vão pro Cloudinary em vez do disco
+// do próprio servidor -- o disco do Render é temporário (some quando o
+// serviço reinicia ou "dorme"), então guardar local fazia a foto sumir do
+// nada mais cedo ou mais tarde. Se essas variáveis não estiverem
+// configuradas, a rota de upload continua de pé, só que avisando com um erro
+// claro em vez de derrubar o servidor inteiro (upload é só uma parte do
+// app -- voz/vídeo/chat de texto continuam funcionando sem isso).
+const cloudinaryConfigured = !!(CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET);
+if (cloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: CLOUDINARY_CLOUD_NAME,
+    api_key: CLOUDINARY_API_KEY,
+    api_secret: CLOUDINARY_API_SECRET,
+  });
+} else {
+  console.warn(
+    'Faltam variáveis de ambiente do Cloudinary (CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET) -- envio de anexo no chat vai ficar desligado até configurar.'
+  );
+}
+
+function uploadBufferToCloudinary(buffer, options) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
+
 const app = express();
 // Libera chamadas de origens diferentes (o app desktop Electron roda num
 // servidor local próprio, em outra origem, então precisa disso pra falar
@@ -40,22 +73,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Upload de imagens/vídeos do chat de texto. Fica salvo no disco do próprio
-// servidor — atenção: no plano gratuito do Render o disco é temporário
-// (some quando o serviço reinicia ou "dorme" por muito tempo), então trate
-// isso como um espaço de conversa do momento, não um arquivo permanente.
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(uploadsDir, { recursive: true });
-app.use('/uploads', express.static(uploadsDir));
-
+// Upload de imagens/vídeos/documentos do chat de texto -- fica só um
+// instante na memória do processo (multer.memoryStorage) e vai direto pro
+// Cloudinary logo em seguida, sem tocar o disco do servidor.
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').slice(0, 10).replace(/[^a-zA-Z0-9.]/g, '');
-      cb(null, `${crypto.randomUUID()}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     // imagem/vídeo, ou um documento comum (pdf, word, excel, powerpoint,
@@ -520,17 +542,38 @@ app.post('/api/moderation/kick', requireAuth, requirePermission('kickMembers'), 
 // como mensagem (o arquivo em si não passa pelo canal de dados do LiveKit,
 // só a URL — assim não trava com arquivos grandes).
 app.post('/api/upload', requireAuth, (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     if (err) {
       const msg =
         err.code === 'LIMIT_FILE_SIZE' ? 'Arquivo muito grande (máx. 25MB).' : err.message || 'Erro ao enviar arquivo.';
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    if (!cloudinaryConfigured) {
+      return res.status(503).json({ error: 'Envio de arquivo não configurado no servidor.' });
+    }
+
     let type = 'file';
     if (req.file.mimetype.startsWith('video/')) type = 'video';
     else if (req.file.mimetype.startsWith('image/')) type = 'image';
-    res.json({ url: `/uploads/${req.file.filename}`, type, name: req.file.originalname, size: req.file.size });
+
+    // "raw" (documento) precisa da extensão dentro do próprio public_id pra
+    // o link final baixar com o nome certo -- imagem/vídeo não, o Cloudinary
+    // já resolve a extensão sozinho a partir do arquivo de verdade.
+    const ext = path.extname(req.file.originalname || '').slice(0, 10).replace(/[^a-zA-Z0-9.]/g, '');
+    const publicId = type === 'file' ? `${crypto.randomUUID()}${ext}` : crypto.randomUUID();
+
+    try {
+      const result = await uploadBufferToCloudinary(req.file.buffer, {
+        folder: 'primalvoice',
+        public_id: publicId,
+        resource_type: type === 'file' ? 'raw' : type,
+      });
+      res.json({ url: result.secure_url, type, name: req.file.originalname, size: req.file.size });
+    } catch (uploadErr) {
+      console.error('Erro ao enviar pro Cloudinary:', uploadErr);
+      res.status(500).json({ error: 'Erro ao enviar arquivo.' });
+    }
   });
 });
 

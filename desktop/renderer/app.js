@@ -2563,6 +2563,17 @@ function buildFileAttachmentCard(src, name, size) {
   return card;
 }
 
+// Anexos novos (foto/vídeo/documento) já vêm com a URL completa do Cloudinary
+// (https://res.cloudinary.com/...), guardada permanentemente lá -- mas
+// mensagens antigas, de antes dessa mudança, ainda têm só o caminho relativo
+// tipo "/uploads/xxx.png" que era servido pelo próprio backend (esses
+// arquivos específicos já foram perdidos quando o Render reiniciou, mas a
+// função continua funcionando pros dois formatos, sem quebrar mensagem
+// antiga nem duplicar o servidor na frente de uma URL que já é completa).
+function resolveAttachmentUrl(url) {
+  return /^https?:\/\//.test(url) ? url : `${serverUrl}${url}`;
+}
+
 function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt }) {
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
@@ -2642,7 +2653,7 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
       upgradeTooltip(viewBtn, { text: 'Ver imagem', dir: 'top' });
       viewBtn.innerHTML = EYE_ICON_SVG;
       viewBtn.addEventListener('click', () => {
-        openImageLightbox(`${serverUrl}${attachment.url}`, attachment.name || 'imagem');
+        openImageLightbox(resolveAttachmentUrl(attachment.url), attachment.name || 'imagem');
       });
       actions.appendChild(viewBtn);
     }
@@ -2685,7 +2696,7 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
   if (attachment && attachment.url) {
     const wrap = document.createElement('div');
     wrap.className = 'attachment';
-    const src = `${serverUrl}${attachment.url}`;
+    const src = resolveAttachmentUrl(attachment.url);
     if (attachment.type === 'video') {
       const video = document.createElement('video');
       video.src = src;
