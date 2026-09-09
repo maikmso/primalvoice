@@ -237,6 +237,7 @@ const textView = document.getElementById('text-view');
 const chatMessages = document.getElementById('chat-messages');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
+const chatInputHighlight = document.getElementById('chat-input-highlight');
 
 const addTextChannelBtn = document.getElementById('add-text-channel-btn');
 const addVoiceChannelBtn = document.getElementById('add-voice-channel-btn');
@@ -1838,6 +1839,7 @@ function insertMention(identity) {
   const start = chatInput.selectionStart ?? chatInput.value.length;
   const end = chatInput.selectionEnd ?? chatInput.value.length;
   chatInput.value = chatInput.value.slice(0, start) + mention + chatInput.value.slice(end);
+  renderChatInputHighlight();
   chatInput.focus();
   const cursor = start + mention.length;
   chatInput.setSelectionRange(cursor, cursor);
@@ -2250,6 +2252,21 @@ function appendTextWithMentions(container, segment) {
   if (last < segment.length) container.appendChild(document.createTextNode(segment.slice(last)));
 }
 
+// Redesenha a div .chat-input-highlight por trás do campo de mensagem,
+// mostrando o texto atual com qualquer "@Nome" já em chip -- reaproveita
+// EXATAMENTE a mesma função usada pra desenhar mensagens já enviadas
+// (appendTextWithMentions), então o chip fica idêntico enquanto digita e
+// depois de mandado. Chamada a cada tecla (evento 'input' do campo) e toda
+// vez que o próprio código muda chatInput.value programaticamente (menção
+// inserida pelo autocomplete/menu de contexto, campo limpo ao enviar etc.)
+// -- essas mudanças não disparam 'input' sozinhas.
+function renderChatInputHighlight() {
+  if (!chatInputHighlight) return;
+  chatInputHighlight.innerHTML = '';
+  appendTextWithMentions(chatInputHighlight, chatInput.value);
+  chatInputHighlight.scrollLeft = chatInput.scrollLeft;
+}
+
 // Cartãozinho de prévia de vídeo do YouTube embaixo da mensagem, igual o
 // Discord — miniatura, título e nome do canal. Continua abrindo no
 // navegador padrão ao clicar (não toca o vídeo dentro do próprio app, por
@@ -2646,6 +2663,7 @@ chatForm.addEventListener('submit', (e) => {
   const text = chatInput.value.trim();
   if (!text || !lobbyRoom || !activeTextChannelId) return;
   chatInput.value = '';
+  renderChatInputHighlight();
 
   if (isDmChannelId(activeTextChannelId)) {
     sendDirectMessage(dmPeerFromChannelId(activeTextChannelId), text);
@@ -2765,13 +2783,23 @@ function selectMentionCandidate(idx) {
   const { start, end } = mentionAutocompleteRange;
   const inserted = `@${candidate.name} `;
   chatInput.value = chatInput.value.slice(0, start) + inserted + chatInput.value.slice(end);
+  renderChatInputHighlight();
   const cursor = start + inserted.length;
   closeMentionAutocomplete();
   chatInput.focus();
   chatInput.setSelectionRange(cursor, cursor);
 }
 
-chatInput.addEventListener('input', updateMentionAutocomplete);
+chatInput.addEventListener('input', () => {
+  renderChatInputHighlight();
+  updateMentionAutocomplete();
+});
+// o próprio <input> rola sozinho quando o texto/cursor passa da largura
+// visível -- sincroniza a div de destaque atrás pra acompanhar (senão o
+// texto "de verdade" (transparente) desalinha do texto colorido por trás)
+chatInput.addEventListener('scroll', () => {
+  chatInputHighlight.scrollLeft = chatInput.scrollLeft;
+});
 
 chatInput.addEventListener('keydown', (e) => {
   if (!mentionAutocompleteEl || mentionAutocompleteMatches.length === 0) return;
@@ -2910,6 +2938,7 @@ async function sendChatFile(file) {
     const attachment = await uploadChatAttachment(file);
     const text = chatInput.value.trim();
     chatInput.value = '';
+    renderChatInputHighlight();
     const ts = Date.now();
     const id = crypto.randomUUID();
     if (isDmChannelId(activeTextChannelId)) {
