@@ -260,6 +260,8 @@ const rolesListEl = document.getElementById('roles-list');
 const createRoleBtn = document.getElementById('create-role-btn');
 const roleEditorEl = document.getElementById('role-editor');
 const rolesMembersListEl = document.getElementById('roles-members-list');
+const rolesSearchInput = document.getElementById('roles-search-input');
+const rolesCountLabel = document.getElementById('roles-count-label');
 
 const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileAvatarChangeBtn = document.getElementById('profile-avatar-change-btn');
@@ -336,6 +338,8 @@ let voiceRoom = null; // conexão separada, só enquanto estiver dentro de um ca
 let activeTextChannelId = null;
 let activeVoiceChannelId = null;
 let selectedRoleId = null;
+let rolesSearchQuery = '';
+let draggedRoleId = null;
 let isDeafened = false;
 // guarda se a voz já estava mutada por escolha da pessoa antes de ensurdecer
 // — assim, ao tirar o ensurdecer, a gente sabe se deve voltar a falar ou não
@@ -1013,6 +1017,14 @@ function renderPermissionGates() {
   document.querySelectorAll('.modal-tab[data-perm]').forEach((tab) => {
     tab.hidden = !myPermissions[tab.dataset.perm];
   });
+  // a seção inteira "Sala da galera" (Canais/Cargos) some se a pessoa não
+  // tiver NENHUMA das permissões dela -- senão ficava um título de seção
+  // solto sem nenhuma aba embaixo
+  const serverSection = document.getElementById('modal-tabs-server-section');
+  if (serverSection) {
+    const anyVisible = Array.from(serverSection.querySelectorAll('.modal-tab[data-perm]')).some((tab) => !tab.hidden);
+    serverSection.hidden = !anyVisible;
+  }
 }
 
 function normalizeServerUrl(value) {
@@ -2414,6 +2426,10 @@ const DELETE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
 const EYE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+const PERSON_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+const KEBAB_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
 
 // Troca o texto da mensagem por um campinho editável na hora, sem abrir
 // modal nenhum — Enter salva, Esc cancela (igual renomear canal).
@@ -4037,8 +4053,15 @@ function renderMemberSidebar() {
   allKnown.forEach((identity) => {
     if (!onlineIdentities.has(identity)) return;
     const assigned = serverState.memberRoles[identity] || [];
-    const topRoleId = assigned.find((rid) => roleGroupById.has(rid));
-    if (topRoleId) roleGroupById.get(topRoleId).identities.push(identity);
+    // o "cargo mais alto" tem que seguir a ORDEM DE serverState.roles (a
+    // hierarquia definida em Configurações -> Cargos, de cima pra baixo),
+    // não a ordem em que os cargos foram atribuídos a essa pessoa -- senão
+    // arrastar um cargo pra cima na lista de hierarquia não mudava nada
+    // aqui (era exatamente esse bug antes: usava assigned.find, que segue
+    // a ordem de atribuição de CADA pessoa, não a hierarquia do servidor).
+    // Mesma lógica de topRoleColorFor, só que devolvendo o cargo inteiro.
+    const topRole = (serverState.roles || []).find((role) => assigned.includes(role.id));
+    if (topRole) roleGroupById.get(topRole.id).identities.push(identity);
     else onlineNoRole.push(identity);
   });
 
@@ -6190,28 +6213,195 @@ function renderManageChannels() {
 }
 
 // ---------- cargos (dentro do modal) ----------
+
+// Conta quantos membros têm esse cargo atribuído (pro número que aparece do
+// lado direito de cada linha na lista, igual Discord).
+function roleMemberCount(roleId) {
+  return Object.values(serverState.memberRoles || {}).filter((ids) => (ids || []).includes(roleId)).length;
+}
+
 function renderRolesTab() {
+  const query = rolesSearchQuery.trim().toLowerCase();
+  const visibleRoles = query ? serverState.roles.filter((role) => role.name.toLowerCase().includes(query)) : serverState.roles;
+
+  if (rolesCountLabel) rolesCountLabel.textContent = `CARGOS — ${serverState.roles.length}`;
+
   rolesListEl.innerHTML = '';
-  serverState.roles.forEach((role) => {
+  visibleRoles.forEach((role) => {
     const item = document.createElement('div');
     item.className = 'role-list-item';
     item.classList.toggle('active', role.id === selectedRoleId);
+    item.draggable = true;
+    item.dataset.roleId = role.id;
+
     const dot = document.createElement('span');
     dot.className = 'role-color-dot';
     dot.style.background = role.color;
     item.appendChild(dot);
-    const label = document.createElement('span');
-    label.textContent = role.name;
-    item.appendChild(label);
+
+    const name = document.createElement('span');
+    name.className = 'role-name';
+    name.textContent = role.name;
+    item.appendChild(name);
+
+    const count = document.createElement('span');
+    count.className = 'role-member-count';
+    count.innerHTML = `${PERSON_ICON_SVG}<span>${roleMemberCount(role.id)}</span>`;
+    item.appendChild(count);
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'role-row-btn';
+    editBtn.title = 'Editar cargo';
+    editBtn.innerHTML = EDIT_ICON_SVG;
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedRoleId = role.id;
+      renderRolesTab();
+    });
+    item.appendChild(editBtn);
+
+    const kebabBtn = document.createElement('button');
+    kebabBtn.type = 'button';
+    kebabBtn.className = 'role-row-btn';
+    kebabBtn.title = 'Mais opções';
+    kebabBtn.innerHTML = KEBAB_ICON_SVG;
+    kebabBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openRoleKebabMenu(e, role);
+    });
+    item.appendChild(kebabBtn);
+
     item.addEventListener('click', () => {
       selectedRoleId = role.id;
       renderRolesTab();
     });
+
+    // arrastar pra reordenar (igual Discord) -- a ordem da lista É a
+    // hierarquia (ver topRoleColorFor/renderMemberSidebar), então soltar um
+    // cargo acima/abaixo de outro já reordena de verdade, não é só visual.
+    item.addEventListener('dragstart', (e) => {
+      draggedRoleId = role.id;
+      item.classList.add('dragging');
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      rolesListEl.querySelectorAll('.role-list-item').forEach((el) => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      draggedRoleId = null;
+    });
+    item.addEventListener('dragover', (e) => {
+      if (!draggedRoleId || draggedRoleId === role.id) return;
+      e.preventDefault();
+      const rect = item.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      item.classList.toggle('drag-over-top', before);
+      item.classList.toggle('drag-over-bottom', !before);
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      item.classList.remove('drag-over-top', 'drag-over-bottom');
+      if (!draggedRoleId || draggedRoleId === role.id) return;
+      const rect = item.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      reorderRoles(draggedRoleId, role.id, before);
+    });
+
     rolesListEl.appendChild(item);
   });
 
   renderRoleEditor();
   renderRoleMembers();
+}
+
+if (rolesSearchInput) {
+  rolesSearchInput.addEventListener('input', () => {
+    rolesSearchQuery = rolesSearchInput.value;
+    renderRolesTab();
+  });
+}
+
+// Reordena os cargos localmente (feedback na hora, igual Discord) e depois
+// persiste no back-end -- se a chamada falhar por qualquer motivo, desfaz e
+// avisa, pra nunca ficar com a tela mostrando uma ordem que não foi salva.
+async function reorderRoles(draggedId, targetId, before) {
+  const previousOrder = serverState.roles;
+  const roles = previousOrder.slice();
+  const fromIdx = roles.findIndex((r) => r.id === draggedId);
+  if (fromIdx === -1) return;
+  const [moved] = roles.splice(fromIdx, 1);
+  let toIdx = roles.findIndex((r) => r.id === targetId);
+  if (toIdx === -1) toIdx = roles.length;
+  else if (!before) toIdx += 1;
+  roles.splice(toIdx, 0, moved);
+
+  serverState.roles = roles;
+  renderRolesTab();
+  renderMemberSidebar();
+  refreshAllChatAuthorColors();
+
+  try {
+    const data = await apiFetch('/api/roles/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ order: roles.map((r) => r.id) }),
+    });
+    serverState.roles = data.roles;
+    renderRolesTab();
+    renderMemberSidebar();
+    refreshAllChatAuthorColors();
+    broadcastStateChanged();
+  } catch (err) {
+    serverState.roles = previousOrder;
+    renderRolesTab();
+    renderMemberSidebar();
+    refreshAllChatAuthorColors();
+    alert(err.message);
+  }
+}
+
+// Menu "..." de cada linha -- por enquanto só "Apagar cargo" (editar já é o
+// lápis/clicar na linha). Reusa a infra de context-menu já existente, só que
+// com uma classe extra (.role-kebab-menu) pra ficar por cima do modal de
+// configurações aberto (modal tem z-index maior que o context-menu comum).
+function openRoleKebabMenu(e, role) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu role-kebab-menu';
+  menu.addEventListener('click', (ev) => ev.stopPropagation());
+
+  const delItem = document.createElement('div');
+  delItem.className = 'context-menu-item danger';
+  const delLabel = document.createElement('span');
+  delLabel.className = 'label';
+  delLabel.textContent = 'Apagar cargo';
+  delItem.appendChild(delLabel);
+  delItem.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    closeContextMenu();
+    if (!confirm(`Apagar o cargo "${role.name}"?`)) return;
+    try {
+      const data = await apiFetch(`/api/roles/${role.id}`, { method: 'DELETE' });
+      serverState.roles = data.roles;
+      serverState.memberRoles = data.memberRoles;
+      if (selectedRoleId === role.id) selectedRoleId = null;
+      renderRolesTab();
+      renderMemberSidebar();
+      refreshAllChatAuthorColors();
+      broadcastStateChanged();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  menu.appendChild(delItem);
+
+  document.body.appendChild(menu);
+  contextMenuEl = menu;
+  positionContextMenu(e.clientX, e.clientY, menu);
 }
 
 function renderRoleEditor() {

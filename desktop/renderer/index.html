@@ -264,12 +264,18 @@
   <div id="settings-modal-overlay" class="modal-overlay" hidden>
     <div class="modal">
       <nav class="modal-tabs">
-        <button class="modal-tab active" data-tab="voice">Voz e Vídeo</button>
-        <button class="modal-tab" data-tab="profile">Perfil</button>
-        <button class="modal-tab" data-tab="appearance">Aparência</button>
-        <button class="modal-tab" data-tab="keybinds">Atalhos</button>
-        <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
-        <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
+        <div class="modal-tabs-section">
+          <div class="modal-tabs-label">Minha conta</div>
+          <button class="modal-tab" data-tab="profile">Perfil</button>
+          <button class="modal-tab" data-tab="appearance">Aparência</button>
+          <button class="modal-tab active" data-tab="voice">Voz e Vídeo</button>
+          <button class="modal-tab" data-tab="keybinds">Atalhos</button>
+        </div>
+        <div class="modal-tabs-section" id="modal-tabs-server-section" hidden>
+          <div class="modal-tabs-label">Sala da galera</div>
+          <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
+          <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
+        </div>
         <button id="exit-app-btn" class="modal-tab-danger" title="Voltar pra tela de login">Sair do PrimalVoice</button>
         <div class="modal-version" id="modal-version"></div>
       </nav>
@@ -369,12 +375,27 @@
           </div>
         </section>
 
-        <section class="modal-pane" data-pane="roles">
+        <section class="modal-pane roles-pane" data-pane="roles">
           <h2>Cargos</h2>
+          <p class="modal-hint">Use cargos para agrupar os membros da sala e dar permissões.</p>
+
+          <div class="roles-toolbar">
+            <div class="roles-search-wrap">
+              <svg class="roles-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="roles-search-input" placeholder="Buscar cargos" autocomplete="off" />
+            </div>
+            <button id="create-role-btn" class="primary-btn">Criar cargo</button>
+          </div>
+
+          <p class="modal-hint roles-hierarchy-hint">Os membros usam a cor do cargo mais alto que eles possuem nesta lista. Arraste os cargos para reordenar.</p>
+
           <div class="roles-layout">
             <div class="roles-list-col">
-              <div id="roles-list"></div>
-              <button id="create-role-btn" class="secondary-btn">+ Criar cargo</button>
+              <div class="roles-table-header">
+                <span id="roles-count-label">CARGOS — 0</span>
+                <span>MEMBROS</span>
+              </div>
+              <div id="roles-list" class="roles-list"></div>
             </div>
             <div class="roles-editor-col" id="role-editor">
               <p class="modal-hint">Selecione um cargo pra editar, ou crie um novo.</p>
@@ -384,7 +405,12 @@
           <div id="roles-members-list"></div>
         </section>
       </div>
-      <button id="settings-modal-close" class="modal-close-btn" title="Fechar">✕</button>
+    </div>
+    <div class="modal-close-standalone">
+      <button id="settings-modal-close" class="modal-close-btn" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+      <span class="modal-close-hint">ESC</span>
     </div>
   </div>
 

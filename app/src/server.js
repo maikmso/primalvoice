@@ -404,6 +404,33 @@ app.post('/api/roles', requireAuth, requirePermission('manageRoles'), (req, res)
   res.json({ roles: s.roles });
 });
 
+// Reordena os cargos (arrastar na lista, igual Discord) -- a ORDEM do
+// array é a hierarquia: quem tem vários cargos usa a cor/agrupamento do
+// primeiro deles que aparecer aqui (ver topRoleColorFor/renderMemberSidebar
+// no app.js). "order" é a lista COMPLETA de ids na nova ordem desejada.
+// PRECISA vir registrada ANTES de "/api/roles/:id" logo abaixo -- senão o
+// Express casa "reorder" como se fosse o :id dessa rota (que teria
+// prioridade por vir primeiro) e essa rota aqui nunca seria alcançada.
+app.patch('/api/roles/reorder', requireAuth, requirePermission('manageRoles'), (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'Ordem inválida.' });
+
+  let error = null;
+  const s = store.mutate((state) => {
+    const byId = new Map(state.roles.map((r) => [r.id, r]));
+    // só aceita se "order" for exatamente uma permutação dos cargos que já
+    // existem -- nada de ids desconhecidos, nem perder/duplicar um cargo
+    if (order.length !== state.roles.length || !order.every((id) => byId.has(id)) || new Set(order).size !== order.length) {
+      error = 'Ordem inválida.';
+      return;
+    }
+    state.roles = order.map((id) => byId.get(id));
+  });
+
+  if (error) return res.status(400).json({ error });
+  res.json({ roles: s.roles });
+});
+
 app.patch('/api/roles/:id', requireAuth, requirePermission('manageRoles'), (req, res) => {
   const { id } = req.params;
   const { name, color, permissions } = req.body || {};
