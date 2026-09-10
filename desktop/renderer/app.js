@@ -380,10 +380,27 @@ function setVoiceQuality(quality) {
   voiceQualityIcon.classList.add(`quality-${quality}`);
 }
 
+// Limites de ping (em ms) que decidem a cor/quantidade de tracinhos --
+// baseado direto no número de "Ping: Xms" que já aparece no balãozinho, em
+// vez de confiar só na classificação que o próprio LiveKit calcula sozinho
+// (que é mais generosa e podia mostrar 3 tracinhos verdes com um ping de
+// 239ms, por exemplo -- o pedido era pra isso refletir o ping de verdade).
+function pingQualityTier(rtt) {
+  if (typeof rtt !== 'number' || rtt <= 0) return null;
+  if (rtt <= 150) return 'excellent'; // 3 tracinhos verdes
+  if (rtt <= 300) return 'good'; // 2 tracinhos laranja
+  return 'poor'; // 1 tracinho vermelho
+}
+
 function updateVoiceQualityTooltip() {
   if (!voiceRoom) return;
   const rtt = voiceRoom.engine && voiceRoom.engine.client && voiceRoom.engine.client.rtt;
   voiceQualityTooltip.textContent = typeof rtt === 'number' && rtt > 0 ? `Ping: ${rtt}ms` : 'Qualidade da conexão';
+  // roda a cada 3s (ver voiceQualityInterval) e é quem manda de verdade no
+  // ícone -- corrige em até 3s qualquer classificação diferente que o evento
+  // ConnectionQualityChanged do LiveKit tenha aplicado nesse meio tempo.
+  const tier = pingQualityTier(rtt);
+  if (tier) setVoiceQuality(tier);
 }
 
 function stopVoiceQualityMonitor() {
