@@ -2074,7 +2074,15 @@ async function joinVoiceChannel(channelId) {
     updateVoiceOverlay();
   });
   vr.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-    if (participant === vr.localParticipant) setVoiceQuality(quality);
+    // Só usa esse evento do LiveKit pra pegar rápido o caso de conexão
+    // realmente perdida -- excellent/good/poor ficam por conta só do ping de
+    // verdade (medido a cada 3s em updateVoiceQualityTooltip/pingQualityTier),
+    // porque a classificação do próprio LiveKit é mais generosa (não bate
+    // com o "Ping: Xms" mostrado no balãozinho) e ficava sobrescrevendo a
+    // cor certa segundos depois de cada correção.
+    if (participant === vr.localParticipant && quality === ConnectionQuality.Lost) {
+      setVoiceQuality('lost');
+    }
   });
   vr.on(RoomEvent.TrackMuted, (publication, participant) => {
     if (publication.source === Track.Source.Microphone) setVoiceMemberStatus(participant.identity, { muted: true });
