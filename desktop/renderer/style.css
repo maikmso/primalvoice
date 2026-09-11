@@ -2478,12 +2478,34 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 /* "Sobre mim" -- texto livre, pode ter várias linhas (diferente do status,
    que é só uma linha curta) */
 .profile-card-bio { font-size: 13px; color: var(--text); margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
-/* "Em voz" -- canal de voz que a pessoa está conectada agora, igual Discord */
+/* "Em voz" -- canal de voz que a pessoa está conectada agora, igual Discord.
+   O bloco inteiro (título + nome do canal) é um botão disfarçado -- clicar
+   nele entra direto na chamada, sem precisar do botão "Abrir chamada de
+   voz" lá embaixo (que continua existindo também, só não é obrigatório). */
+.profile-card-voice-block {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.profile-card-voice-block:hover,
+.profile-card-voice-block:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+}
+.profile-card-voice-block .profile-card-section-title { padding-left: 4px; padding-right: 4px; }
 .profile-card-voice {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+  padding: 0 4px 4px;
   font-size: 13px;
   color: var(--text);
 }

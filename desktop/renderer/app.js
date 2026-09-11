@@ -5011,10 +5011,17 @@ function openProfileCard(x, y, identity) {
     ? serverState.channels?.voice?.find((c) => c.id === currentVoiceChannelId)
     : null;
   if (currentVoiceChannel) {
+    // Igual Discord: esse bloco inteiro (título + nome do canal) é
+    // clicável, e clicar nele já entra direto na chamada -- não precisa
+    // procurar um botão separado lá embaixo.
+    const voiceBlock = document.createElement('button');
+    voiceBlock.type = 'button';
+    voiceBlock.className = 'profile-card-voice-block';
+
     const voiceTitle = document.createElement('div');
     voiceTitle.className = 'profile-card-section-title';
     voiceTitle.textContent = 'Em voz';
-    body.appendChild(voiceTitle);
+    voiceBlock.appendChild(voiceTitle);
 
     const voiceWrap = document.createElement('div');
     voiceWrap.className = 'profile-card-voice';
@@ -5023,7 +5030,13 @@ function openProfileCard(x, y, identity) {
     const voiceName = document.createElement('span');
     voiceName.textContent = currentVoiceChannel.name;
     voiceWrap.appendChild(voiceName);
-    body.appendChild(voiceWrap);
+    voiceBlock.appendChild(voiceWrap);
+
+    voiceBlock.addEventListener('click', () => {
+      closeContextMenu();
+      enterVoiceChannel(currentVoiceChannelId);
+    });
+    body.appendChild(voiceBlock);
   }
 
   // desde quando a pessoa usa o PrimalVoice (data de criação da conta) —
