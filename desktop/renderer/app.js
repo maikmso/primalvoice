@@ -73,6 +73,7 @@ const exitAppBtn = document.getElementById('exit-app-btn');
 const cinemaControlsBar = document.getElementById('cinema-controls-bar');
 const cinemaCamBtn = document.getElementById('cinema-cam-btn');
 const cinemaVolumeBtn = document.getElementById('cinema-volume-btn');
+const cinemaFullscreenBtn = document.getElementById('cinema-fullscreen-btn');
 const cinemaStopWatchBtn = document.getElementById('cinema-stop-watch-btn');
 const cinemaMicBtn = document.getElementById('cinema-mic-btn');
 const cinemaHangupBtn = document.getElementById('cinema-hangup-btn');
@@ -116,6 +117,23 @@ cinemaVolumeBtn.addEventListener('click', (e) => {
   const identity = cinemaVolumeBtn.dataset.identity;
   if (!identity) return;
   openStreamVolumePopover(cinemaVolumeBtn, identity);
+});
+// Coloca a transmissão em tela cheia de verdade (janela inteira) -- mesma
+// identidade da barra (cinemaVolumeBtn.dataset.identity), já que essa barra
+// só aparece quando já tem uma telinha expandida assistindo alguém. Clicar
+// de novo (já em tela cheia) sai dela -- ver enterCinemaFullscreen/
+// exitCinemaFullscreen mais abaixo.
+cinemaFullscreenBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const identity = cinemaVolumeBtn.dataset.identity;
+  if (!identity) return;
+  if (cinemaTileIdentity === identity) {
+    exitCinemaFullscreen();
+    return;
+  }
+  const tile = document.getElementById(tileId(identity));
+  if (!tile) return;
+  enterCinemaFullscreen(tile, participantFromRow(tile));
 });
 
 // ---------- overlay por cima de outras janelas/jogos, enquanto VOCÊ compartilha a tela ----------
@@ -3736,6 +3754,7 @@ function updateFloatingBarVisibility() {
     cinemaControlsBar.hidden = false;
     cinemaVolumeBtn.dataset.identity = identity;
     syncScreenVolumeBtnIcon(identity);
+    cinemaFullscreenBtn.classList.toggle('is-fullscreen', cinemaTileIdentity === identity);
     // fora do modo cinema de verdade a barra fica sempre visível (a tela
     // não tá toda tomada pelo vídeo, então não atrapalha) -- o esquema de
     // sumir sozinha depois de alguns segundos parado (showCinemaControlsBriefly)
@@ -5693,6 +5712,7 @@ upgradeTooltip(myLiveStopBtn, { dir: 'top' });
 upgradeTooltip(hangupBtn, { dir: 'top' });
 upgradeTooltip(cinemaCamBtn, { dir: 'top' });
 upgradeTooltip(cinemaVolumeBtn, { dir: 'top' });
+upgradeTooltip(cinemaFullscreenBtn, { dir: 'top' });
 upgradeTooltip(cinemaStopWatchBtn, { dir: 'top' });
 upgradeTooltip(cinemaMicBtn, { dir: 'top' });
 upgradeTooltip(cinemaHangupBtn, { dir: 'top' });

@@ -190,6 +190,12 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .cinema-ctrl-btn.cinema-hangup-btn { background: var(--danger); }
 .cinema-ctrl-btn.cinema-hangup-btn svg { transform: rotate(135deg); }
 .cinema-ctrl-btn.cinema-hangup-btn:hover { background: #c73437; }
+/* mesmo truque usado noutros botões com 2 ícones sobrepostos (só um visível
+   por vez, trocando pela classe em vez de recriar o SVG na hora) -- reflete
+   se a transmissão que você tá assistindo já está em tela cheia de verdade */
+#cinema-fullscreen-btn .icon-minimize { display: none; }
+#cinema-fullscreen-btn.is-fullscreen .icon-maximize { display: none; }
+#cinema-fullscreen-btn.is-fullscreen .icon-minimize { display: block; }
 /* botão branco destacado no meio -- fecha a visualização da transmissão
    (sai do modo cinema), igual o "parar de assistir" do Discord */
 .cinema-stop-watch-btn {
