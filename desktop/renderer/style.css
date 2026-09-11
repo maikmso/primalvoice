@@ -1350,6 +1350,25 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   z-index: 2;
 }
 
+/* "AO VIVO" no canto de cima de quem está compartilhando a tela -- mesma
+   cara do badge que já existia na lista de membros (.status-badge.live-badge),
+   só que fixo no canto da telinha em vez de do lado do nome. Fica em cima
+   até de quem ainda não clicou em "Assistir transmissão" (por cima do fundo
+   escuro do watch-stream-prompt, por isso o z-index maior que o dele). */
+.tile .tile-live-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--danger);
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  z-index: 4;
+}
+
 /* compartilhamento de tela de outra pessoa não abre sozinho — fica um botão
    "Assistir transmissão" no meio até a pessoa clicar */
 .tile .watch-stream-prompt {

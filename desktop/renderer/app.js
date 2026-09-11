@@ -3441,6 +3441,18 @@ function updateMyWatchingStatus() {
   broadcastWatchStatus();
 }
 
+// Badge vermelho "AO VIVO" no canto da telinha de quem está compartilhando
+// a tela agora -- aparece assim que a transmissão começa (mesmo antes de
+// alguém clicar em "Assistir transmissão") e só some de vez quando ela
+// termina de verdade (ver detachTrack).
+function addLiveBadge(tile) {
+  if (tile.querySelector('.tile-live-badge')) return;
+  const badge = document.createElement('div');
+  badge.className = 'tile-live-badge';
+  badge.textContent = 'AO VIVO';
+  tile.appendChild(badge);
+}
+
 function showWatchStreamPrompt(tile, participant) {
   if (tile.querySelector('.watch-stream-prompt')) return;
   tile.classList.add('screen-pending');
@@ -3608,6 +3620,7 @@ function attachTrack(track, participant, publication) {
   if (isRemoteScreenShare) {
     screenShareTracks.set(participant.identity, track);
     if (publication) screenSharePublications.set(participant.identity, publication);
+    addLiveBadge(tile);
     if (!watchingScreenShare.has(participant.identity)) {
       showWatchStreamPrompt(tile, participant);
       return;
@@ -3692,6 +3705,7 @@ function detachTrack(track, participant) {
     if (tile) {
       tile.querySelector('.watch-stream-prompt')?.remove();
       tile.querySelector('.screen-share-controls')?.remove();
+      tile.querySelector('.tile-live-badge')?.remove();
       tile.classList.remove('screen-pending', 'has-screen-controls');
     }
   }
