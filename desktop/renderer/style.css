@@ -420,6 +420,30 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   align-items: stretch;
 }
 
+/* Quando o tema ativo (colorido pronto ou "Tema Personalizado" com mais de
+   uma cor) é um degradê de verdade, o PrimalVoice inteiro mostra UM ÚNICO
+   degradê contínuo atravessando a faixa de título, a barra lateral, a
+   conversa e a lista de membros -- igual o Discord -- em vez de cada
+   painel ficar com uma cor sólida diferente (jeito antigo). O truque: todo
+   painel grande recebe o MESMO degradê (--app-bg-gradient, calculado em
+   applyColorTheme() no app.js, que também liga/desliga esta classe no
+   <html>) com `background-attachment: fixed`, que ancora o degradê na
+   JANELA em vez de em cada elemento -- assim as bordas entre os painéis se
+   encaixam sem emenda, como se fosse um fundo só por trás de tudo. Os
+   controles pequenos (botões, campos, dropdowns, cartões) continuam
+   pintados com --bg/--panel/--tile-bg sólidos (essas variáveis não mudam
+   aqui, só ganham um degradê por cima nestes 6 painéis estruturais). */
+html.theme-gradient-active #app-titlebar,
+html.theme-gradient-active .server-rail,
+html.theme-gradient-active .channel-sidebar,
+html.theme-gradient-active .room-header,
+html.theme-gradient-active .text-view,
+html.theme-gradient-active .member-list {
+  background: var(--app-bg-gradient);
+  background-attachment: fixed;
+  background-size: 100vw 100vh;
+}
+
 /* barra de servidor, à esquerda de tudo */
 .server-rail {
   width: 72px;

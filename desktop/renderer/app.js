@@ -1475,15 +1475,26 @@ function applyColorTheme(key) {
   let paletteAccent = null;
   let paletteOpts = { sat: 32, mode: 'escuro' };
   let displayName = null;
+  // Degradê de verdade (--app-bg-gradient) pros painéis grandes -- ver
+  // comentário em cima da regra `html.theme-gradient-active` no style.css.
+  // Só existe quando o tema tem MAIS de uma cor de fato; um tom só continua
+  // no jeito antigo (cor sólida derivada, sem classe nenhuma).
+  let gradientCss = null;
   if (activeKey === 'custom') {
     paletteAccent = customThemeColors[0] || '#5865f2';
     paletteOpts = { sat: customThemeIntensity, mode: customThemeMode };
     displayName = 'Tema Personalizado';
+    if (customThemeColors.length > 1) {
+      gradientCss = `linear-gradient(135deg, ${customThemeColors.join(', ')})`;
+    }
   } else if (activeKey) {
     theme = COLOR_THEMES.find((t) => t.key === activeKey) || null;
     if (theme) {
       paletteAccent = theme.accent;
       displayName = theme.name;
+      if (theme.css && theme.css.startsWith('linear-gradient')) {
+        gradientCss = theme.css;
+      }
     }
   }
   if (!paletteAccent) {
@@ -1513,6 +1524,13 @@ function applyColorTheme(key) {
     } else {
       CUSTOM_THEME_TEXT_VARS.forEach((v) => root.style.removeProperty(v));
     }
+  }
+  if (gradientCss) {
+    root.style.setProperty('--app-bg-gradient', gradientCss);
+    root.classList.add('theme-gradient-active');
+  } else {
+    root.style.removeProperty('--app-bg-gradient');
+    root.classList.remove('theme-gradient-active');
   }
   document.querySelectorAll('.color-theme-swatch').forEach((btn) => {
     btn.classList.toggle('active', !!paletteAccent && btn.dataset.themeKey === activeKey);
