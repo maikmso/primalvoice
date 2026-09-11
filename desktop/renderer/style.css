@@ -700,8 +700,8 @@ body.cinema-mode .screen-share-controls { display: none !important; }
    comunica sozinha) */
 .status-badge.mic-badge img,
 .status-badge.deafen-badge img {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 /* "olho" de quem está assistindo uma transmissão agora — não é um alerta
