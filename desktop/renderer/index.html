@@ -471,13 +471,21 @@
     </div>
   </div>
 
-  <!-- Aparece quando a pessoa clica em "Pré-visualizar tema" -- as
-       configurações somem por baixo pra mostrar a conversa/servidor de
-       verdade com a cor nova, e esse botão flutuante traz de volta. -->
-  <div id="theme-preview-return" class="theme-preview-return" hidden>
-    <button type="button" id="theme-preview-return-btn">
+  <!-- Aparece quando a pessoa clica em "Pré-visualizar tema" -- igual o
+       Discord: as configurações somem por baixo pra mostrar a conversa/
+       servidor de verdade com a cor já aplicada, e esse painel fica fixo do
+       lado direito, com a própria grade de temas coloridos, pra dar pra
+       trocar de cor vendo o resultado ao vivo sem abrir o modal de novo. -->
+  <div id="theme-preview-panel" class="theme-preview-panel" hidden>
+    <div class="theme-preview-panel-header">
+      <h3>Pré-visualizar tema</h3>
+      <p class="modal-hint">Escolha um tema e veja o PrimalVoice mudando na hora, por trás deste painel.</p>
+      <p class="theme-preview-panel-active" id="theme-preview-panel-active-name">Tema atual: Padrão</p>
+    </div>
+    <div class="color-theme-grid theme-preview-panel-grid" id="theme-preview-panel-grid"></div>
+    <button type="button" id="theme-preview-exit-btn" class="theme-preview-exit-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-      Voltar para configurações
+      Sair da prévia
     </button>
   </div>
 

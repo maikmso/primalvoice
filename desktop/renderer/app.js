@@ -309,8 +309,10 @@ const accentColorGrid = document.getElementById('accent-color-grid');
 const accentColorCustomInput = document.getElementById('accent-color-custom-input');
 const colorThemeGrid = document.getElementById('color-theme-grid');
 const previewThemeBtn = document.getElementById('preview-theme-btn');
-const themePreviewReturn = document.getElementById('theme-preview-return');
-const themePreviewReturnBtn = document.getElementById('theme-preview-return-btn');
+const themePreviewPanel = document.getElementById('theme-preview-panel');
+const themePreviewPanelGrid = document.getElementById('theme-preview-panel-grid');
+const themePreviewPanelActiveName = document.getElementById('theme-preview-panel-active-name');
+const themePreviewExitBtn = document.getElementById('theme-preview-exit-btn');
 const fontOptionList = document.getElementById('font-option-list');
 
 const dmListEl = document.getElementById('dm-list');
@@ -1271,26 +1273,33 @@ if (accentColorCustomInput) {
 // nenhuma "Cor de destaque" escolhida (primeiro uso, sem customização);
 // depois disso ele nunca mais mexe no botão, só no fundo/painéis.
 const COLOR_THEMES = [
-  { key: 'verde-menta', name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
-  { key: 'pessego', name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
-  { key: 'azul-lavanda', name: 'Azul-lavanda', css: '#b7c6f2', accent: '#7c8ee0' },
+  // "Lua Carmesim" -- a referência que o Discord mostra com selo de "NOVO"
+  // em destaque no topo da grade dele; aqui não é um criador de tema (isso
+  // é coisa de assinatura paga de lá), só um degradê rico igual aos outros,
+  // com o mesmo nome/destaque.
+  { key: 'lua-carmesim', name: 'Lua Carmesim', badge: 'NOVO', css: 'linear-gradient(135deg, #ff6b6b, #b91d3a, #4a0e1f, #150408)', accent: '#b91d3a' },
+  { key: 'verde-menta', name: 'Verde-menta', css: 'linear-gradient(135deg, #b9f2d4, #8fe3b0, #4fbd85)', accent: '#4fbd85' },
+  { key: 'pessego', name: 'Pêssego', css: 'linear-gradient(135deg, #fbe0b8, #f5c894, #e0a460)', accent: '#e0a460' },
+  { key: 'azul-lavanda', name: 'Azul-lavanda', css: 'linear-gradient(135deg, #d7e0fa, #b7c6f2, #7c8ee0)', accent: '#7c8ee0' },
   { key: 'amarelo-claro', name: 'Amarelo-claro', css: '#eee7a8', accent: '#cfc357' },
-  { key: 'lilas', name: 'Lilás', css: '#e3c6f0', accent: '#b370d1' },
+  { key: 'lilas', name: 'Lilás', css: 'linear-gradient(135deg, #f2ddfa, #e3c6f0, #b370d1)', accent: '#b370d1' },
   { key: 'ciano-claro', name: 'Ciano-claro', css: '#b7ecec', accent: '#3fb8b8' },
   { key: 'creme', name: 'Creme', css: '#f0ead0', accent: '#c9b96a' },
-  { key: 'roxo-azulado', name: 'Roxo-azulado', css: 'linear-gradient(135deg, #5b3df0, #8a5cf6)', accent: '#6a46f2' },
-  { key: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
-  { key: 'vinho', name: 'Vinho', css: 'linear-gradient(135deg, #7a1d24, #24080a)', accent: '#a3282f' },
-  { key: 'ameixa', name: 'Ameixa', css: 'linear-gradient(135deg, #4b2a78, #1c0e30)', accent: '#6339a8' },
+  { key: 'roxo-azulado', name: 'Roxo-azulado', css: 'linear-gradient(135deg, #8a5cf6, #5b3df0, #2c1c7a)', accent: '#6a46f2' },
+  { key: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg, #3fe0b0, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
+  { key: 'vinho', name: 'Vinho', css: 'linear-gradient(135deg, #c23c46, #7a1d24, #24080a)', accent: '#a3282f' },
+  { key: 'ameixa', name: 'Ameixa', css: 'linear-gradient(135deg, #8a5cd6, #4b2a78, #1c0e30)', accent: '#6339a8' },
   { key: 'terracota', name: 'Terracota', css: '#b06a55', accent: '#b06a55' },
   { key: 'cinza-azulado', name: 'Cinza-azulado', css: '#8d93ab', accent: '#8d93ab' },
   { key: 'verde-oliva', name: 'Verde-oliva', css: '#4f7a5e', accent: '#4f7a5e' },
-  { key: 'azul-petroleo', name: 'Azul-petróleo', css: 'linear-gradient(135deg, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
-  { key: 'berinjela', name: 'Berinjela', css: 'linear-gradient(135deg, #7a2160, #2b0c22)', accent: '#9a2c7a' },
-  { key: 'por-do-sol', name: 'Pôr do sol', css: 'linear-gradient(135deg, #f0a63c, #d94f4f)', accent: '#e37a3f' },
-  { key: 'ceu-noturno', name: 'Céu noturno', css: 'linear-gradient(135deg, #274bd6, #7a3fd6)', accent: '#4a5fe0' },
+  { key: 'azul-petroleo', name: 'Azul-petróleo', css: 'linear-gradient(135deg, #3fa0c2, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
+  { key: 'berinjela', name: 'Berinjela', css: 'linear-gradient(135deg, #c247a0, #7a2160, #2b0c22)', accent: '#9a2c7a' },
+  { key: 'por-do-sol', name: 'Pôr do sol', css: 'linear-gradient(135deg, #f7d23c, #f0a63c, #d94f4f, #8a2f6b)', accent: '#e37a3f' },
+  { key: 'ceu-noturno', name: 'Céu noturno', css: 'linear-gradient(135deg, #7a3fd6, #4a5fe0, #274bd6, #101b5c)', accent: '#4a5fe0' },
   { key: 'dourado', name: 'Dourado', css: '#8a7a3a', accent: '#a89042' },
   { key: 'indigo-puro', name: 'Índigo puro', css: '#2b3ecb', accent: '#2b3ecb' },
+  { key: 'aurora-boreal', name: 'Aurora boreal', css: 'linear-gradient(135deg, #0fd8c4, #4a5fe0, #8a3fd6, #1c0e30)', accent: '#2f8fc4' },
+  { key: 'chama', name: 'Chama', css: 'linear-gradient(135deg, #ffd23c, #ff8a3c, #e0433f, #7a1d4a)', accent: '#e0663f' },
 ];
 
 // Variáveis de CSS que um "tema colorido" repinta por cima do tema padrão
@@ -1373,14 +1382,22 @@ function applyColorTheme(key) {
   document.querySelectorAll('.color-theme-swatch').forEach((btn) => {
     btn.classList.toggle('active', !!theme && btn.dataset.themeKey === theme.key);
   });
+  if (themePreviewPanelActiveName) {
+    themePreviewPanelActiveName.textContent = theme ? `Tema atual: ${theme.name}` : 'Tema atual: Padrão';
+  }
 }
 
 async function loadColorThemeFromConfig(cfg) {
   applyColorTheme(cfg.colorTheme || '');
 }
 
-function renderColorThemeGrid() {
-  if (!colorThemeGrid || colorThemeGrid.childElementCount > 0) return;
+// Monta os quadradinhos de um "Temas coloridos" dentro do container dado --
+// usada tanto pra grade normal (dentro das configurações) quanto pra cópia
+// que mora no painel de prévia lateral (ver mais abaixo). As duas grades
+// ficam sempre sincronizadas "de graça": applyColorTheme() marca/desmarca
+// `.active` em TODOS os `.color-theme-swatch` da página, não só numa grade.
+function buildColorThemeSwatches(container) {
+  if (!container || container.childElementCount > 0) return;
   COLOR_THEMES.forEach((theme) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -1388,6 +1405,12 @@ function renderColorThemeGrid() {
     btn.dataset.accent = theme.accent;
     btn.dataset.themeKey = theme.key;
     btn.style.background = theme.css;
+    if (theme.badge) {
+      const badgeEl = document.createElement('span');
+      badgeEl.className = 'color-theme-badge';
+      badgeEl.textContent = theme.badge;
+      btn.appendChild(badgeEl);
+    }
     upgradeTooltip(btn, { text: theme.name, dir: 'top' });
     btn.addEventListener('click', async () => {
       const cfg = (await window.vortex.getConfig()) || {};
@@ -1405,25 +1428,32 @@ function renderColorThemeGrid() {
       cfg.colorTheme = theme.key;
       await window.vortex.setConfig(cfg);
     });
-    colorThemeGrid.appendChild(btn);
+    container.appendChild(btn);
   });
+}
+
+function renderColorThemeGrid() {
+  buildColorThemeSwatches(colorThemeGrid);
+  buildColorThemeSwatches(themePreviewPanelGrid);
 }
 renderColorThemeGrid();
 
-// "Pré-visualizar tema": fecha as configurações pra mostrar a conversa ou
-// o servidor de verdade com a cor já aplicada (ela já foi aplicada e salva
-// assim que a pessoa clicou na cor, então não tem passo de "confirmar" --
-// isso aqui é só pra ela CONFERIR o resultado sem o modal no caminho), e
-// deixa um botãozinho flutuante pra voltar pras configurações depois.
+// "Pré-visualizar tema": igual o Discord faz -- fecha as configurações pra
+// mostrar a conversa ou o servidor de verdade por trás (a cor já foi
+// aplicada e salva assim que a pessoa clicou nela, então não tem passo de
+// "confirmar"), e abre um painel fixo do lado direito com a MESMA grade de
+// temas coloridos, pra dar pra continuar trocando de cor vendo o resultado
+// ao vivo, sem precisar voltar pras configurações toda hora. O botão "Sair
+// da prévia" fecha o painel e volta pra aba de aparência.
 if (previewThemeBtn) {
   previewThemeBtn.addEventListener('click', () => {
     closeSettingsModal();
-    if (themePreviewReturn) themePreviewReturn.hidden = false;
+    if (themePreviewPanel) themePreviewPanel.hidden = false;
   });
 }
-if (themePreviewReturnBtn) {
-  themePreviewReturnBtn.addEventListener('click', () => {
-    if (themePreviewReturn) themePreviewReturn.hidden = true;
+if (themePreviewExitBtn) {
+  themePreviewExitBtn.addEventListener('click', () => {
+    if (themePreviewPanel) themePreviewPanel.hidden = true;
     openSettingsModal('appearance');
   });
 }
