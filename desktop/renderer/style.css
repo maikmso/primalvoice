@@ -2354,6 +2354,9 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .profile-actions { margin-top: 20px; display: flex; gap: 10px; }
 
 /* ---------- aparência (grade de temas) ---------- */
+/* Quadrado liso de uma cor só + uma bolinha de check quando selecionado --
+   igual o Discord faz em "Temas padrão" (o antigo formato, com o
+   quadradinho cortado na diagonal em duas cores, não ficou bom). */
 .theme-grid { display: flex; gap: 14px; flex-wrap: wrap; }
 .theme-option {
   display: flex;
@@ -2361,28 +2364,43 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   align-items: center;
   gap: 8px;
   background: transparent;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  padding: 10px;
+  border: none;
+  padding: 0;
   color: var(--muted);
   font-size: 12.5px;
   cursor: pointer;
-  width: 96px;
-}
-.theme-option:hover { background: rgba(255, 255, 255, 0.04); }
-.theme-option.active { border-color: var(--accent); color: var(--text); font-weight: 600; }
-.theme-swatch {
   width: 64px;
-  height: 44px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: block;
 }
-.theme-swatch-escuro { background: linear-gradient(135deg, #1e1f22 55%, #8a8f98 55%); }
-.theme-swatch-meianoite { background: linear-gradient(135deg, #000000 55%, #9198a1 55%); }
-.theme-swatch-classico { background: linear-gradient(135deg, #1b1e2c 55%, #5865f2 55%); }
+.theme-option:hover .theme-swatch { filter: brightness(1.12); }
+.theme-option.active { color: var(--text); font-weight: 600; }
+.theme-swatch {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  display: block;
+  transition: filter 0.12s ease, border-color 0.12s ease;
+}
+.theme-option.active .theme-swatch { border-color: var(--accent); }
+.theme-swatch-escuro { background: #2b2d31; }
+.theme-swatch-meianoite { background: #000000; }
+.theme-swatch-classico { background: #272b40; }
+.theme-swatch-check {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.theme-option.active .theme-swatch-check { opacity: 1; transform: scale(1); }
 
 .modal-subheading { font-size: 15px; font-weight: 700; color: var(--text); margin: 22px 0 4px; }
+.modal-subheading-first { margin-top: 14px; }
 
 /* ---------- aparência (cor de destaque) ---------- */
 .accent-color-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
