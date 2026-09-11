@@ -388,8 +388,8 @@ function setVoiceQuality(quality) {
 function pingQualityTier(rtt) {
   if (typeof rtt !== 'number' || rtt <= 0) return null;
   if (rtt <= 150) return 'excellent'; // 3 tracinhos verdes
-  if (rtt <= 600) return 'good'; // 2 tracinhos laranja
-  return 'poor'; // 1 tracinho vermelho (600ms+)
+  if (rtt <= 299) return 'good'; // 2 tracinhos laranja
+  return 'poor'; // 1 tracinho vermelho (300ms+)
 }
 
 function updateVoiceQualityTooltip() {
