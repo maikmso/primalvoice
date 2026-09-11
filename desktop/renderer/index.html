@@ -47,7 +47,7 @@
         <label>
           Nome de usuário
           <input id="name-input" type="text" maxlength="24" required autocomplete="off" />
-          <small id="username-privacy-hint" class="join-field-hint" hidden>Só serve pra você entrar — ninguém mais vê esse nome.</small>
+          <small id="username-privacy-hint" class="join-field-hint" hidden>Só serve pra você entrar. Ninguém mais vê esse nome.</small>
         </label>
         <label id="join-displayname-label" hidden>
           Nome de exibição
@@ -321,7 +321,7 @@
           <label class="modal-field">Nome de exibição
             <input type="text" id="profile-displayname-input" maxlength="32" placeholder="Como quer aparecer pros outros" />
           </label>
-          <p class="modal-hint modal-hint-tight">Seu usuário padrão continua sendo <strong id="profile-identity-tag"></strong> — esse nome de exibição é só o que aparece pros outros, igual um apelido.</p>
+          <p class="modal-hint modal-hint-tight">Seu usuário padrão continua sendo <strong id="profile-identity-tag"></strong>. Esse nome de exibição é só o que aparece pros outros, igual um apelido.</p>
 
           <label class="modal-field profile-status-field">Status
             <input type="text" id="profile-status-input" maxlength="60" placeholder="Ex: jogando, ausente, etc." />
@@ -338,7 +338,7 @@
 
         <section class="modal-pane" data-pane="appearance">
           <h2>Aparência</h2>
-          <p class="modal-hint">Só muda como o PrimalVoice aparece pra você — cada pessoa escolhe o tema dela.</p>
+          <p class="modal-hint">Só muda como o PrimalVoice aparece pra você. Cada pessoa escolhe o tema dela.</p>
           <div class="theme-grid" id="theme-grid">
             <button type="button" class="theme-option" data-theme="escuro">
               <span class="theme-swatch theme-swatch-escuro"></span>
@@ -352,6 +352,44 @@
               <span class="theme-swatch theme-swatch-classico"></span>
               Clássico
             </button>
+          </div>
+
+          <h3 class="modal-subheading">Cor de destaque</h3>
+          <p class="modal-hint">A cor usada nos botões, links e detalhes da interface.</p>
+          <div class="accent-color-grid" id="accent-color-grid">
+            <button type="button" class="accent-color-option" data-accent="" title="Padrão do tema">
+              <span class="accent-color-swatch accent-color-swatch-default"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#5865f2" title="Índigo">
+              <span class="accent-color-swatch" style="background:#5865f2"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#2bb673" title="Verde">
+              <span class="accent-color-swatch" style="background:#2bb673"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#eb459e" title="Rosa">
+              <span class="accent-color-swatch" style="background:#eb459e"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#f0b132" title="Âmbar">
+              <span class="accent-color-swatch" style="background:#f0b132"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#ed4245" title="Vermelho">
+              <span class="accent-color-swatch" style="background:#ed4245"></span>
+            </button>
+            <button type="button" class="accent-color-option" data-accent="#00b0c7" title="Ciano"></button>
+            <label class="accent-color-option accent-color-custom" title="Escolher outra cor">
+              <span class="accent-color-swatch accent-color-swatch-custom"></span>
+              <input type="color" id="accent-color-custom-input" value="#5865f2" />
+            </label>
+          </div>
+
+          <h3 class="modal-subheading">Fonte</h3>
+          <p class="modal-hint">A fonte usada em todo o PrimalVoice.</p>
+          <div class="font-option-list" id="font-option-list">
+            <button type="button" class="font-option" data-font="padrao" style="font-family: 'Segoe UI', sans-serif;">Padrão</button>
+            <button type="button" class="font-option" data-font="classica" style="font-family: Georgia, 'Times New Roman', serif;">Clássica</button>
+            <button type="button" class="font-option" data-font="arredondada" style="font-family: Calibri, Verdana, sans-serif;">Arredondada</button>
+            <button type="button" class="font-option" data-font="tecnica" style="font-family: Consolas, 'Cascadia Code', monospace;">Técnica</button>
+            <button type="button" class="font-option" data-font="amigavel" style="font-family: 'Comic Sans MS', 'Trebuchet MS', sans-serif;">Amigável</button>
           </div>
         </section>
 
@@ -403,7 +441,7 @@
           <div class="roles-layout">
             <div class="roles-list-col">
               <div class="roles-table-header">
-                <span id="roles-count-label">CARGOS — 0</span>
+                <span id="roles-count-label">CARGOS (0)</span>
                 <span>MEMBROS</span>
               </div>
               <div id="roles-list" class="roles-list"></div>

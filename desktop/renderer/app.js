@@ -305,6 +305,9 @@ const cropCancelBtn = document.getElementById('crop-cancel-btn');
 const cropConfirmBtn = document.getElementById('crop-confirm-btn');
 
 const themeGrid = document.getElementById('theme-grid');
+const accentColorGrid = document.getElementById('accent-color-grid');
+const accentColorCustomInput = document.getElementById('accent-color-custom-input');
+const fontOptionList = document.getElementById('font-option-list');
 
 const dmListEl = document.getElementById('dm-list');
 
@@ -1168,6 +1171,96 @@ if (themeGrid) {
   });
 }
 
+// ---------- aparência (cor de destaque) ----------
+// Deixa a pessoa trocar a cor usada nos botões/links/detalhes sem precisar
+// trocar de tema inteiro -- clareia a cor escolhida pra --accent-2 (usada
+// em texto/ícone sobre fundo escuro) e gera uma versão bem fraquinha em
+// --accent-soft (fundo de botão/destaque), do mesmo jeito que os temas
+// prontos já fazem à mão lá no CSS.
+function hexToRgb(hex) {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+function mixWithWhite(hex, amount) {
+  const { r, g, b } = hexToRgb(hex);
+  const mix = (c) => Math.round(c + (255 - c) * amount);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+function applyAccent(hex) {
+  const root = document.documentElement;
+  if (!hex) {
+    root.style.removeProperty('--accent');
+    root.style.removeProperty('--accent-2');
+    root.style.removeProperty('--accent-soft');
+  } else {
+    const { r, g, b } = hexToRgb(hex);
+    root.style.setProperty('--accent', hex);
+    root.style.setProperty('--accent-2', mixWithWhite(hex, 0.35));
+    root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.18)`);
+  }
+  document.querySelectorAll('.accent-color-option').forEach((btn) => {
+    if (btn.dataset.accent !== undefined) btn.classList.toggle('active', (btn.dataset.accent || '') === (hex || ''));
+  });
+  if (accentColorCustomInput && hex) accentColorCustomInput.value = hex;
+}
+
+async function loadAccentFromConfig(cfg) {
+  applyAccent(cfg.accentColor || '');
+}
+
+if (accentColorGrid) {
+  accentColorGrid.querySelectorAll('.accent-color-option[data-accent]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const hex = btn.dataset.accent || '';
+      applyAccent(hex);
+      const cfg = (await window.vortex.getConfig()) || {};
+      cfg.accentColor = hex;
+      await window.vortex.setConfig(cfg);
+    });
+  });
+}
+if (accentColorCustomInput) {
+  accentColorCustomInput.addEventListener('input', async () => {
+    const hex = accentColorCustomInput.value;
+    applyAccent(hex);
+    const cfg = (await window.vortex.getConfig()) || {};
+    cfg.accentColor = hex;
+    await window.vortex.setConfig(cfg);
+  });
+}
+
+// ---------- aparência (fonte) ----------
+const FONT_STACKS = {
+  padrao: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`,
+  classica: `Georgia, "Times New Roman", serif`,
+  arredondada: `Calibri, Verdana, sans-serif`,
+  tecnica: `Consolas, "Cascadia Code", monospace`,
+  amigavel: `"Comic Sans MS", "Trebuchet MS", sans-serif`,
+};
+function applyFont(fontKey) {
+  const key = FONT_STACKS[fontKey] ? fontKey : 'padrao';
+  document.documentElement.style.setProperty('--font-family', FONT_STACKS[key]);
+  document.querySelectorAll('.font-option').forEach((btn) => {
+    btn.classList.toggle('active', (btn.dataset.font || 'padrao') === key);
+  });
+}
+async function loadFontFromConfig(cfg) {
+  applyFont(cfg.fontFamily || 'padrao');
+}
+if (fontOptionList) {
+  fontOptionList.querySelectorAll('.font-option').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const fontKey = btn.dataset.font || 'padrao';
+      applyFont(fontKey);
+      const cfg = (await window.vortex.getConfig()) || {};
+      cfg.fontFamily = fontKey;
+      await window.vortex.setConfig(cfg);
+    });
+  });
+}
+
 function renderPermissionGates() {
   addTextChannelBtn.hidden = !myPermissions.manageChannels;
   addVoiceChannelBtn.hidden = !myPermissions.manageChannels;
@@ -1451,6 +1544,8 @@ async function init() {
   loadProfileFromConfig(cfg);
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
+  await loadAccentFromConfig(cfg);
+  await loadFontFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
     // Se já tinha entrado antes nesse PC, tenta reconectar sozinho (sem
@@ -4365,7 +4460,7 @@ function renderMemberSidebar() {
     const header = document.createElement('div');
     header.className = 'member-section-header';
     if (color) header.style.color = color;
-    header.textContent = `${label} — ${identities.length}`;
+    header.textContent = `${label} (${identities.length})`;
     section.appendChild(header);
 
     identities.sort(byName).forEach((identity) => {
@@ -4673,7 +4768,7 @@ function openSoundboardPanel() {
   const hint = document.createElement('div');
   hint.className = 'soundboard-hint';
   hint.textContent = voiceRoom
-    ? 'Clique num efeito pra tocar — todo mundo no canal de voz escuta.'
+    ? 'Clique num efeito pra tocar. Todo mundo no canal de voz escuta.'
     : 'Entre num canal de voz pra poder tocar os efeitos.';
   panel.appendChild(hint);
 
@@ -4767,7 +4862,7 @@ soundboardFileInput.addEventListener('change', async () => {
   soundboardFileInput.value = '';
   if (!file) return;
   if (file.size > MAX_SOUND_BYTES) {
-    alert(`Esse áudio é muito grande (máximo ${(MAX_SOUND_BYTES / 1_000_000).toFixed(1)}MB — dá pra usar um trecho bem curtinho).`);
+    alert(`Esse áudio é muito grande (máximo ${(MAX_SOUND_BYTES / 1_000_000).toFixed(1)}MB, dá pra usar um trecho bem curtinho).`);
     return;
   }
   try {
@@ -4781,7 +4876,7 @@ soundboardFileInput.addEventListener('change', async () => {
       probeCtx.close().catch(() => {});
     }
     if (duration > MAX_SOUND_SECONDS) {
-      alert(`Esse áudio dura ${duration.toFixed(1)}s — o limite pra efeito sonoro é ${MAX_SOUND_SECONDS}s.`);
+      alert(`Esse áudio dura ${duration.toFixed(1)}s, e o limite pra efeito sonoro é ${MAX_SOUND_SECONDS}s.`);
       return;
     }
     const dataUrl = await readFileAsDataUrl(file);
@@ -4791,7 +4886,7 @@ soundboardFileInput.addEventListener('change', async () => {
     openSoundboardPanel();
   } catch (err) {
     console.warn('Não consegui usar esse arquivo de áudio:', err);
-    alert('Não consegui usar esse arquivo — confira se é mesmo um áudio válido.');
+    alert('Não consegui usar esse arquivo. Confira se é mesmo um áudio válido.');
   }
 });
 
@@ -6670,7 +6765,7 @@ function renderRolesTab() {
   const query = rolesSearchQuery.trim().toLowerCase();
   const visibleRoles = query ? serverState.roles.filter((role) => role.name.toLowerCase().includes(query)) : serverState.roles;
 
-  if (rolesCountLabel) rolesCountLabel.textContent = `CARGOS — ${serverState.roles.length}`;
+  if (rolesCountLabel) rolesCountLabel.textContent = `CARGOS (${serverState.roles.length})`;
 
   rolesListEl.innerHTML = '';
   visibleRoles.forEach((role) => {
