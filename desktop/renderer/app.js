@@ -1294,7 +1294,12 @@ const COLOR_THEMES = [
   // em destaque no topo da grade dele; aqui não é um criador de tema (isso
   // é coisa de assinatura paga de lá), só um degradê rico igual aos outros,
   // com o mesmo nome/destaque.
-  { key: 'lua-carmesim', name: 'Lua Carmesim', badge: 'NOVO', css: 'linear-gradient(135deg, #ff6b6b, #b91d3a, #4a0e1f, #150408)', accent: '#b91d3a' },
+  // Pediram mais escuro (mais preto do que vermelho) -- por isso o vermelho
+  // fica só no comecinho (0%-22%) e o resto do degradê (a maior parte)
+  // desce rápido pro preto quase puro, em vez de dividir igualzinho entre
+  // as 4 cores (que numa janela bem mais larga que alta deixava vermelho
+  // demais visível).
+  { key: 'lua-carmesim', name: 'Lua Carmesim', badge: 'NOVO', css: 'linear-gradient(135deg, #c0293a 0%, #7a1220 22%, #350a12 48%, #0d0304 78%, #000000 100%)', accent: '#b91d3a' },
   { key: 'verde-menta', name: 'Verde-menta', css: 'linear-gradient(135deg, #b9f2d4, #8fe3b0, #4fbd85)', accent: '#4fbd85' },
   { key: 'pessego', name: 'Pêssego', css: 'linear-gradient(135deg, #fbe0b8, #f5c894, #e0a460)', accent: '#e0a460' },
   { key: 'azul-lavanda', name: 'Azul-lavanda', css: 'linear-gradient(135deg, #d7e0fa, #b7c6f2, #7c8ee0)', accent: '#7c8ee0' },
