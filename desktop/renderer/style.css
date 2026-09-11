@@ -2074,6 +2074,14 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   display: flex;
   align-items: center;
   justify-content: center;
+  /* #app-titlebar tem 36px de altura, com os botõezinhos nativos de
+     minimizar/maximizar/fechar do Windows (titleBarOverlay) colados no
+     canto superior direito da JANELA (não do modal). Sem essa folga, com
+     a janela num tamanho comum o modal ficava quase encostado no topo, e o
+     canto arredondado + o nosso próprio X (que mora dentro do modal, perto
+     desse mesmo canto) ficavam parcialmente escondidos atrás desses
+     botões nativos -- ver o mesmo problema/solução em .image-lightbox-close. */
+  padding-top: 44px;
   z-index: 200;
   animation: modal-overlay-in 0.15s ease;
 }
