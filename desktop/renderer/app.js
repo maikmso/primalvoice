@@ -1516,10 +1516,17 @@ setupResizeHandle(resizeLeft, channelSidebar, {
 function showTextView() {
   grid.hidden = true;
   textView.hidden = false;
+  // a barra flutuante (cinemaControlsBar) fica fixed na janela toda, fora
+  // do grid -- então escondendo só o grid ela continuava por cima da tela
+  // de texto. Esconde ela também ao sair da visão de voz; volta certinha
+  // (se ainda fizer sentido) em showVoiceView, via updateFloatingBarVisibility.
+  cinemaControlsBar.hidden = true;
+  cinemaControlsBar.classList.remove('visible');
 }
 function showVoiceView() {
   textView.hidden = true;
   grid.hidden = false;
+  updateFloatingBarVisibility();
 }
 
 function channelMemberRowId(identity) {
