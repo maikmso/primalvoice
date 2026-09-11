@@ -694,6 +694,16 @@ body.cinema-mode .screen-share-controls { display: none !important; }
 .status-badge.badge-on { display: flex; }
 .status-badge svg { width: 14px; height: 14px; }
 .status-badge.camera-badge { color: var(--speaking); }
+/* mascote do PrimalVoice no lugar dos ícones genéricos de mic mudo/
+   ensurdecido -- imagem própria, não segue currentColor como os SVGs, então
+   não herda o vermelho de alerta dos outros (a carinha do bichinho já
+   comunica sozinha) */
+.status-badge.mic-badge img,
+.status-badge.deafen-badge img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
 /* "olho" de quem está assistindo uma transmissão agora — não é um alerta
    (por isso não usa o vermelho padrão dos outros ícones), só uma informação */
 .status-badge.watching-badge { color: var(--text); }
