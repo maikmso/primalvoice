@@ -4131,19 +4131,23 @@ function buildMemberRow(participant, opts = {}) {
     cameraBadge.innerHTML = CAMERA_BADGE_SVG;
     badges.appendChild(cameraBadge);
 
-    // Mascote do PrimalVoice no lugar dos ícones genéricos de mic mudo/
-    // ensurdecido -- só aparecem quando badge-on (ver applyStatusBadges),
-    // então já são só os dois estados "isso está ativado agora" mesmo.
+    // Emoji de macaquinho no lugar dos ícones genéricos de mic mudo/
+    // ensurdecido -- 🙊 (mão na boca) pra mudo, 🙉 (mão na orelha) pra
+    // ensurdecido. Emoji em vez de imagem própria: sempre nítido em
+    // qualquer tamanho (fonte do sistema, não escala feito PNG) e já é
+    // reconhecível de cara. Só aparecem quando badge-on (ver
+    // applyStatusBadges), então já são só os dois estados "isso está
+    // ativado agora" mesmo.
     const micBadge = document.createElement('span');
     micBadge.className = 'status-badge mic-badge';
     upgradeTooltip(micBadge, { text: 'Microfone mudo' });
-    micBadge.innerHTML = '<img src="assets/mic-muted-monkey.png" alt="" />';
+    micBadge.textContent = '🙊';
     badges.appendChild(micBadge);
 
     const deafenBadge = document.createElement('span');
     deafenBadge.className = 'status-badge deafen-badge';
     upgradeTooltip(deafenBadge, { text: 'Ensurdecido' });
-    deafenBadge.innerHTML = '<img src="assets/headset-deafened-monkey.png" alt="" />';
+    deafenBadge.textContent = '🙉';
     badges.appendChild(deafenBadge);
 
     const watchingBadge = document.createElement('span');
