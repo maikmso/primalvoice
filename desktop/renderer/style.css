@@ -681,6 +681,14 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   cursor: pointer;
 }
 .voice-members-list .member-row { padding-left: 28px; }
+/* destaque ao passar o mouse -- pra dar pra saber quem você tá "selecionando"
+   antes de clicar, igual o Discord (a lista da direita já tinha isso, ver
+   .member-list .member-row:hover mais abaixo; essa aqui, aninhada dentro do
+   canal de voz na barra lateral esquerda, não tinha nenhum feedback). */
+.voice-members-list .member-row:hover {
+  background: var(--hover-strong);
+  color: var(--text);
+}
 .member-status-badges { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .status-badge { display: none; color: var(--danger); }
 .status-badge.badge-on { display: flex; }
