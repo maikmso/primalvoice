@@ -170,6 +170,7 @@ const voiceStatusChannel = document.getElementById('voice-status-channel');
 const voiceStatusTitle = document.getElementById('voice-status-title');
 const voiceQualityTooltip = document.getElementById('voice-quality-tooltip');
 const voiceQualityIcon = document.getElementById('voice-quality-icon');
+const reconnectOverlay = document.getElementById('reconnect-overlay');
 
 // posiciona o balão do ping em coordenadas fixas da tela (calculadas na
 // hora), em vez de depender de "escapar" do painel — o painel da barra
@@ -411,6 +412,47 @@ function stopVoiceQualityMonitor() {
   setVoiceQuality('unknown');
   voiceQualityTooltip.textContent = 'Qualidade da conexão';
 }
+
+// ---------- Internet caindo de vez (não só um pinguinho ruim) ----------
+// window 'offline'/'online' pegam a placa de rede do Windows desligando/
+// voltando (ex: Wi-Fi desligado na mão, cabo puxado) -- diferente do ping
+// alto/quality-poor de cima, que é sobre uma conexão ainda de pé mas ruim.
+// Só mostra a tela cheia depois de OFFLINE_GRACE_MS sem rede pra não piscar
+// numa queda rápida (tipo o Wi-Fi trocando de canal por 1-2s) que se resolve
+// sozinha antes de atrapalhar quem tá usando o app.
+const OFFLINE_GRACE_MS = 10000;
+let offlineGraceTimer = null;
+let channelToRejoinOnReconnect = null;
+
+function handleNetworkOffline() {
+  if (offlineGraceTimer || !reconnectOverlay.hidden) return; // já esperando, ou já mostrando
+  offlineGraceTimer = setTimeout(() => {
+    offlineGraceTimer = null;
+    channelToRejoinOnReconnect = activeVoiceChannelId || null;
+    reconnectOverlay.hidden = false;
+  }, OFFLINE_GRACE_MS);
+}
+
+function handleNetworkOnline() {
+  if (offlineGraceTimer) {
+    clearTimeout(offlineGraceTimer);
+    offlineGraceTimer = null;
+  }
+  if (reconnectOverlay.hidden) return; // não chegou a mostrar a tela, nada pra desfazer
+  reconnectOverlay.hidden = true;
+  if (channelToRejoinOnReconnect) {
+    const channelId = channelToRejoinOnReconnect;
+    channelToRejoinOnReconnect = null;
+    // entra de novo sozinho no mesmo canal de voz que a gente estava antes
+    // de cair -- joinVoiceChannel já cuida de sair de qualquer resto de
+    // conexão velha primeiro (ver o início dela)
+    joinVoiceChannel(channelId).catch(() => {});
+  }
+}
+
+window.addEventListener('offline', handleNetworkOffline);
+window.addEventListener('online', handleNetworkOnline);
+
 let joining = false;
 
 const chatHistoryByChannel = new Map(); // channelId -> [{name,text,ts,isSelf}]

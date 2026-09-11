@@ -1860,6 +1860,32 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 }
 .voice-quality-tooltip.tooltip-visible { opacity: 1; visibility: visible; }
 
+/* Tela cheia que cobre o app quando a internet cai de vez (ver
+   handleOffline/handleOnline no app.js) -- só aparece depois de um tempo
+   sem rede pra não piscar por causa de uma queda rápida e sem importância. */
+.reconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.reconnect-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  animation: reconnect-spin 0.9s linear infinite;
+}
+@keyframes reconnect-spin { to { transform: rotate(360deg); } }
+.reconnect-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.reconnect-subtitle { font-size: 13px; color: var(--muted); }
+
 /* mesmo balãozinho bonito do "Ping: Xms" (fixed + JS), só que pra direita —
    usado nos ícones da barra de servidores (PrimalVoice, Mensagens diretas,
    atalhos de DM), que antes usavam o tooltip feio/padrão do sistema (title
