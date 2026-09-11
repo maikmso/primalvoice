@@ -5018,9 +5018,9 @@ function openProfileCard(x, y, identity) {
 
     // Cartão igual o Discord: quem mais está na chamada (em miniatura, com
     // "+N" se não couber todo mundo), o canal, quantas pessoas tem, e um
-    // "Juntar-se" -- clicar em qualquer lugar do cartão entra na chamada.
-    const voiceCard = document.createElement('button');
-    voiceCard.type = 'button';
+    // "Juntar-se" -- só o "Juntar-se" é clicável, o resto do cartão é só
+    // informativo.
+    const voiceCard = document.createElement('div');
     voiceCard.className = 'profile-card-voice-card';
 
     const participants = Array.from((voicePresence.get(currentVoiceChannelId) || new Map()).keys());
@@ -5061,17 +5061,17 @@ function openProfileCard(x, y, identity) {
     sub.textContent = participants.length === 1 ? '1 pessoa na chamada' : `${participants.length} pessoas na chamada`;
     info.appendChild(sub);
 
-    const joinPill = document.createElement('span');
+    const joinPill = document.createElement('button');
+    joinPill.type = 'button';
     joinPill.className = 'profile-card-voice-join';
     joinPill.textContent = 'Juntar-se';
-    info.appendChild(joinPill);
-
-    voiceCard.appendChild(info);
-
-    voiceCard.addEventListener('click', () => {
+    joinPill.addEventListener('click', () => {
       closeContextMenu();
       enterVoiceChannel(currentVoiceChannelId);
     });
+    info.appendChild(joinPill);
+
+    voiceCard.appendChild(info);
     body.appendChild(voiceCard);
   }
 
