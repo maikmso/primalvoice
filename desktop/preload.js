@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('vortex', {
     return () => ipcRenderer.removeListener('update-status', listener);
   },
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  // Clicou numa notificação de DM nova (ver notifyNewMessage no renderer) --
+  // traz a janela de volta pra frente.
+  focusWindow: () => ipcRenderer.invoke('window:focus'),
   // Tela cheia de verdade da janela (cinema mode do compartilhamento de tela).
   setWindowFullscreen: (value) => ipcRenderer.invoke('window:setFullscreen', value),
   onWindowFullscreenChanged: (callback) => {

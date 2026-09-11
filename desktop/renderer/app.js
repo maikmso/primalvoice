@@ -631,6 +631,7 @@ const joinSound = new Audio('assets/sound-join.wav');
 const leaveSound = new Audio('assets/sound-leave.wav');
 const muteSound = new Audio('assets/sound-mute.wav');
 const unmuteSound = new Audio('assets/sound-unmute.wav');
+const messageSound = new Audio('assets/sound-message.wav');
 function playSound(el) {
   try {
     el.currentTime = 0;
@@ -642,6 +643,51 @@ function playSound(el) {
 
 function sanitizeId(str) {
   return String(str).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+// ---------- Notificação de mensagem privada nova ----------
+// Igual o Discord faz quando você tá "disponível": toca um barulhinho
+// próprio (messageSound) e mostra uma notificação nativa do sistema
+// operacional, mesmo com o app minimizado/em segundo plano. Só dispara pra
+// mensagem de quem NÃO é a própria pessoa (evita notificar do próprio eco),
+// e só quando a pessoa não está com o olho já em cima daquela conversa
+// (janela focada + aquela DM aberta na tela) -- senão vira barulho à toa.
+function shouldNotifyForDm(peer) {
+  const windowFocused = typeof document !== 'undefined' && document.hasFocus && document.hasFocus();
+  const alreadyViewing = activeDmPeer === peer && windowFocused;
+  return !alreadyViewing;
+}
+
+function showDmNotification(peer, name, text) {
+  if (typeof Notification === 'undefined') return;
+  const fire = () => {
+    try {
+      const n = new Notification(name || displayNameFor(peer), {
+        body: text && text.trim() ? text : 'Enviou uma mensagem',
+        icon: 'assets/logo.png',
+        silent: true, // já tocamos o nosso próprio som (messageSound)
+      });
+      n.onclick = () => {
+        window.vortex?.focusWindow?.();
+        switchToDm(peer);
+      };
+    } catch {
+      // ambiente sem suporte a Notification -- ignora
+    }
+  };
+  if (Notification.permission === 'granted') {
+    fire();
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then((perm) => {
+      if (perm === 'granted') fire();
+    });
+  }
+}
+
+function notifyNewMessage(peer, name, text) {
+  if (!shouldNotifyForDm(peer)) return;
+  playSound(messageSound);
+  showDmNotification(peer, name, text);
 }
 
 // ---------- API ----------
@@ -5653,6 +5699,9 @@ async function completeConnect(token, identity, st) {
         identity: msg.from,
         attachment: msg.attachment || null,
       });
+      if (msg.from !== myIdentity) {
+        notifyNewMessage(peer, msg.name || displayNameFor(peer), msg.text);
+      }
     } else if (msg.type === 'message-edited' || msg.type === 'message-deleted') {
       // mesma checagem de privacidade do 'dm' acima: numa edição/apagada de
       // DM, só aceita se eu for de fato remetente ou destinatário

@@ -300,9 +300,10 @@ function createTray() {
 let pendingScreenShareChoice = null;
 
 app.whenReady().then(async () => {
-  // Autoriza pedidos de câmera/mic/tela sem o Electron bloquear silenciosamente.
+  // Autoriza pedidos de câmera/mic/tela e de notificação (avisos de DM nova,
+  // igual Discord) sem o Electron bloquear silenciosamente.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    if (permission === 'media' || permission === 'display-capture') {
+    if (permission === 'media' || permission === 'display-capture' || permission === 'notifications') {
       return callback(true);
     }
     callback(false);
@@ -482,6 +483,16 @@ ipcMain.handle('update:install', () => {
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+// Clicou numa notificação de DM nova (ver notifyNewMessage no renderer) --
+// traz a janela de volta pra frente (pode estar minimizada na bandeja).
+ipcMain.handle('window:focus', () => {
+  if (!mainWindow) return false;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  return true;
+});
 
 // Tela cheia de verdade (a janela inteira, sem moldura/barra de título) pro
 // "cinema mode" de assistir compartilhamento de tela — ver enterCinemaFullscreen
