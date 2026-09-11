@@ -1258,18 +1258,18 @@ if (accentColorCustomInput) {
 // aparece no balãozinho ao passar o mouse. Diferente da "Cor de destaque"
 // de cima (que só troca a cor dos botões), clicar aqui REPINTA O
 // PRIMALVOICE INTEIRO: fundo, painéis, bordas etc. também ganham um tom
-// combinando com a cor, além do botão/accent (que fica igual à "accent" do
-// tema, escolhida por padrão). Quando a opção é um degradê, o quadradinho
-// da grade mostra o degradê inteiro, mas quem vira de fato a cor de
-// botões/fundo é a "accent" (uma das duas pontas), já que o resto da
-// interface usa cor sólida, não degradê.
+// combinando com a cor. Quando a opção é um degradê, o quadradinho da
+// grade mostra o degradê inteiro, mas quem vira de fato a cor de
+// botões/fundo (quando aplicada) é a "accent" (uma das duas pontas), já
+// que o resto da interface usa cor sólida, não degradê.
 //
 // O fundo/painéis (esta grade) e a cor dos botões ("Cor de destaque" logo
-// acima) são independentes: depois de escolher um tema colorido aqui,
-// ainda dá pra ir em "Cor de destaque" e trocar só a cor dos botões, sem
-// perder o fundo escolhido -- pediram exatamente isso (ex: fundo Azul-
-// petróleo com botões Amarelo). Só clicar de novo num tema colorido (aqui
-// ou o mesmo de novo) volta a igualar tudo à "accent" dele.
+// acima) são TOTALMENTE independentes, não importa a ordem que a pessoa
+// mexeu nos dois: dá pra ter o fundo Azul-petróleo com botões Amarelo
+// (pediram exatamente isso), escolhendo em qualquer ordem. Um tema
+// colorido só sugere a própria "accent" pro botão quando ainda não existe
+// nenhuma "Cor de destaque" escolhida (primeiro uso, sem customização);
+// depois disso ele nunca mais mexe no botão, só no fundo/painéis.
 const COLOR_THEMES = [
   { key: 'verde-menta', name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
   { key: 'pessego', name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
@@ -1390,10 +1390,18 @@ function renderColorThemeGrid() {
     btn.style.background = theme.css;
     upgradeTooltip(btn, { text: theme.name, dir: 'top' });
     btn.addEventListener('click', async () => {
-      applyAccent(theme.accent);
-      applyColorTheme(theme.key);
       const cfg = (await window.vortex.getConfig()) || {};
-      cfg.accentColor = theme.accent;
+      // Independente da ordem que a pessoa mexeu nos controles: se ela já
+      // escolheu uma "Cor de destaque" própria (em qualquer momento, antes
+      // OU depois de mexer aqui), essa cor tem prioridade e o tema colorido
+      // não a sobrescreve -- só repinta o fundo/painéis. A accent do tema
+      // só é usada como sugestão quando ainda não tem nenhuma cor de botão
+      // escolhida (primeira vez, tema "de fábrica").
+      if (!cfg.accentColor) {
+        applyAccent(theme.accent);
+        cfg.accentColor = theme.accent;
+      }
+      applyColorTheme(theme.key);
       cfg.colorTheme = theme.key;
       await window.vortex.setConfig(cfg);
     });
