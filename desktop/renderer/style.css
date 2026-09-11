@@ -585,6 +585,10 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   flex-direction: column;
   overflow: hidden;
   transition: width 0.15s ease;
+  /* pro rodapé do usuário (.user-panel) flutuar sobreposto por cima da
+     lista de canais -- ver comentário lá embaixo -- ancorado NESTA caixa,
+     não na janela inteira. */
+  position: relative;
 }
 .channel-sidebar.no-transition { transition: none; }
 .channel-sidebar.collapsed > * { visibility: hidden; }
@@ -599,7 +603,18 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
-.channel-list { flex: 1; overflow-y: auto; padding: 8px; }
+.channel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  /* espaço reservado embaixo pro rodapé flutuante (.user-panel, agora
+     position:absolute) não tampar de vez os últimos canais -- dá pra
+     rolar a lista pra cima e ver eles por trás/acima do cartão, igual o
+     Discord. O valor cobre até o estado mais alto do rodapé (conectado
+     numa chamada, com a barrinha "Voz conectada" + os botões + o cartão
+     do usuário, tudo junto). */
+  padding-bottom: 180px;
+}
 .channel-category-row {
   display: flex;
   align-items: center;
@@ -801,11 +816,21 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   color: transparent !important;
 }
 
+/* Igual o Discord: o rodapé do usuário não fica preso/encaixado embaixo da
+   lista de canais (empurrando ela) -- ele FLUTUA por cima, sobrepondo o
+   final da lista, com cantos arredondados nos 4 lados + sombra, meio
+   "solto" da borda da barra lateral (ver .channel-sidebar {position:
+   relative} e .channel-list {padding-bottom} logo acima). */
 .user-panel {
-  flex-shrink: 0;
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   padding: 8px;
   background: var(--surface-raised);
-  border-top: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 .user-panel-controls { display: flex; flex-direction: column; gap: 8px; }
 .user-panel-controls.voice-disabled .ctrl-icon {
