@@ -5661,6 +5661,24 @@ async function completeConnect(token, identity, st) {
   joinScreen.hidden = true;
   roomScreen.hidden = false;
   renderMemberSidebar();
+
+  // Se a pessoa estava numa chamada de voz quando mandou instalar uma
+  // atualização (ver updateBannerBtn), volta pra ela sozinho agora que
+  // reconectou -- sem precisar entrar de novo na mão. Só usa isso uma vez
+  // (apaga a marca logo em seguida, connect com sucesso ou não) pra nunca
+  // entrar de volta numa chamada antiga sem querer numa abertura futura.
+  try {
+    const cfg = (await window.vortex.getConfig()) || {};
+    const rejoinChannelId = cfg.rejoinVoiceChannelAfterUpdate;
+    if (rejoinChannelId) {
+      delete cfg.rejoinVoiceChannelAfterUpdate;
+      await window.vortex.setConfig(cfg);
+      const stillExists = serverState.channels?.voice?.some((c) => c.id === rejoinChannelId);
+      if (stillExists) joinVoiceChannel(rejoinChannelId).catch(() => {});
+    }
+  } catch {
+    // sem problema -- só não volta sozinho pra chamada
+  }
 }
 
 // Se essa máquina já tem uma sessão salva de uma vez anterior, tenta entrar
@@ -6906,8 +6924,28 @@ if (window.vortex && window.vortex.onUpdateStatus) {
   });
 }
 
-updateBannerBtn.addEventListener('click', () => {
+updateBannerBtn.addEventListener('click', async () => {
   if (!updateReadyToInstall) return;
+  // evita clique duplo mandando instalar 2x (ex: cliques rápidos antes do
+  // botão sumir de vista com o resto do banner)
+  updateReadyToInstall = false;
+  updateBannerBtn.disabled = true;
+
+  // Se a pessoa está numa chamada de voz agora, guarda qual canal era —
+  // depois que a atualização reiniciar o app sozinho (ver main.js), a gente
+  // usa isso pra voltar direto pra ela, sem precisar entrar nada de novo na
+  // mão (ver o fim de completeConnect).
+  if (activeVoiceChannelId) {
+    try {
+      const cfg = (await window.vortex.getConfig()) || {};
+      cfg.rejoinVoiceChannelAfterUpdate = activeVoiceChannelId;
+      await window.vortex.setConfig(cfg);
+    } catch {
+      // se não salvar, sem problema -- só significa que não volta sozinho
+      // pra chamada depois de atualizar
+    }
+  }
+
   // mostra a telinha escura com o logo girando (igual Discord) antes de
   // mandar instalar — dá um tempinho pro Chromium desenhar isso na tela
   // antes do app fechar pra instalar em segundo plano.

@@ -3,6 +3,77 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const { autoUpdater } = require('electron-updater');
+const { spawn } = require('child_process');
+
+// ---------- processo auxiliar de atualização (janelinha "Atualizando...") ----------
+// Pra instalar uma atualização o Windows PRECISA que o .exe do PrimalVoice
+// feche de vez (não dá pra sobrescrever os arquivos de um programa rodando)
+// — então não tem como literalmente "não fechar o app". O que dá pra fazer,
+// e é o que isso aqui resolve, é a pessoa nunca ver a área de trabalho
+// "pelada" no meio do processo: antes de fechar de verdade (ver
+// ipcMain.handle('update:install') lá embaixo), o app de verdade abre uma
+// SEGUNDA cópia de si mesmo, só que com essa flag `--pv-update-helper`, que
+// não faz mais nada além de mostrar essa janelinha flutuante "Atualizando o
+// PrimalVoice..." por cima de tudo. Ela fica esperando o app de verdade
+// terminar de reinstalar e abrir de novo sozinho (isso o electron-updater já
+// faz com quitAndInstall(true, true)) — o sinal de "já pode fechar" é um
+// arquivinho vazio que o app de verdade escreve assim que a janela principal
+// dele está prestes a aparecer de novo (ver finishBootIfReady). Tem também
+// um limite de segurança (MAX_WAIT_MS) pra essa janelinha nunca ficar aberta
+// pra sempre caso alguma coisa dê errado no meio do caminho.
+if (process.argv.includes('--pv-update-helper')) {
+  // Descobre o caminho de dados REAL do app (onde o config.json de verdade
+  // mora) antes de trocar o userData deste processo auxiliar pra uma pasta
+  // temporária só dele — assim ele nunca disputa o mesmo perfil do Chromium
+  // com o app de verdade, que pode estar bem no meio de fechar nesse instante.
+  const realUserDataPath = app.getPath('userData');
+  app.setPath('userData', path.join(app.getPath('temp'), 'primalvoice-update-helper'));
+
+  app.whenReady().then(() => {
+    const helperWin = new BrowserWindow({
+      width: 220,
+      height: 260,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      alwaysOnTop: true,
+      center: true,
+      skipTaskbar: true,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    helperWin.once('ready-to-show', () => helperWin.show());
+    helperWin.loadFile(path.join(__dirname, 'renderer', 'updating.html'));
+
+    const flagPath = path.join(realUserDataPath, '.update-restarting');
+    try {
+      fs.unlinkSync(flagPath); // limpa qualquer resto de uma vez anterior antes de começar a esperar
+    } catch {
+      // não tinha mesmo, sem problema
+    }
+    const startedAt = Date.now();
+    const MAX_WAIT_MS = 25000; // trava de segurança: nunca fica pra sempre nessa telinha
+    const poll = setInterval(() => {
+      const done = fs.existsSync(flagPath) || Date.now() - startedAt > MAX_WAIT_MS;
+      if (!done) return;
+      clearInterval(poll);
+      try {
+        fs.unlinkSync(flagPath);
+      } catch {
+        // idem
+      }
+      app.quit();
+    }, 300);
+  });
+  return; // nada do resto do arquivo roda aqui -- esse processo só existe pra essa janelinha
+}
 
 let mainWindow;
 let splashWindow;
@@ -23,6 +94,20 @@ function finishBootIfReady() {
   setTimeout(() => {
     if (mainWindow) mainWindow.show();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+    // Se isso aqui é a reabertura automática logo depois de instalar uma
+    // atualização, avisa a janelinha "Atualizando..." (ver o bloco
+    // --pv-update-helper lá em cima) que já pode fechar — a janela principal
+    // já está prestes a aparecer. É a PRÓPRIA janelinha quem apaga esse
+    // arquivo depois de perceber (ela confere a cada 300ms); numa abertura
+    // normal (sem atualização em andamento) ele fica órfão até a próxima vez
+    // que uma atualização for instalada, quando é limpo antes de começar a
+    // espera de novo — sem efeito nenhum nesse meio tempo.
+    try {
+      fs.writeFileSync(updateRestartFlagPath, '1');
+    } catch {
+      // sem problema -- na pior das hipóteses a janelinha fecha sozinha
+      // depois pelo limite de segurança dela (MAX_WAIT_MS)
+    }
   }, wait);
 }
 
@@ -64,10 +149,15 @@ app.on('second-instance', () => {
     mainWindow.show();
     mainWindow.focus();
   }
+  checkForUpdatesThrottled();
 });
 
 const configPath = path.join(app.getPath('userData'), 'config.json');
 const iconPath = path.join(__dirname, 'build', 'icon.png');
+// Arquivo-sinal usado só durante uma atualização: avisa a janelinha
+// "Atualizando..." (processo auxiliar, ver bloco --pv-update-helper lá em
+// cima) que a janela principal está prestes a aparecer de novo.
+const updateRestartFlagPath = path.join(app.getPath('userData'), '.update-restarting');
 
 function readConfig() {
   try {
@@ -172,7 +262,14 @@ function createWindow() {
   // ganha/perde foco (ou é minimizada pra bandeja) -- ver syncShareOverlayVisibility.
   mainWindow.on('focus', () => syncShareOverlayVisibility());
   mainWindow.on('blur', () => syncShareOverlayVisibility());
-  mainWindow.on('show', () => syncShareOverlayVisibility());
+  mainWindow.on('show', () => {
+    syncShareOverlayVisibility();
+    // Todo momento em que a pessoa volta a olhar pro app (reaberto da
+    // bandeja, focado de novo, etc.) é uma chance boa de conferir uma
+    // atualização nova sem esperar o próximo ciclo do setInterval lá embaixo
+    // -- checkForUpdatesThrottled ignora se já checou há pouco tempo.
+    checkForUpdatesThrottled();
+  });
   mainWindow.on('hide', () => syncShareOverlayVisibility());
 }
 
@@ -232,9 +329,13 @@ app.whenReady().then(async () => {
   createTray();
 
   // Primeira checagem alguns segundos após abrir (não trava a inicialização),
-  // depois confere de novo a cada 30 minutos enquanto o app estiver aberto.
+  // depois confere de novo a cada 5 minutos enquanto o app estiver aberto --
+  // era 30 minutos, o que fazia a atualização demorar bem mais pra aparecer
+  // pra quem já estava com o app aberto há um tempo. Some-se a isso as
+  // checagens extras em checkForUpdatesThrottled (toda vez que a pessoa volta
+  // a olhar pro app).
   setTimeout(checkForUpdates, 5000);
-  setInterval(checkForUpdates, 30 * 60 * 1000);
+  setInterval(checkForUpdates, 5 * 60 * 1000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -334,11 +435,23 @@ autoUpdater.on('download-progress', (progress) => sendUpdateStatus('downloading'
 autoUpdater.on('update-downloaded', (info) => sendUpdateStatus('downloaded', { version: info.version }));
 autoUpdater.on('error', (err) => sendUpdateStatus('error', { message: err?.message || String(err) }));
 
+let lastUpdateCheckAt = 0;
+
 function checkForUpdates() {
   if (!app.isPackaged) return; // sem update em modo desenvolvimento
+  lastUpdateCheckAt = Date.now();
   autoUpdater.checkForUpdates().catch((err) => {
     console.error('[primalvoice] erro ao checar atualização:', err);
   });
+}
+
+// Mesma checagem de sempre, só que ignorada se já rodou há pouco tempo --
+// usada nos momentos em que a pessoa volta a olhar pro app (reaberto,
+// focado de novo...), pra não checar de novo o tempo todo à toa quando isso
+// acontece em sequência rápida (troca de janela, minimizar/restaurar, etc.).
+function checkForUpdatesThrottled() {
+  if (Date.now() - lastUpdateCheckAt < 60 * 1000) return;
+  checkForUpdates();
 }
 
 ipcMain.handle('update:check', () => {
@@ -347,6 +460,22 @@ ipcMain.handle('update:check', () => {
 });
 
 ipcMain.handle('update:install', () => {
+  // Abre uma segunda cópia do próprio app só pra mostrar a janelinha
+  // "Atualizando..." (ver o bloco --pv-update-helper lá no topo do arquivo)
+  // -- é ela quem cobre visualmente o tempo em que ESTE processo vai ficar
+  // fechado de vez pra instalar (não dá pra sobrescrever os arquivos de um
+  // programa rodando). Se por algum motivo não conseguir abrir essa
+  // janelinha, segue o processo normalmente mesmo assim (só sem esse
+  // "enfeite" visual -- a atualização em si não depende dela).
+  try {
+    const helperArgs = app.isPackaged
+      ? ['--pv-update-helper']
+      : [...process.argv.slice(1), '--pv-update-helper'];
+    spawn(process.execPath, helperArgs, { detached: true, stdio: 'ignore' }).unref();
+  } catch (err) {
+    console.error('[primalvoice] não consegui abrir a janelinha de atualização:', err);
+  }
+
   // silencioso (sem a telinha feia do instalador NSIS) + reabre sozinho
   // depois de instalar, igual ao Discord.
   autoUpdater.quitAndInstall(true, true);
