@@ -565,6 +565,21 @@ const chatDecoder = new TextDecoder();
 
 const audioElsByIdentity = new Map();
 const participantVolumes = new Map();
+// GainNode (Web Audio) por identity -- é o que permite passar de 100% (o
+// <audio>.volume nativo trava em 1.0/100%, então pra dar boost até 200%
+// igual ao Discord a gente roteia o áudio da voz por um GainNode em vez de
+// só ajustar o volume do elemento). Um elemento pode ter mais de um GainNode
+// (ex.: reconexão troca o <audio> mas o antigo ainda não foi destacado).
+const gainNodesByIdentity = new Map();
+const gainNodeByAudioEl = new WeakMap();
+let sharedAudioCtx = null;
+
+// Volume por pessoa que o usuário já configurou antes, pra lembrar da
+// próxima vez que entrar em chamada com ela (não precisa reajustar toda
+// vez) -- ver loadMemberVolumesFromConfig/scheduleSaveMemberVolumes.
+// identity -> volume (0 a 2, onde 1 = 100%).
+let savedMemberVolumes = {};
+let saveMemberVolumesTimer = null;
 // Áudio do COMPARTILHAMENTO DE TELA (o som do jogo/vídeo/desktop de quem tá
 // transmitindo) é registrado separado do áudio da VOZ dela (microfone) —
 // assim dá pra abaixar só o som do jogo sem abaixar a voz da pessoa junto
@@ -1140,6 +1155,22 @@ function scheduleSaveMemberNotes() {
   }, 500);
 }
 
+function loadMemberVolumesFromConfig(cfg) {
+  savedMemberVolumes = Object.assign({}, cfg.memberVolumes || {});
+}
+
+// Mesma ideia do scheduleSaveMemberNotes acima -- debounce pra não gravar o
+// config.json a cada tiquinho do slider (só grava no soltar do mouse, ver
+// o listener de 'change' do volumeSlider).
+function scheduleSaveMemberVolumes() {
+  clearTimeout(saveMemberVolumesTimer);
+  saveMemberVolumesTimer = setTimeout(async () => {
+    const cfg = (await window.vortex.getConfig()) || {};
+    cfg.memberVolumes = savedMemberVolumes;
+    await window.vortex.setConfig(cfg);
+  }, 500);
+}
+
 // ---------- efeitos sonoros (soundboard) ----------
 // Guardado só neste PC (não segue a conta pra outros dispositivos, diferente
 // do perfil) — cada som vira um data URL (base64) dentro do config.json,
@@ -1333,6 +1364,7 @@ async function init() {
   const cfg = (await window.vortex.getConfig()) || {};
   await loadPrefsFromConfig(cfg);
   loadMemberNotesFromConfig(cfg);
+  loadMemberVolumesFromConfig(cfg);
   loadProfileFromConfig(cfg);
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
@@ -3854,21 +3886,74 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---------- áudio (volume por pessoa, mute local, ensurdecer) ----------
+// Volume por pessoa combina: um ajuste feito NESTA chamada (participantVolumes,
+// zerado ao sair da chamada) e, quando não há ajuste nesta chamada ainda, o
+// que a pessoa deixou salvo de uma chamada anterior (savedMemberVolumes,
+// persistido em disco) -- assim não precisa reajustar todo mundo de novo
+// toda vez que entra numa chamada.
+function getEffectiveVolume(identity) {
+  if (participantVolumes.has(identity)) return participantVolumes.get(identity);
+  const saved = savedMemberVolumes[identity];
+  return typeof saved === 'number' ? saved : 1;
+}
+
+function getSharedAudioCtx() {
+  if (!sharedAudioCtx) {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxClass) return null;
+    sharedAudioCtx = new AudioCtxClass();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume().catch(() => {});
+  return sharedAudioCtx;
+}
+
 function registerAudioEl(identity, el) {
   if (!audioElsByIdentity.has(identity)) audioElsByIdentity.set(identity, new Set());
   audioElsByIdentity.get(identity).add(el);
+  // O <audio>.volume nativo trava em 1.0 (100%) -- pra dar boost até 200%
+  // (igual ao Discord) a gente cria um GainNode e passa a controlar o
+  // volume por ele em vez do .volume do elemento. Se o Web Audio falhar por
+  // algum motivo, cai pro volume nativo (fica limitado a 100%, mas não quebra).
+  try {
+    const ctx = getSharedAudioCtx();
+    if (ctx) {
+      const source = ctx.createMediaElementSource(el);
+      const gainNode = ctx.createGain();
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      gainNodeByAudioEl.set(el, gainNode);
+      if (!gainNodesByIdentity.has(identity)) gainNodesByIdentity.set(identity, new Set());
+      gainNodesByIdentity.get(identity).add(gainNode);
+    }
+  } catch (err) {
+    console.warn('Não foi possível criar GainNode pro áudio de', identity, err);
+  }
   applyVolume(identity);
 }
 
 function unregisterAudioEl(identity, el) {
   audioElsByIdentity.get(identity)?.delete(el);
+  const gainNode = gainNodeByAudioEl.get(el);
+  if (gainNode) {
+    gainNodesByIdentity.get(identity)?.delete(gainNode);
+    gainNodeByAudioEl.delete(el);
+    try { gainNode.disconnect(); } catch (err) { /* já desconectado */ }
+  }
 }
 
 function applyVolume(identity) {
-  const volume = mutedForMe.has(identity) || isDeafened ? 0 : (participantVolumes.get(identity) ?? 1) * masterOutputVolume;
-  audioElsByIdentity.get(identity)?.forEach((el) => {
-    el.volume = volume;
-  });
+  const volume = mutedForMe.has(identity) || isDeafened ? 0 : getEffectiveVolume(identity) * masterOutputVolume;
+  const gains = gainNodesByIdentity.get(identity);
+  if (gains && gains.size) {
+    gains.forEach((gainNode) => {
+      gainNode.gain.value = volume;
+    });
+  } else {
+    // Sem GainNode disponível (Web Audio falhou) -- volume nativo, travado em 100%.
+    audioElsByIdentity.get(identity)?.forEach((el) => {
+      el.volume = Math.min(volume, 1);
+    });
+  }
 }
 
 // Volume DA VOZ/microfone de alguém pra mim (menu de contexto, botão direito
@@ -3879,6 +3964,13 @@ function setParticipantVolumeForMe(identity, v) {
   if (v > 0 && mutedForMe.has(identity)) mutedForMe.delete(identity);
   applyVolume(identity);
   applySoundboardVolume();
+}
+
+// Lembra esse volume pra próxima vez que a gente estiver em chamada com essa
+// pessoa (ver getEffectiveVolume/loadMemberVolumesFromConfig acima).
+function saveParticipantVolumePreference(identity, v) {
+  savedMemberVolumes[identity] = v;
+  scheduleSaveMemberVolumes();
 }
 
 // Mesma ideia do registerAudioEl/applyVolume acima, só que pro áudio da
@@ -3915,6 +4007,7 @@ function syncScreenVolumeBtnIcon(identity) {
 function resetAudioState() {
   audioElsByIdentity.clear();
   participantVolumes.clear();
+  gainNodesByIdentity.clear();
   streamAudioElsByIdentity.clear();
   streamVolumes.clear();
   mutedForMe.clear();
@@ -4882,13 +4975,32 @@ function openContextMenu(x, y, participant, opts = {}) {
   volumeLabel.className = 'label';
   volumeLabel.textContent = opts.showStreamVolume ? 'Volume (voz)' : 'Volume';
   volumeWrap.appendChild(volumeLabel);
+  // Igual ao Discord: dá pra dar boost até 200% (não só 0-100%), com uma
+  // bolinha mostrando a porcentagem enquanto arrasta (ver getEffectiveVolume/
+  // registerAudioEl com GainNode lá em cima, que é o que permite passar de 100%).
+  const volumeSliderWrap = document.createElement('div');
+  volumeSliderWrap.className = 'volume-slider-wrap';
+  const volumeBubble = document.createElement('div');
+  volumeBubble.className = 'volume-bubble';
+  volumeBubble.hidden = true;
   const volumeSlider = document.createElement('input');
   volumeSlider.type = 'range';
   volumeSlider.min = '0';
-  volumeSlider.max = '100';
-  volumeSlider.value = String(Math.round((participantVolumes.get(identity) ?? 1) * 100));
-  volumeWrap.appendChild(volumeSlider);
+  volumeSlider.max = '200';
+  volumeSlider.value = String(Math.round(getEffectiveVolume(identity) * 100));
+  volumeSliderWrap.appendChild(volumeBubble);
+  volumeSliderWrap.appendChild(volumeSlider);
+  volumeWrap.appendChild(volumeSliderWrap);
   menu.appendChild(volumeWrap);
+
+  function positionVolumeBubble() {
+    const min = Number(volumeSlider.min);
+    const max = Number(volumeSlider.max);
+    const percent = (Number(volumeSlider.value) - min) / (max - min);
+    volumeBubble.style.left = `${percent * 100}%`;
+    volumeBubble.textContent = `${volumeSlider.value}%`;
+  }
+  let volumeBubbleHideTimer = null;
 
   if (opts.showStreamVolume) {
     const streamVolumeWrap = document.createElement('div');
@@ -4929,6 +5041,16 @@ function openContextMenu(x, y, participant, opts = {}) {
     if (wasMuted && !mutedForMe.has(identity)) {
       muteItem.querySelector('.context-menu-checkbox').classList.remove('checked');
     }
+    positionVolumeBubble();
+    volumeBubble.hidden = false;
+    clearTimeout(volumeBubbleHideTimer);
+  });
+  // Só salva (e some com a bolinha de %) quando solta o slider -- não a cada
+  // tiquinho, senão gravaria o config.json o tempo todo enquanto arrasta.
+  volumeSlider.addEventListener('change', () => {
+    saveParticipantVolumePreference(identity, Number(volumeSlider.value) / 100);
+    clearTimeout(volumeBubbleHideTimer);
+    volumeBubbleHideTimer = setTimeout(() => { volumeBubble.hidden = true; }, 600);
   });
 
   const videoItem = buildToggleItem('Desativar vídeo', videoHiddenForMe.has(identity), (checked) => {
