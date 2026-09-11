@@ -3445,9 +3445,6 @@ function showWatchStreamPrompt(tile, participant) {
   tile.appendChild(prompt);
 }
 
-const SCREEN_FULLSCREEN_ICON_SVG =
-  '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
-  '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
 const STOP_WATCH_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
 
@@ -3518,23 +3515,15 @@ function addScreenShareControls(tile, participant) {
     openStreamVolumePopover(volumeBtn, participant.identity);
   });
 
-  const fullscreenBtn = document.createElement('button');
-  fullscreenBtn.type = 'button';
-  fullscreenBtn.className = 'screen-share-ctrl-btn screen-share-fullscreen-btn';
-  fullscreenBtn.innerHTML = SCREEN_FULLSCREEN_ICON_SVG;
-  upgradeTooltip(fullscreenBtn, { text: 'Tela cheia', dir: 'top' });
-  fullscreenBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (cinemaTileIdentity === participant.identity) {
-      exitCinemaFullscreen();
-    } else {
-      enterCinemaFullscreen(tile, participant);
-    }
-  });
-
   // Botão de parar de assistir, visível ao passar o mouse (igual os outros
   // dessa barra) -- antes só dava pra fazer isso pelo menu do botão direito,
   // que ficou escondido demais.
+  // (Não tem mais botão de "Tela cheia" aqui -- só duplicava o botão de
+  // abrir/expandir a telinha (.expand-hint, no canto da telinha), e pulava
+  // direto pro modo cinema sem passar pela visão normal expandida antes.
+  // Pra entrar em tela cheia de verdade agora é: abre a telinha normal
+  // primeiro, depois dá dois cliques nela -- ver o listener de dblclick
+  // do grid, mais abaixo.)
   const stopWatchBtn = document.createElement('button');
   stopWatchBtn.type = 'button';
   stopWatchBtn.className = 'screen-share-ctrl-btn screen-share-stopwatch-btn';
@@ -3546,7 +3535,6 @@ function addScreenShareControls(tile, participant) {
   });
 
   bar.appendChild(volumeBtn);
-  bar.appendChild(fullscreenBtn);
   bar.appendChild(stopWatchBtn);
   tile.appendChild(bar);
 }
@@ -3735,10 +3723,6 @@ function collapseExpandedTile() {
 // a transmissão — igual apertar F11 num player de vídeo.
 let cinemaTileIdentity = null;
 
-function updateFullscreenBtnIcon(tile, isFullscreen) {
-  tile.querySelector('.screen-share-fullscreen-btn')?.classList.toggle('is-fullscreen', isFullscreen);
-}
-
 // A barra flutuante nova (câmera/volume/parar de assistir/mic/desligar)
 // agora aparece SEMPRE que a telinha expandida é de uma transmissão de
 // tela — não só no modo cinema de verdade (tela cheia da janela). Essa
@@ -3766,10 +3750,6 @@ function updateFloatingBarVisibility() {
 }
 
 function enterCinemaFullscreen(tile, participant) {
-  if (cinemaTileIdentity && cinemaTileIdentity !== participant.identity) {
-    const oldTile = document.getElementById(tileId(cinemaTileIdentity));
-    if (oldTile) updateFullscreenBtnIcon(oldTile, false);
-  }
   if (!tile.classList.contains('expanded')) {
     const gridWasExpanded = grid.classList.contains('has-expanded');
     grid.querySelectorAll('.tile.expanded').forEach((t) => t.classList.remove('expanded'));
@@ -3780,7 +3760,6 @@ function enterCinemaFullscreen(tile, participant) {
   cinemaTileIdentity = participant.identity;
   document.body.classList.add('cinema-mode');
   window.vortex.setWindowFullscreen?.(true).catch(() => {});
-  updateFullscreenBtnIcon(tile, true);
   updateFloatingBarVisibility();
   showCinemaControlsBriefly();
 }
@@ -3794,7 +3773,6 @@ function exitCinemaFullscreen() {
   if (identity) {
     const tile = document.getElementById(tileId(identity));
     if (tile) {
-      updateFullscreenBtnIcon(tile, false);
       tile.classList.remove('force-controls');
     }
   }
@@ -3856,25 +3834,25 @@ grid.addEventListener('click', (e) => {
     // nas barras de novo
     if (!gridWasExpanded) enterExpandedExtras();
     // trocou pra outro vídeo enquanto a janela já tava em cinema mode —
-    // mantém o modo, só troca o ícone de tela cheia de dono
+    // mantém o modo, só muda quem é a telinha de dono do cinema
     if (cinemaTileIdentity && cinemaTileIdentity !== tile.dataset.identity) {
-      const oldTile = document.getElementById(tileId(cinemaTileIdentity));
-      if (oldTile) updateFullscreenBtnIcon(oldTile, false);
       cinemaTileIdentity = tile.dataset.identity;
-      updateFullscreenBtnIcon(tile, true);
     }
   }
   updateFloatingBarVisibility();
 });
 
-// Duplo-clique numa telinha de transmissão JÁ expandida entra direto no
-// modo cinema de verdade (tela cheia da janela) -- como agora a barra
-// antiga (que tinha o botão de "tela cheia") não aparece mais em lugar
-// nenhum, precisa de um jeito de chegar lá; um clique só continua servindo
-// só pra expandir/recolher dentro da grade, igual sempre foi.
+// Duplo-clique numa telinha de transmissão entra no modo cinema de verdade
+// (tela cheia da janela) -- só funciona numa telinha que JÁ está expandida
+// (visão normal), nunca direto da miniatura pequena: primeiro clique (só
+// um clique) expande/recolhe dentro da grade, tela cheia de verdade exige
+// já estar na visão normal expandida antes (ver addScreenShareControls, que
+// não tem mais botão de "Tela cheia" nenhum -- só duplicava esse caminho e
+// pulava direto pra tela cheia sem passar pela visão normal).
 grid.addEventListener('dblclick', (e) => {
   const tile = e.target.closest('.tile');
   if (!tile || !tile.dataset.identity) return;
+  if (!tile.classList.contains('expanded')) return;
   if (!watchingScreenShare.has(tile.dataset.identity)) return;
   enterCinemaFullscreen(tile, participantFromRow(tile));
 });

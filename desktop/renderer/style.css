@@ -1397,7 +1397,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .watch-stream-btn:active { transform: scale(0.98); }
 
 /* controles de quem tá assistindo uma transmissão de tela (volume da
-   transmissão, tela cheia de verdade, parar de assistir). Só aparece ao
+   transmissão, parar de assistir -- sem botão de tela cheia aqui, isso é
+   pelo .expand-hint da telinha + duplo-clique já expandida). Só aparece ao
    passar o mouse na MINIATURA PEQUENA (dentro da grade, não expandida) --
    assim que a telinha expande (cinema de verdade ou só expandida dentro da
    grade), essa barrinha some de vez e quem assume é a barra flutuante
@@ -1439,11 +1440,6 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 }
 .screen-share-ctrl-btn:hover { background: rgba(0, 0, 0, 0.8); }
 .screen-share-ctrl-btn svg { width: 16px; height: 16px; }
-/* mesmo truque do .expand-hint: dois ícones sobrepostos, só um visível por
-   vez, trocando pela classe (em vez de recriar o SVG na hora) */
-.screen-share-fullscreen-btn .icon-minimize { display: none; }
-.screen-share-fullscreen-btn.is-fullscreen .icon-maximize { display: none; }
-.screen-share-fullscreen-btn.is-fullscreen .icon-minimize { display: block; }
 /* parar de assistir é uma ação de "sair" -- fica vermelho ao passar o mouse,
    igual outras ações destrutivas do app (expulsar da chamada, etc.) */
 .screen-share-stopwatch-btn:hover { background: var(--danger); }
