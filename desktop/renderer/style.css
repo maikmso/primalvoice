@@ -1879,12 +1879,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   align-items: center;
   gap: 18px;
   max-width: 320px;
-  padding: 44px 40px;
   text-align: center;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   animation: reconnect-card-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .reconnect-icon-wrap {
