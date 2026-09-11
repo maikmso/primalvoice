@@ -1399,6 +1399,37 @@ function deriveThemePalette(accentHex, { sat = 32, mode = 'escuro' } = {}) {
   };
 }
 
+// Quando o "Tema Personalizado" tem MAIS de uma cor (um degradê de
+// verdade, montado com "+ Adicionar cor"), uma única cor não dá conta de
+// mostrar as outras -- por isso, em vez de tingir tudo com o tom da
+// primeira, cada "camada" da interface (fundo, painel, quadradinho,
+// borda...) puxa o tom de uma cor diferente da lista (girando entre elas
+// se tiver menos cores que camadas). Assim o PrimalVoice inteiro mostra
+// TODAS as cores escolhidas, cada uma numa parte diferente da tela, em vez
+// de só a primeira "vencer" -- é o que faz um degradê de várias cores
+// realmente aparecer, igual pediram.
+function deriveThemePaletteFromColors(colors, { sat = 32, mode = 'escuro' } = {}) {
+  const list = Array.isArray(colors) && colors.length ? colors : ['#5865f2'];
+  if (list.length === 1) return deriveThemePalette(list[0], { sat, mode });
+  const hues = list.map((c) => hexToHsl(c).h);
+  const pick = (i) => hues[i % hues.length];
+  const light = mode === 'claro';
+  const L = light
+    ? { bg: 94, panel: 89, tileBg: 98, border: 78, hoverStrong: 82, surfaceDeep: 97, surfaceRaised: 85, qualityDim: 45 }
+    : { bg: 10, panel: 15, tileBg: 6, border: 24, hoverStrong: 20, surfaceDeep: 7, surfaceRaised: 19, qualityDim: 42 };
+  return {
+    bg: hslToCss(pick(0), sat, L.bg),
+    panel: hslToCss(pick(1), sat, L.panel),
+    tileBg: hslToCss(pick(2), sat, L.tileBg),
+    border: hslToCss(pick(3), sat, L.border),
+    hoverStrong: hslToCss(pick(1), sat, L.hoverStrong),
+    surfaceDeep: hslToCss(pick(2), sat, L.surfaceDeep),
+    surfaceRaised: hslToCss(pick(0), sat, L.surfaceRaised),
+    qualityDim: hslToCss(pick(0), Math.max(sat - 14, 18), L.qualityDim),
+    onAccent: getOnAccentColor(list[0]),
+  };
+}
+
 // Estado do "Tema Personalizado" -- ver a seção "criar tema personalizado"
 // mais abaixo pra tudo que edita isso (grade de cor, degradê de matiz,
 // campo hex, intensidade, claro/escuro, etc). Fica aqui em cima porque
@@ -1429,7 +1460,12 @@ function applyColorTheme(key) {
     COLOR_THEME_PALETTE_VARS.forEach((v) => root.style.removeProperty(v));
     CUSTOM_THEME_TEXT_VARS.forEach((v) => root.style.removeProperty(v));
   } else {
-    const palette = deriveThemePalette(paletteAccent, paletteOpts);
+    // Um "Tema Personalizado" com várias cores usa a versão que gira entre
+    // todas elas (ver comentário acima da função); os temas prontos e um
+    // "Tema Personalizado" de uma cor só continuam com a versão simples.
+    const palette = activeKey === 'custom' && customThemeColors.length > 1
+      ? deriveThemePaletteFromColors(customThemeColors, paletteOpts)
+      : deriveThemePalette(paletteAccent, paletteOpts);
     root.style.setProperty('--bg', palette.bg);
     root.style.setProperty('--panel', palette.panel);
     root.style.setProperty('--tile-bg', palette.tileBg);
