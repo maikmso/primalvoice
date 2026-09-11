@@ -9,6 +9,7 @@
   --text: #e7e9ea;
   --muted: #96999e;
   --danger: #ed4245;
+  --warning: #faa61a;
   --tile-bg: #121214;
   --speaking: #2bb673;
   --border: #3a3d42;
@@ -1906,7 +1907,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 #voice-quality-icon.quality-excellent .quality-bar { fill: var(--speaking); }
 /* boa (mas não ótima): 2 barrinhas laranja */
 #voice-quality-icon.quality-good .quality-bar[data-bar='1'],
-#voice-quality-icon.quality-good .quality-bar[data-bar='2'] { fill: var(--accent-2); }
+#voice-quality-icon.quality-good .quality-bar[data-bar='2'] { fill: var(--warning); }
 /* ruim ou perdendo pacote: só 1 barrinha vermelha */
 #voice-quality-icon.quality-poor .quality-bar[data-bar='1'],
 #voice-quality-icon.quality-lost .quality-bar[data-bar='1'] { fill: var(--danger); }
