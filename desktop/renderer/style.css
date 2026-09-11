@@ -24,13 +24,10 @@
   --on-accent: #16171a;
   --sidebar-w: 240px;
   --memberlist-w: 240px;
-  /* azul de link, igual o Discord -- esse é só o padrão "de fábrica" (nos
-     3 temas prontos --accent-2 é cinza, não dava pra reaproveitar ele aqui
-     pros links/menções/título do embed). Quando a pessoa escolhe uma cor
-     de destaque ou um tema colorido (ver applyAccent no app.js), essas 3
-     variáveis são sobrescritas pra acompanhar a cor escolhida -- é assim
-     que "os links e detalhes da interface" (ver a dica em Aparência)
-     realmente passam a seguir a cor, e não só os botões. */
+  /* azul de link, igual o Discord -- fixo de propósito, não muda com a cor
+     de destaque nem com os temas coloridos (chegou a acompanhar por um
+     tempo, mas pediram pra tirar: links e @menções ficam sempre nesse
+     azul, faça a pessoa escolher a cor que escolher). */
   --link-color: #00aff4;
   --link-soft: rgba(0, 175, 244, 0.16);
   --on-link: #ffffff;
@@ -2933,10 +2930,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .sharepick-actions #sharepick-cancel-btn:hover { border-color: var(--muted); background: var(--hover-strong); }
 .sharepick-actions #sharepick-confirm-btn {
   /* var(--link-color) em vez de var(--accent) -- accent é cinza neutro nos
-     temas prontos, o que deixava o botão principal sem destaque; agora que
-     --link-color acompanha a cor de destaque/tema colorido escolhido (ver
-     applyAccent no app.js), --on-link garante o texto legível em qualquer
-     uma delas, mesmo numa cor bem clara. */
+     temas prontos, o que deixava o botão principal sem destaque. Assim
+     como o link, essa cor é fixa (não acompanha a cor de destaque). */
   background: var(--link-color);
   color: var(--on-link);
   border: none;

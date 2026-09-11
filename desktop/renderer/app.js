@@ -1203,21 +1203,15 @@ function applyAccent(hex) {
     root.style.removeProperty('--accent');
     root.style.removeProperty('--accent-2');
     root.style.removeProperty('--accent-soft');
-    root.style.removeProperty('--link-color');
-    root.style.removeProperty('--link-soft');
-    root.style.removeProperty('--on-link');
   } else {
     const { r, g, b } = hexToRgb(hex);
     root.style.setProperty('--accent', hex);
     root.style.setProperty('--accent-2', mixWithWhite(hex, 0.35));
     root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.18)`);
-    // A dica em Aparência diz "botões, LINKS e detalhes da interface" --
-    // antes só os botões seguiam a cor escolhida (links/menções ficavam
-    // presos num azul fixo, --link-color). Agora eles também acompanham.
-    root.style.setProperty('--link-color', hex);
-    root.style.setProperty('--link-soft', `rgba(${r}, ${g}, ${b}, 0.16)`);
-    root.style.setProperty('--on-link', getOnAccentColor(hex));
   }
+  // Propositalmente NÃO mexe em --link-color/--link-soft/--on-link --
+  // pediram pra tirar isso: links e @menções continuam sempre no azul
+  // fixo de fábrica, não acompanham a cor de destaque escolhida.
   // Marca só a fileirinha pequena "Cor de destaque" -- a grade grande
   // "Temas coloridos" tem o próprio controle de "ativo" (por chave do
   // tema, não pela cor), já que ela mexe em mais coisa que só o accent.
