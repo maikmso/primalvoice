@@ -364,9 +364,10 @@
           <h3 class="modal-subheading">Cor de destaque</h3>
           <p class="modal-hint">A cor usada nos botões, links e detalhes da interface.</p>
           <div class="accent-color-grid" id="accent-color-grid">
-            <button type="button" class="accent-color-option" data-accent="" title="Padrão do tema">
+            <label class="accent-color-option accent-color-custom" title="Escolher qualquer cor">
               <span class="accent-color-swatch accent-color-swatch-default"></span>
-            </button>
+              <input type="color" id="accent-color-custom-input" value="#5865f2" />
+            </label>
             <button type="button" class="accent-color-option" data-accent="#5865f2" title="Índigo">
               <span class="accent-color-swatch" style="background:#5865f2"></span>
             </button>
@@ -385,10 +386,6 @@
             <button type="button" class="accent-color-option" data-accent="#00b0c7" title="Ciano">
               <span class="accent-color-swatch" style="background:#00b0c7"></span>
             </button>
-            <label class="accent-color-option accent-color-custom" title="Escolher outra cor">
-              <span class="accent-color-swatch accent-color-swatch-custom"></span>
-              <input type="color" id="accent-color-custom-input" value="#5865f2" />
-            </label>
           </div>
 
           <h3 class="modal-subheading">Temas coloridos</h3>

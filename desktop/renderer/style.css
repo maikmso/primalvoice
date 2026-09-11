@@ -24,11 +24,16 @@
   --on-accent: #16171a;
   --sidebar-w: 240px;
   --memberlist-w: 240px;
-  /* azul de link, igual o Discord -- fixo, não muda com o tema (nos 3 temas
-     do app --accent-2 é usado pra outras coisas também, tipo o nome de quem
-     é você mesmo no chat, e em 2 dos 3 temas ele é cinza, não azul, então
-     não dava pra reaproveitar ele aqui pros links/título do embed) */
+  /* azul de link, igual o Discord -- esse é só o padrão "de fábrica" (nos
+     3 temas prontos --accent-2 é cinza, não dava pra reaproveitar ele aqui
+     pros links/menções/título do embed). Quando a pessoa escolhe uma cor
+     de destaque ou um tema colorido (ver applyAccent no app.js), essas 3
+     variáveis são sobrescritas pra acompanhar a cor escolhida -- é assim
+     que "os links e detalhes da interface" (ver a dica em Aparência)
+     realmente passam a seguir a cor, e não só os botões. */
   --link-color: #00aff4;
+  --link-soft: rgba(0, 175, 244, 0.16);
+  --on-link: #ffffff;
 }
 
 /* tema "Meia-noite": preto puro (AMOLED), mas com uma escada de contraste
@@ -866,7 +871,7 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   justify-content: center;
   border: 2px dashed var(--accent-2);
   border-radius: 8px;
-  background: rgba(88, 101, 242, 0.08);
+  background: var(--accent-soft);
   color: var(--accent-2);
   font-size: 15px;
   font-weight: 600;
@@ -956,7 +961,7 @@ body.cinema-mode .screen-share-controls { display: none !important; }
    (não só texto azul). */
 .chat-mention {
   color: var(--link-color);
-  background: rgba(0, 175, 244, 0.16);
+  background: var(--link-soft);
   border-radius: 3px;
   padding: 0 2px;
   font-weight: 600;
@@ -2421,13 +2426,12 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
+/* roda colorida -- é o botão "escolher qualquer cor" (primeiro da fileira),
+   não um preset fixo */
 .accent-color-swatch-default {
   background: conic-gradient(from 180deg, #5865f2, #eb459e, #f0b132, #2bb673, #5865f2);
 }
 .accent-color-custom { position: relative; }
-.accent-color-swatch-custom {
-  background: repeating-conic-gradient(#8a8f98 0% 25%, #6b6f76 0% 50%) 0 0/10px 10px;
-}
 .accent-color-custom input[type='color'] {
   position: absolute;
   inset: 0;
@@ -2928,10 +2932,13 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 }
 .sharepick-actions #sharepick-cancel-btn:hover { border-color: var(--muted); background: var(--hover-strong); }
 .sharepick-actions #sharepick-confirm-btn {
-  /* var(--link-color) em vez de var(--accent) -- accent é cinza neutro em
-     duas das três temas, o que deixava o botão principal sem destaque */
+  /* var(--link-color) em vez de var(--accent) -- accent é cinza neutro nos
+     temas prontos, o que deixava o botão principal sem destaque; agora que
+     --link-color acompanha a cor de destaque/tema colorido escolhido (ver
+     applyAccent no app.js), --on-link garante o texto legível em qualquer
+     uma delas, mesmo numa cor bem clara. */
   background: var(--link-color);
-  color: #fff;
+  color: var(--on-link);
   border: none;
   border-radius: 6px;
   padding: 9px 18px;
