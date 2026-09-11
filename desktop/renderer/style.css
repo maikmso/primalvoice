@@ -436,8 +436,12 @@ body.cinema-mode .screen-share-controls { display: none !important; }
    grandes de estrutura, também entram aqui o rodapé do usuário
    (.user-panel, com os botõezinhos de câmera/tela/efeitos e o cartão de
    perfil) e a barra de escrever mensagem (.chat-input-wrap +
-   .chat-attachment-btn) -- foram relatados como os dois pontos que ainda
-   ficavam "destacados" com cor sólida, quebrando o degradê contínuo. */
+   .chat-attachment-btn) -- foram relatados como pontos que ainda ficavam
+   "destacados" com cor sólida, quebrando o degradê contínuo. Os 3
+   botõezinhos quadrados de câmera/tela/efeitos (.feature-btn) também
+   entram, MENOS quando estão com a classe .sharing (vermelho de aviso,
+   "compartilhando a tela" -- esse continua sólido de propósito, sempre
+   visível não importa o tema). */
 html.theme-gradient-active #app-titlebar,
 html.theme-gradient-active .server-rail,
 html.theme-gradient-active .channel-sidebar,
@@ -446,10 +450,17 @@ html.theme-gradient-active .text-view,
 html.theme-gradient-active .member-list,
 html.theme-gradient-active .user-panel,
 html.theme-gradient-active .chat-input-wrap,
-html.theme-gradient-active .chat-attachment-btn {
+html.theme-gradient-active .chat-attachment-btn,
+html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing) {
   background: var(--app-bg-gradient);
   background-attachment: fixed;
   background-size: 100vw 100vh;
+}
+/* especificidade maior que a regra de cima -- sem isso o hover dos 3
+   botõezinhos de câmera/tela/efeitos parava de "acender" (var(--hover-strong))
+   com um tema em degradê ativo. */
+html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
+  background: var(--hover-strong);
 }
 
 /* barra de servidor, à esquerda de tudo */
@@ -1199,6 +1210,10 @@ html.theme-gradient-active .chat-attachment-btn {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
+  /* sombra suave por baixo -- dá aquele ar "flutuante" (destacada do fundo
+     atrás dela), igual pediram, em vez de ficar totalmente rente/chapada
+     com o que tem atrás (inclusive com um tema em degradê ativo). */
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
 }
 .chat-input-wrap:focus-within { border-color: var(--accent); }
 .chat-input-highlight {
@@ -1235,6 +1250,7 @@ html.theme-gradient-active .chat-attachment-btn {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--panel);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
   color: var(--muted);
   display: flex;
   align-items: center;
