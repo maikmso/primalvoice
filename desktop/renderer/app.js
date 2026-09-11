@@ -660,11 +660,15 @@ function shouldNotifyForDm(peer) {
 
 function showDmNotification(peer, name, text) {
   if (typeof Notification === 'undefined') return;
+  // Usa a foto de perfil de quem mandou (se ela tiver uma), igual o
+  // Discord mostra o avatar de quem te chamou -- só cai pro logo do
+  // PrimalVoice se a pessoa não tiver avatar definido.
+  const peerAvatar = memberProfiles.get(peer)?.avatar;
   const fire = () => {
     try {
       const n = new Notification(name || displayNameFor(peer), {
         body: text && text.trim() ? text : 'Enviou uma mensagem',
-        icon: 'assets/logo.png',
+        icon: peerAvatar || 'assets/logo.png',
         silent: true, // já tocamos o nosso próprio som (messageSound)
       });
       n.onclick = () => {

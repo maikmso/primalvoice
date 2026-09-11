@@ -75,6 +75,13 @@ if (process.argv.includes('--pv-update-helper')) {
   return; // nada do resto do arquivo roda aqui -- esse processo só existe pra essa janelinha
 }
 
+// Sem isso, o Windows não sabe "quem" é o app de verdade e mostra as
+// notificações com o nome genérico "electron.app.Electron" (a identidade do
+// Electron em si) em vez de "PrimalVoice" -- precisa bater com o mesmo id
+// usado lá no package.json (build.appId), que é o que o instalador NSIS
+// registra pro atalho do menu iniciar.
+app.setAppUserModelId('com.primalvoice.app');
+
 let mainWindow;
 let splashWindow;
 let tray;
