@@ -432,13 +432,21 @@ body.cinema-mode .screen-share-controls { display: none !important; }
    encaixam sem emenda, como se fosse um fundo só por trás de tudo. Os
    controles pequenos (botões, campos, dropdowns, cartões) continuam
    pintados com --bg/--panel/--tile-bg sólidos (essas variáveis não mudam
-   aqui, só ganham um degradê por cima nestes 6 painéis estruturais). */
+   aqui, só ganham um degradê por cima destes painéis). Além dos 6 painéis
+   grandes de estrutura, também entram aqui o rodapé do usuário
+   (.user-panel, com os botõezinhos de câmera/tela/efeitos e o cartão de
+   perfil) e a barra de escrever mensagem (.chat-input-wrap +
+   .chat-attachment-btn) -- foram relatados como os dois pontos que ainda
+   ficavam "destacados" com cor sólida, quebrando o degradê contínuo. */
 html.theme-gradient-active #app-titlebar,
 html.theme-gradient-active .server-rail,
 html.theme-gradient-active .channel-sidebar,
 html.theme-gradient-active .room-header,
 html.theme-gradient-active .text-view,
-html.theme-gradient-active .member-list {
+html.theme-gradient-active .member-list,
+html.theme-gradient-active .user-panel,
+html.theme-gradient-active .chat-input-wrap,
+html.theme-gradient-active .chat-attachment-btn {
   background: var(--app-bg-gradient);
   background-attachment: fixed;
   background-size: 100vw 100vh;
