@@ -1168,8 +1168,13 @@ if (themeGrid) {
     btn.addEventListener('click', async () => {
       const theme = btn.dataset.theme || 'escuro';
       applyTheme(theme);
+      // Escolher um tema padrão (Escuro/Meia-noite/Clássico) volta pro
+      // fundo "de fábrica" desse tema -- desliga qualquer "tema colorido"
+      // que estivesse pintando o fundo/painéis por cima.
+      applyColorTheme('');
       const cfg = (await window.vortex.getConfig()) || {};
       cfg.theme = theme;
+      cfg.colorTheme = '';
       await window.vortex.setConfig(cfg);
     });
   });
@@ -1204,10 +1209,10 @@ function applyAccent(hex) {
     root.style.setProperty('--accent-2', mixWithWhite(hex, 0.35));
     root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.18)`);
   }
-  // Os dois seletores de cor (a fileirinha pequena "Cor de destaque" e a
-  // grade grande "Temas coloridos") escolhem a MESMA coisa por baixo dos
-  // panos -- então marca o "ativo" nos dois juntos, sempre em sincronia.
-  document.querySelectorAll('.accent-color-option, .color-theme-swatch').forEach((btn) => {
+  // Marca só a fileirinha pequena "Cor de destaque" -- a grade grande
+  // "Temas coloridos" tem o próprio controle de "ativo" (por chave do
+  // tema, não pela cor), já que ela mexe em mais coisa que só o accent.
+  document.querySelectorAll('.accent-color-option').forEach((btn) => {
     if (btn.dataset.accent !== undefined) btn.classList.toggle('active', (btn.dataset.accent || '') === (hex || ''));
   });
   if (accentColorCustomInput && hex) accentColorCustomInput.value = hex;
@@ -1222,9 +1227,13 @@ if (accentColorGrid) {
     upgradeTooltip(btn, { dir: 'top' });
     btn.addEventListener('click', async () => {
       const hex = btn.dataset.accent || '';
+      // "Cor de destaque" mexe só nos botões -- se um "tema colorido"
+      // estava pintando o fundo/painéis, desliga ele aqui.
+      applyColorTheme('');
       applyAccent(hex);
       const cfg = (await window.vortex.getConfig()) || {};
       cfg.accentColor = hex;
+      cfg.colorTheme = '';
       await window.vortex.setConfig(cfg);
     });
   });
@@ -1233,9 +1242,11 @@ if (accentColorCustomInput) {
   upgradeTooltip(accentColorCustomInput.closest('.accent-color-custom'), { dir: 'top' });
   accentColorCustomInput.addEventListener('input', async () => {
     const hex = accentColorCustomInput.value;
+    applyColorTheme('');
     applyAccent(hex);
     const cfg = (await window.vortex.getConfig()) || {};
     cfg.accentColor = hex;
+    cfg.colorTheme = '';
     await window.vortex.setConfig(cfg);
   });
 }
@@ -1243,33 +1254,121 @@ if (accentColorCustomInput) {
 // ---------- aparência (temas coloridos: grade grande, com degradê) ----------
 // Igual o "Temas coloridos" do Discord: uma grade bem maior de cores pra
 // escolher, incluindo algumas em degradê -- cada uma com um nome que
-// aparece no balãozinho ao passar o mouse. Por baixo dos panos é a mesma
-// coisa que a "Cor de destaque" de cima (mexe no --accent): quando a opção
-// é um degradê, o quadradinho mostra o degradê inteiro, mas a cor
-// realmente aplicada nos botões/links é a "accent" (uma das duas pontas),
+// aparece no balãozinho ao passar o mouse. Diferente da "Cor de destaque"
+// de cima (que só troca a cor dos botões), aqui a cor escolhida REPINTA O
+// PRIMALVOICE INTEIRO: fundo, painéis, bordas etc. também ganham um tom
+// combinando com a cor, além dos botões/links (a "accent"). Quando a opção
+// é um degradê, o quadradinho da grade mostra o degradê inteiro, mas quem
+// vira de fato a cor de botões/fundo é a "accent" (uma das duas pontas),
 // já que o resto da interface usa cor sólida, não degradê.
 const COLOR_THEMES = [
-  { name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
-  { name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
-  { name: 'Azul-lavanda', css: '#b7c6f2', accent: '#7c8ee0' },
-  { name: 'Amarelo-claro', css: '#eee7a8', accent: '#cfc357' },
-  { name: 'Lilás', css: '#e3c6f0', accent: '#b370d1' },
-  { name: 'Ciano-claro', css: '#b7ecec', accent: '#3fb8b8' },
-  { name: 'Creme', css: '#f0ead0', accent: '#c9b96a' },
-  { name: 'Roxo-azulado', css: 'linear-gradient(135deg, #5b3df0, #8a5cf6)', accent: '#6a46f2' },
-  { name: 'Aurora', css: 'linear-gradient(135deg, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
-  { name: 'Vinho', css: 'linear-gradient(135deg, #7a1d24, #24080a)', accent: '#a3282f' },
-  { name: 'Ameixa', css: 'linear-gradient(135deg, #4b2a78, #1c0e30)', accent: '#6339a8' },
-  { name: 'Terracota', css: '#b06a55', accent: '#b06a55' },
-  { name: 'Cinza-azulado', css: '#8d93ab', accent: '#8d93ab' },
-  { name: 'Verde-oliva', css: '#4f7a5e', accent: '#4f7a5e' },
-  { name: 'Azul-petróleo', css: 'linear-gradient(135deg, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
-  { name: 'Berinjela', css: 'linear-gradient(135deg, #7a2160, #2b0c22)', accent: '#9a2c7a' },
-  { name: 'Pôr do sol', css: 'linear-gradient(135deg, #f0a63c, #d94f4f)', accent: '#e37a3f' },
-  { name: 'Céu noturno', css: 'linear-gradient(135deg, #274bd6, #7a3fd6)', accent: '#4a5fe0' },
-  { name: 'Dourado', css: '#8a7a3a', accent: '#a89042' },
-  { name: 'Índigo puro', css: '#2b3ecb', accent: '#2b3ecb' },
+  { key: 'verde-menta', name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
+  { key: 'pessego', name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
+  { key: 'azul-lavanda', name: 'Azul-lavanda', css: '#b7c6f2', accent: '#7c8ee0' },
+  { key: 'amarelo-claro', name: 'Amarelo-claro', css: '#eee7a8', accent: '#cfc357' },
+  { key: 'lilas', name: 'Lilás', css: '#e3c6f0', accent: '#b370d1' },
+  { key: 'ciano-claro', name: 'Ciano-claro', css: '#b7ecec', accent: '#3fb8b8' },
+  { key: 'creme', name: 'Creme', css: '#f0ead0', accent: '#c9b96a' },
+  { key: 'roxo-azulado', name: 'Roxo-azulado', css: 'linear-gradient(135deg, #5b3df0, #8a5cf6)', accent: '#6a46f2' },
+  { key: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
+  { key: 'vinho', name: 'Vinho', css: 'linear-gradient(135deg, #7a1d24, #24080a)', accent: '#a3282f' },
+  { key: 'ameixa', name: 'Ameixa', css: 'linear-gradient(135deg, #4b2a78, #1c0e30)', accent: '#6339a8' },
+  { key: 'terracota', name: 'Terracota', css: '#b06a55', accent: '#b06a55' },
+  { key: 'cinza-azulado', name: 'Cinza-azulado', css: '#8d93ab', accent: '#8d93ab' },
+  { key: 'verde-oliva', name: 'Verde-oliva', css: '#4f7a5e', accent: '#4f7a5e' },
+  { key: 'azul-petroleo', name: 'Azul-petróleo', css: 'linear-gradient(135deg, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
+  { key: 'berinjela', name: 'Berinjela', css: 'linear-gradient(135deg, #7a2160, #2b0c22)', accent: '#9a2c7a' },
+  { key: 'por-do-sol', name: 'Pôr do sol', css: 'linear-gradient(135deg, #f0a63c, #d94f4f)', accent: '#e37a3f' },
+  { key: 'ceu-noturno', name: 'Céu noturno', css: 'linear-gradient(135deg, #274bd6, #7a3fd6)', accent: '#4a5fe0' },
+  { key: 'dourado', name: 'Dourado', css: '#8a7a3a', accent: '#a89042' },
+  { key: 'indigo-puro', name: 'Índigo puro', css: '#2b3ecb', accent: '#2b3ecb' },
 ];
+
+// Variáveis de CSS que um "tema colorido" repinta por cima do tema padrão
+// (Escuro/Meia-noite/Clássico) -- tudo que dá "corpo" à interface, fora o
+// texto (--text/--muted ficam como estão, sempre legíveis em qualquer tom).
+const COLOR_THEME_PALETTE_VARS = [
+  '--bg', '--panel', '--tile-bg', '--border', '--hover-strong',
+  '--surface-deep', '--surface-raised', '--quality-dim', '--on-accent',
+];
+
+function hexToHsl(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const rN = r / 255, gN = g / 255, bN = b / 255;
+  const max = Math.max(rN, gN, bN), min = Math.min(rN, gN, bN);
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case rN: h = (gN - bN) / d + (gN < bN ? 6 : 0); break;
+      case gN: h = (bN - rN) / d + 2; break;
+      default: h = (rN - gN) / d + 4; break;
+    }
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function hslToCss(h, s, l) {
+  return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
+}
+
+// Decide se o texto/ícone em cima da cor de destaque deve ser claro ou
+// escuro, pelo brilho percebido (luminância) da cor -- não dá pra usar só
+// a "lightness" do HSL porque tons de azul/roxo parecem mais escuros do
+// que a lightness sugere (é assim que os 3 temas prontos já escolhem).
+function getOnAccentColor(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.5 ? '#16171a' : '#ffffff';
+}
+
+// A partir de uma única cor (a "accent" do tema), gera um fundo/painéis
+// escuros e tingidos com o mesmo tom -- é isso que faz o PrimalVoice
+// inteiro mudar de cara, não só os botões.
+function deriveThemePalette(accentHex) {
+  const { h } = hexToHsl(accentHex);
+  const sat = 32;
+  return {
+    bg: hslToCss(h, sat, 10),
+    panel: hslToCss(h, sat, 15),
+    tileBg: hslToCss(h, sat, 6),
+    border: hslToCss(h, sat, 24),
+    hoverStrong: hslToCss(h, sat, 20),
+    surfaceDeep: hslToCss(h, sat, 7),
+    surfaceRaised: hslToCss(h, sat, 19),
+    qualityDim: hslToCss(h, Math.max(sat - 14, 18), 42),
+    onAccent: getOnAccentColor(accentHex),
+  };
+}
+
+function applyColorTheme(key) {
+  const root = document.documentElement;
+  const theme = key ? COLOR_THEMES.find((t) => t.key === key) : null;
+  if (!theme) {
+    COLOR_THEME_PALETTE_VARS.forEach((v) => root.style.removeProperty(v));
+  } else {
+    const palette = deriveThemePalette(theme.accent);
+    root.style.setProperty('--bg', palette.bg);
+    root.style.setProperty('--panel', palette.panel);
+    root.style.setProperty('--tile-bg', palette.tileBg);
+    root.style.setProperty('--border', palette.border);
+    root.style.setProperty('--hover-strong', palette.hoverStrong);
+    root.style.setProperty('--surface-deep', palette.surfaceDeep);
+    root.style.setProperty('--surface-raised', palette.surfaceRaised);
+    root.style.setProperty('--quality-dim', palette.qualityDim);
+    root.style.setProperty('--on-accent', palette.onAccent);
+  }
+  document.querySelectorAll('.color-theme-swatch').forEach((btn) => {
+    btn.classList.toggle('active', !!theme && btn.dataset.themeKey === theme.key);
+  });
+}
+
+async function loadColorThemeFromConfig(cfg) {
+  applyColorTheme(cfg.colorTheme || '');
+}
 
 function renderColorThemeGrid() {
   if (!colorThemeGrid || colorThemeGrid.childElementCount > 0) return;
@@ -1278,12 +1377,15 @@ function renderColorThemeGrid() {
     btn.type = 'button';
     btn.className = 'color-theme-swatch';
     btn.dataset.accent = theme.accent;
+    btn.dataset.themeKey = theme.key;
     btn.style.background = theme.css;
     upgradeTooltip(btn, { text: theme.name, dir: 'top' });
     btn.addEventListener('click', async () => {
       applyAccent(theme.accent);
+      applyColorTheme(theme.key);
       const cfg = (await window.vortex.getConfig()) || {};
       cfg.accentColor = theme.accent;
+      cfg.colorTheme = theme.key;
       await window.vortex.setConfig(cfg);
     });
     colorThemeGrid.appendChild(btn);
@@ -1623,6 +1725,7 @@ async function init() {
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
   await loadAccentFromConfig(cfg);
+  await loadColorThemeFromConfig(cfg);
   await loadFontFromConfig(cfg);
   if (cfg.serverUrl) {
     serverUrl = cfg.serverUrl;
