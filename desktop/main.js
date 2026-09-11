@@ -501,6 +501,31 @@ ipcMain.handle('window:focus', () => {
   return true;
 });
 
+// Os botõezinhos de minimizar/maximizar/fechar (canto superior direito) são
+// desenhados pelo próprio Windows (ver `titleBarOverlay` em createWindow),
+// não por CSS -- por isso trocar o tema/tema colorido/cor de destaque no
+// renderer não muda a cor deles sozinho, e ficava um cantinho cinza
+// destoando de temas mais fortes (tipo o "Lua Carmesim"). O renderer chama
+// isso toda vez que a cor de fundo efetiva muda, mandando a cor de fundo
+// (hex) e a cor do "X"/"_"/"[]" (clara ou escura, o que garantir contraste).
+// setTitleBarOverlay só existe de fato no Windows -- em outro SO isso não
+// faz nada (fica quieto, sem erro).
+ipcMain.handle('window:setTitleBarOverlay', (_event, { color, symbolColor } = {}) => {
+  if (!mainWindow || typeof mainWindow.setTitleBarOverlay !== 'function') return false;
+  if (!/^#[0-9a-f]{6}$/i.test(color || '')) return false;
+  try {
+    mainWindow.setTitleBarOverlay({
+      color,
+      symbolColor: /^#[0-9a-f]{6}$/i.test(symbolColor || '') ? symbolColor : '#c8ccd1',
+      height: 36,
+    });
+    return true;
+  } catch (err) {
+    console.error('[primalvoice] não consegui recolorir os botões da barra de título:', err);
+    return false;
+  }
+});
+
 // Bolinha vermelha com o número de mensagens não lidas por cima do ícone do
 // PrimalVoice na barra de tarefas do Windows -- igual o Discord faz. Só tem
 // suporte nativo no Windows (setOverlayIcon não existe/não faz nada em

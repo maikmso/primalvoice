@@ -1355,6 +1355,19 @@ function hslToCss(h, s, l) {
   return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
 }
 
+// Igual hslToCss, mas devolvendo hex -- só usada pra mandar a cor de fundo
+// atual pro processo principal (ver syncTitleBarOverlayColor), já que os
+// botõezinhos nativos de minimizar/maximizar/fechar (setTitleBarOverlay)
+// não entendem "hsl(...)", só hex.
+function hslToHex(h, s, l) {
+  const sN = s / 100, lN = l / 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = sN * Math.min(lN, 1 - lN);
+  const f = (n) => lN - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (n) => Math.round(f(n) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(0)}${toHex(8)}${toHex(4)}`;
+}
+
 // Decide se o texto/ícone em cima da cor de destaque deve ser claro ou
 // escuro, pelo brilho percebido (luminância) da cor -- não dá pra usar só
 // a "lightness" do HSL porque tons de azul/roxo parecem mais escuros do
@@ -1438,6 +1451,23 @@ let customThemeColors = ['#5865f2'];
 let customThemeMode = 'escuro';
 let customThemeIntensity = 32;
 
+// Manda a cor de fundo (--bg) EFETIVA (já com o tema/tema colorido/tema
+// personalizado aplicado -- ou a de fábrica do tema padrão, se nenhum
+// estiver ativo) pro processo principal, pra recolorir os botõezinhos
+// nativos de minimizar/maximizar/fechar junto (ver window:setTitleBarOverlay
+// no main.js -- CSS não alcança eles). Lê o valor computado (não só o
+// inline) porque, sem nenhum tema colorido/personalizado, --bg vem só da
+// folha de estilo (um hex fixo por tema padrão), não de um style.setProperty.
+function syncTitleBarOverlayColor() {
+  if (!window.vortex || typeof window.vortex.setTitleBarOverlay !== 'function') return;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  const hslMatch = raw.match(/^hsl\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)%,\s*(\d+(?:\.\d+)?)%\)$/i);
+  const hex = hslMatch ? hslToHex(Number(hslMatch[1]), Number(hslMatch[2]), Number(hslMatch[3])) : raw;
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+  const symbolColor = getOnAccentColor(hex) === '#16171a' ? '#3a3d42' : '#c8ccd1';
+  window.vortex.setTitleBarOverlay(hex, symbolColor);
+}
+
 function applyColorTheme(key) {
   const root = document.documentElement;
   const activeKey = key || '';
@@ -1490,6 +1520,7 @@ function applyColorTheme(key) {
   if (themePreviewPanelActiveName) {
     themePreviewPanelActiveName.textContent = displayName ? `Tema atual: ${displayName}` : 'Tema atual: Padrão';
   }
+  syncTitleBarOverlayColor();
 }
 
 async function loadColorThemeFromConfig(cfg) {

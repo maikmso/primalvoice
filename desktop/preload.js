@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld('vortex', {
   // Clicou numa notificação de DM nova (ver notifyNewMessage no renderer) --
   // traz a janela de volta pra frente.
   focusWindow: () => ipcRenderer.invoke('window:focus'),
+  // Recolore os botõezinhos nativos de minimizar/maximizar/fechar (o
+  // Windows quem desenha eles, não CSS) pra acompanhar o tema/cor escolhida
+  // -- ver applyColorTheme no renderer, que chama isso toda vez que o fundo
+  // efetivo muda.
+  setTitleBarOverlay: (color, symbolColor) => ipcRenderer.invoke('window:setTitleBarOverlay', { color, symbolColor }),
   // Bolinha de mensagens não lidas por cima do ícone na barra de tarefas
   // (Windows) -- count total de mensagens não lidas (0 tira a bolinha).
   setUnreadBadge: (count) => ipcRenderer.invoke('badge:set', count),
