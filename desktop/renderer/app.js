@@ -5011,32 +5011,68 @@ function openProfileCard(x, y, identity) {
     ? serverState.channels?.voice?.find((c) => c.id === currentVoiceChannelId)
     : null;
   if (currentVoiceChannel) {
-    // Igual Discord: esse bloco inteiro (título + nome do canal) é
-    // clicável, e clicar nele já entra direto na chamada -- não precisa
-    // procurar um botão separado lá embaixo.
-    const voiceBlock = document.createElement('button');
-    voiceBlock.type = 'button';
-    voiceBlock.className = 'profile-card-voice-block';
-
     const voiceTitle = document.createElement('div');
     voiceTitle.className = 'profile-card-section-title';
     voiceTitle.textContent = 'Em voz';
-    voiceBlock.appendChild(voiceTitle);
+    body.appendChild(voiceTitle);
 
-    const voiceWrap = document.createElement('div');
-    voiceWrap.className = 'profile-card-voice';
-    voiceWrap.innerHTML =
+    // Cartão igual o Discord: quem mais está na chamada (em miniatura, com
+    // "+N" se não couber todo mundo), o canal, quantas pessoas tem, e um
+    // "Juntar-se" -- clicar em qualquer lugar do cartão entra na chamada.
+    const voiceCard = document.createElement('button');
+    voiceCard.type = 'button';
+    voiceCard.className = 'profile-card-voice-card';
+
+    const participants = Array.from((voicePresence.get(currentVoiceChannelId) || new Map()).keys());
+    const MAX_AVATARS_SHOWN = 3;
+
+    const avatarsWrap = document.createElement('div');
+    avatarsWrap.className = 'profile-card-voice-avatars';
+    participants.slice(0, MAX_AVATARS_SHOWN).forEach((pid) => {
+      const av = document.createElement('span');
+      av.className = 'avatar profile-card-voice-avatar';
+      av.textContent = displayNameFor(pid).charAt(0).toUpperCase();
+      applyAvatarToEl(av, pid);
+      avatarsWrap.appendChild(av);
+    });
+    const extraCount = participants.length - MAX_AVATARS_SHOWN;
+    if (extraCount > 0) {
+      const more = document.createElement('span');
+      more.className = 'profile-card-voice-avatar-more';
+      more.textContent = `+${extraCount}`;
+      avatarsWrap.appendChild(more);
+    }
+    voiceCard.appendChild(avatarsWrap);
+
+    const info = document.createElement('div');
+    info.className = 'profile-card-voice-info';
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'profile-card-voice-name';
+    nameRow.innerHTML =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
-    const voiceName = document.createElement('span');
-    voiceName.textContent = currentVoiceChannel.name;
-    voiceWrap.appendChild(voiceName);
-    voiceBlock.appendChild(voiceWrap);
+    const nameText = document.createElement('span');
+    nameText.textContent = currentVoiceChannel.name;
+    nameRow.appendChild(nameText);
+    info.appendChild(nameRow);
 
-    voiceBlock.addEventListener('click', () => {
+    const sub = document.createElement('div');
+    sub.className = 'profile-card-voice-sub';
+    sub.textContent = participants.length === 1 ? '1 pessoa na chamada' : `${participants.length} pessoas na chamada`;
+    info.appendChild(sub);
+
+    const joinPill = document.createElement('span');
+    joinPill.className = 'profile-card-voice-join';
+    joinPill.textContent = 'Juntar-se';
+    info.appendChild(joinPill);
+
+    voiceCard.appendChild(info);
+
+    voiceCard.addEventListener('click', () => {
       closeContextMenu();
       enterVoiceChannel(currentVoiceChannelId);
     });
-    body.appendChild(voiceBlock);
+    body.appendChild(voiceCard);
   }
 
   // desde quando a pessoa usa o PrimalVoice (data de criação da conta) —
@@ -5053,17 +5089,8 @@ function openProfileCard(x, y, identity) {
 
   const actions = document.createElement('div');
   actions.className = 'profile-card-actions';
-  if (currentVoiceChannel) {
-    const joinCallBtn = document.createElement('button');
-    joinCallBtn.type = 'button';
-    joinCallBtn.className = 'secondary-btn';
-    joinCallBtn.textContent = 'Abrir chamada de voz';
-    joinCallBtn.addEventListener('click', () => {
-      closeContextMenu();
-      enterVoiceChannel(currentVoiceChannelId);
-    });
-    actions.appendChild(joinCallBtn);
-  }
+  // (o cartão "Em voz" lá em cima já é o botão de entrar na chamada --
+  // igual Discord, não precisa de mais um botão duplicado aqui embaixo.)
   if (isSelf) {
     const actionBtn = document.createElement('button');
     actionBtn.type = 'button';
