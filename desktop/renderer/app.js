@@ -6619,6 +6619,18 @@ function renderRoleMembers() {
 
     const row = document.createElement('div');
     row.className = 'role-member-row';
+
+    // dono da sala: coroa antes do nome (igual Discord), em vez da tag
+    // "Dono" separada lá nas badges de cargo -- não é um cargo de verdade,
+    // então não faz sentido ficar misturada com eles.
+    if (identity === serverState.ownerIdentity) {
+      const crown = document.createElement('span');
+      crown.className = 'owner-crown';
+      crown.title = 'Dono da sala';
+      crown.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 19h18l-1.4-9.2-4.6 4-3-6.8-3 6.8-4.6-4z"/></svg>';
+      row.appendChild(crown);
+    }
+
     const nameEl = document.createElement('span');
     nameEl.className = 'name';
     nameEl.textContent = name;
@@ -6627,16 +6639,6 @@ function renderRoleMembers() {
     const badges = document.createElement('div');
     badges.className = 'role-member-badges';
     const assignedIds = new Set(serverState.memberRoles[identity] || []);
-
-    if (identity === serverState.ownerIdentity) {
-      const ownerBadge = document.createElement('span');
-      ownerBadge.className = 'role-badge assigned';
-      ownerBadge.style.background = 'rgba(255,178,56,0.2)';
-      ownerBadge.style.color = '#ffb238';
-      ownerBadge.style.borderColor = '#ffb238';
-      ownerBadge.textContent = 'Dono';
-      badges.appendChild(ownerBadge);
-    }
 
     serverState.roles.forEach((role) => {
       const assigned = assignedIds.has(role.id);

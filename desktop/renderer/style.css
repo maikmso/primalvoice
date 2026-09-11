@@ -2908,6 +2908,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   font-size: 14px;
 }
 .role-member-row .name { width: 140px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-crown { flex-shrink: 0; display: flex; color: #ffb238; }
+.owner-crown svg { width: 16px; height: 16px; }
 .role-member-badges { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .role-badge {
   display: inline-flex;
