@@ -5604,7 +5604,10 @@ upgradeTooltip(addVoiceChannelBtn);
 upgradeTooltip(selfAvatar);
 upgradeTooltip(selfNameBtn);
 upgradeTooltip(chatAttachmentBtn);
-upgradeTooltip(settingsModalClose);
+// dir: 'top' -- agora que o X mora no canto superior direito do próprio
+// modal (perto da borda direita da janela), o balãozinho padrão (que
+// aparece à direita do botão) não cabia e vazava pra fora da tela.
+upgradeTooltip(settingsModalClose, { dir: 'top' });
 upgradeTooltip(exitAppBtn);
 upgradeTooltip(keybindMuteClearBtn);
 upgradeTooltip(keybindDeafenClearBtn);
