@@ -3449,8 +3449,13 @@ function showWatchStreamPrompt(tile, participant) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'watch-stream-btn';
+  // Mascote do PrimalVoice no lugar do botão branco de antes -- passa o
+  // mouse em cima e ele troca pra outra pose (ver .watch-stream-btn no CSS,
+  // é só opacidade trocando entre as duas imagens empilhadas, sem JS).
   btn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"></path></svg>Assistir transmissão';
+    '<img class="watch-stream-img watch-stream-img-default" src="assets/watch-stream-monkey.png" alt="" />' +
+    '<img class="watch-stream-img watch-stream-img-hover" src="assets/watch-stream-monkey-hover.png" alt="" />';
+  upgradeTooltip(btn, { text: 'Assistir transmissão', dir: 'top' });
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     watchingScreenShare.add(participant.identity);

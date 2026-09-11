@@ -1361,31 +1361,39 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   background: rgba(0, 0, 0, 0.6);
   z-index: 3;
 }
-/* branco sólido de propósito, não usa var(--accent) -- em duas das três
-   temas do app esse accent é um cinza neutro, então o botão ficava
-   apagado/sem graça em cima da miniatura escura da transmissão. Branco +
-   texto escuro sempre destaca, em qualquer tema (igual o play do
-   YouTube/Netflix). */
+/* Mascote do PrimalVoice no lugar do botão branco de antes -- só o bichinho
+   (sem fundo, sem texto) no meio da telinha; passar o mouse em cima troca
+   pra outra pose dele (as duas imagens ficam empilhadas e só a opacidade
+   troca, ver watch-stream-img-default/-hover abaixo -- nada de JS pra isso). */
 .watch-stream-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 22px;
-  border-radius: 999px;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  border-radius: 50%;
   border: none;
-  background: #fff;
-  color: #0a0a0c;
-  font: 700 14px inherit;
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: transform 0.12s ease;
 }
-.watch-stream-btn svg { width: 18px; height: 18px; }
-.watch-stream-btn:hover {
-  transform: scale(1.04);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
+.watch-stream-btn:hover { transform: scale(1.08); }
 .watch-stream-btn:active { transform: scale(0.98); }
+.watch-stream-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45));
+  transition: opacity 0.15s ease;
+}
+.watch-stream-img-default { opacity: 1; }
+.watch-stream-img-hover { opacity: 0; }
+.watch-stream-btn:hover .watch-stream-img-default { opacity: 0; }
+.watch-stream-btn:hover .watch-stream-img-hover { opacity: 1; }
 
 /* controles de quem tá assistindo uma transmissão de tela (volume da
    transmissão, parar de assistir -- sem botão de tela cheia aqui, isso é
