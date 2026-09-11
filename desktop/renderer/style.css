@@ -2785,8 +2785,12 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .roles-search-wrap input:focus { outline: none; border-color: var(--accent); }
 .roles-hierarchy-hint { margin-top: 14px; }
 
-.roles-layout { display: flex; gap: 20px; margin-top: 12px; }
-.roles-list-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0; }
+/* altura fixa (com scroll interno em cada coluna) -- antes, selecionar um
+   cargo (e o painel de permissões aparecer do lado) deixava essa área mais
+   alta e empurrava "Membros e seus cargos" mais pra baixo. Com altura fixa
+   isso não muda mais dependendo se tem um cargo selecionado ou não. */
+.roles-layout { display: flex; gap: 20px; margin-top: 12px; height: 360px; }
+.roles-list-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 0; }
 .roles-table-header {
   display: flex;
   justify-content: space-between;
@@ -2797,7 +2801,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   color: var(--muted);
   border-bottom: 1px solid var(--border);
 }
-.roles-list { display: flex; flex-direction: column; }
+.roles-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
 .role-list-item {
   display: flex;
   align-items: center;
@@ -2858,6 +2862,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   min-width: 0;
   border-left: 1px solid var(--border);
   padding-left: 20px;
+  overflow-y: auto;
 }
 .role-editor-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
 .role-editor-field input[type='text'] {

@@ -6564,6 +6564,10 @@ function renderRoleEditor() {
         body: JSON.stringify({ name: nameInputEl.value.trim(), color: colorInputEl.value, permissions }),
       });
       serverState.roles = data.roles;
+      // fecha o painel de edição depois de salvar -- antes ele continuava
+      // aberto com os mesmos campos, sem nenhum sinal visível de que
+      // salvou de verdade (parecia que não tinha acontecido nada)
+      selectedRoleId = null;
       renderRolesTab();
       renderMemberSidebar();
       refreshAllChatAuthorColors();
