@@ -3363,12 +3363,10 @@ function ensureTile(participant) {
     label.textContent = displayNameFor(participant.identity);
     tile.appendChild(label);
 
-    const expandHint = document.createElement('div');
-    expandHint.className = 'expand-hint';
-    expandHint.innerHTML =
-      '<svg class="icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>' +
-      '<svg class="icon-minimize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>';
-    tile.appendChild(expandHint);
+    // (Sem ícone de "expandir" no canto -- a telinha inteira já é clicável
+    // pra expandir/recolher, ver o listener de click do grid mais abaixo;
+    // o ícone ali era só decorativo e ficava se sobrepondo com os outros
+    // botões da transmissão, no canto.)
 
     grid.appendChild(tile);
   }
@@ -3518,12 +3516,12 @@ function addScreenShareControls(tile, participant) {
   // Botão de parar de assistir, visível ao passar o mouse (igual os outros
   // dessa barra) -- antes só dava pra fazer isso pelo menu do botão direito,
   // que ficou escondido demais.
-  // (Não tem mais botão de "Tela cheia" aqui -- só duplicava o botão de
-  // abrir/expandir a telinha (.expand-hint, no canto da telinha), e pulava
-  // direto pro modo cinema sem passar pela visão normal expandida antes.
-  // Pra entrar em tela cheia de verdade agora é: abre a telinha normal
-  // primeiro, depois dá dois cliques nela -- ver o listener de dblclick
-  // do grid, mais abaixo.)
+  // (Não tem mais botão de "Tela cheia" aqui -- só duplicava o clique na
+  // própria telinha, que já expande/recolhe normal (grid.click, mais
+  // abaixo), e pulava direto pro modo cinema sem passar pela visão normal
+  // expandida antes. Pra entrar em tela cheia de verdade agora é: clica na
+  // telinha pra expandir normal, depois dá dois cliques nela -- ver o
+  // listener de dblclick do grid, mais abaixo.)
   const stopWatchBtn = document.createElement('button');
   stopWatchBtn.type = 'button';
   stopWatchBtn.className = 'screen-share-ctrl-btn screen-share-stopwatch-btn';

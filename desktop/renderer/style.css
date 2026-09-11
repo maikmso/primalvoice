@@ -1286,28 +1286,6 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 }
 .tile.speaking { box-shadow: 0 0 0 3px var(--speaking); }
 
-.tile .expand-hint {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 2;
-}
-.tile .expand-hint svg { width: 14px; height: 14px; }
-.tile .expand-hint .icon-minimize { display: none; }
-.tile.expanded .expand-hint .icon-maximize { display: none; }
-.tile.expanded .expand-hint .icon-minimize { display: block; }
-.tile:hover .expand-hint { opacity: 1; }
-
 .grid.has-expanded {
   display: block;
   padding: 16px;
@@ -1319,7 +1297,6 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   height: 100%;
   aspect-ratio: unset;
 }
-.grid.has-expanded .tile.expanded .expand-hint { opacity: 1; }
 .tile video.video-el {
   position: absolute;
   inset: 0;
@@ -1398,7 +1375,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 
 /* controles de quem tá assistindo uma transmissão de tela (volume da
    transmissão, parar de assistir -- sem botão de tela cheia aqui, isso é
-   pelo .expand-hint da telinha + duplo-clique já expandida). Só aparece ao
+   clicando na telinha (expande normal) + duplo-clique já expandida). Só
+   aparece ao
    passar o mouse na MINIATURA PEQUENA (dentro da grade, não expandida) --
    assim que a telinha expande (cinema de verdade ou só expandida dentro da
    grade), essa barrinha some de vez e quem assume é a barra flutuante
