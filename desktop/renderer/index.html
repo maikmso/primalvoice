@@ -382,12 +382,19 @@
             <button type="button" class="accent-color-option" data-accent="#ed4245" title="Vermelho">
               <span class="accent-color-swatch" style="background:#ed4245"></span>
             </button>
-            <button type="button" class="accent-color-option" data-accent="#00b0c7" title="Ciano"></button>
+            <button type="button" class="accent-color-option" data-accent="#00b0c7" title="Ciano">
+              <span class="accent-color-swatch" style="background:#00b0c7"></span>
+            </button>
             <label class="accent-color-option accent-color-custom" title="Escolher outra cor">
               <span class="accent-color-swatch accent-color-swatch-custom"></span>
               <input type="color" id="accent-color-custom-input" value="#5865f2" />
             </label>
           </div>
+
+          <h3 class="modal-subheading">Temas coloridos</h3>
+          <p class="modal-hint">Mais opções de cor, incluindo degradês. Clique pra escolher, ou pré-visualize antes.</p>
+          <div class="color-theme-grid" id="color-theme-grid"></div>
+          <button type="button" class="secondary-btn color-theme-preview-btn" id="preview-theme-btn">Pré-visualizar tema</button>
 
           <h3 class="modal-subheading">Fonte</h3>
           <p class="modal-hint">A fonte usada em todo o PrimalVoice.</p>
@@ -465,6 +472,16 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
+  </div>
+
+  <!-- Aparece quando a pessoa clica em "Pré-visualizar tema" -- as
+       configurações somem por baixo pra mostrar a conversa/servidor de
+       verdade com a cor nova, e esse botão flutuante traz de volta. -->
+  <div id="theme-preview-return" class="theme-preview-return" hidden>
+    <button type="button" id="theme-preview-return-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+      Voltar para configurações
+    </button>
   </div>
 
   <input type="file" id="server-icon-input" accept="image/*" hidden />

@@ -307,6 +307,10 @@ const cropConfirmBtn = document.getElementById('crop-confirm-btn');
 const themeGrid = document.getElementById('theme-grid');
 const accentColorGrid = document.getElementById('accent-color-grid');
 const accentColorCustomInput = document.getElementById('accent-color-custom-input');
+const colorThemeGrid = document.getElementById('color-theme-grid');
+const previewThemeBtn = document.getElementById('preview-theme-btn');
+const themePreviewReturn = document.getElementById('theme-preview-return');
+const themePreviewReturnBtn = document.getElementById('theme-preview-return-btn');
 const fontOptionList = document.getElementById('font-option-list');
 
 const dmListEl = document.getElementById('dm-list');
@@ -1200,7 +1204,10 @@ function applyAccent(hex) {
     root.style.setProperty('--accent-2', mixWithWhite(hex, 0.35));
     root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.18)`);
   }
-  document.querySelectorAll('.accent-color-option').forEach((btn) => {
+  // Os dois seletores de cor (a fileirinha pequena "Cor de destaque" e a
+  // grade grande "Temas coloridos") escolhem a MESMA coisa por baixo dos
+  // panos -- então marca o "ativo" nos dois juntos, sempre em sincronia.
+  document.querySelectorAll('.accent-color-option, .color-theme-swatch').forEach((btn) => {
     if (btn.dataset.accent !== undefined) btn.classList.toggle('active', (btn.dataset.accent || '') === (hex || ''));
   });
   if (accentColorCustomInput && hex) accentColorCustomInput.value = hex;
@@ -1212,6 +1219,7 @@ async function loadAccentFromConfig(cfg) {
 
 if (accentColorGrid) {
   accentColorGrid.querySelectorAll('.accent-color-option[data-accent]').forEach((btn) => {
+    upgradeTooltip(btn, { dir: 'top' });
     btn.addEventListener('click', async () => {
       const hex = btn.dataset.accent || '';
       applyAccent(hex);
@@ -1222,12 +1230,82 @@ if (accentColorGrid) {
   });
 }
 if (accentColorCustomInput) {
+  upgradeTooltip(accentColorCustomInput.closest('.accent-color-custom'), { dir: 'top' });
   accentColorCustomInput.addEventListener('input', async () => {
     const hex = accentColorCustomInput.value;
     applyAccent(hex);
     const cfg = (await window.vortex.getConfig()) || {};
     cfg.accentColor = hex;
     await window.vortex.setConfig(cfg);
+  });
+}
+
+// ---------- aparência (temas coloridos: grade grande, com degradê) ----------
+// Igual o "Temas coloridos" do Discord: uma grade bem maior de cores pra
+// escolher, incluindo algumas em degradê -- cada uma com um nome que
+// aparece no balãozinho ao passar o mouse. Por baixo dos panos é a mesma
+// coisa que a "Cor de destaque" de cima (mexe no --accent): quando a opção
+// é um degradê, o quadradinho mostra o degradê inteiro, mas a cor
+// realmente aplicada nos botões/links é a "accent" (uma das duas pontas),
+// já que o resto da interface usa cor sólida, não degradê.
+const COLOR_THEMES = [
+  { name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
+  { name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
+  { name: 'Azul-lavanda', css: '#b7c6f2', accent: '#7c8ee0' },
+  { name: 'Amarelo-claro', css: '#eee7a8', accent: '#cfc357' },
+  { name: 'Lilás', css: '#e3c6f0', accent: '#b370d1' },
+  { name: 'Ciano-claro', css: '#b7ecec', accent: '#3fb8b8' },
+  { name: 'Creme', css: '#f0ead0', accent: '#c9b96a' },
+  { name: 'Roxo-azulado', css: 'linear-gradient(135deg, #5b3df0, #8a5cf6)', accent: '#6a46f2' },
+  { name: 'Aurora', css: 'linear-gradient(135deg, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
+  { name: 'Vinho', css: 'linear-gradient(135deg, #7a1d24, #24080a)', accent: '#a3282f' },
+  { name: 'Ameixa', css: 'linear-gradient(135deg, #4b2a78, #1c0e30)', accent: '#6339a8' },
+  { name: 'Terracota', css: '#b06a55', accent: '#b06a55' },
+  { name: 'Cinza-azulado', css: '#8d93ab', accent: '#8d93ab' },
+  { name: 'Verde-oliva', css: '#4f7a5e', accent: '#4f7a5e' },
+  { name: 'Azul-petróleo', css: 'linear-gradient(135deg, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
+  { name: 'Berinjela', css: 'linear-gradient(135deg, #7a2160, #2b0c22)', accent: '#9a2c7a' },
+  { name: 'Pôr do sol', css: 'linear-gradient(135deg, #f0a63c, #d94f4f)', accent: '#e37a3f' },
+  { name: 'Céu noturno', css: 'linear-gradient(135deg, #274bd6, #7a3fd6)', accent: '#4a5fe0' },
+  { name: 'Dourado', css: '#8a7a3a', accent: '#a89042' },
+  { name: 'Índigo puro', css: '#2b3ecb', accent: '#2b3ecb' },
+];
+
+function renderColorThemeGrid() {
+  if (!colorThemeGrid || colorThemeGrid.childElementCount > 0) return;
+  COLOR_THEMES.forEach((theme) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'color-theme-swatch';
+    btn.dataset.accent = theme.accent;
+    btn.style.background = theme.css;
+    upgradeTooltip(btn, { text: theme.name, dir: 'top' });
+    btn.addEventListener('click', async () => {
+      applyAccent(theme.accent);
+      const cfg = (await window.vortex.getConfig()) || {};
+      cfg.accentColor = theme.accent;
+      await window.vortex.setConfig(cfg);
+    });
+    colorThemeGrid.appendChild(btn);
+  });
+}
+renderColorThemeGrid();
+
+// "Pré-visualizar tema": fecha as configurações pra mostrar a conversa ou
+// o servidor de verdade com a cor já aplicada (ela já foi aplicada e salva
+// assim que a pessoa clicou na cor, então não tem passo de "confirmar" --
+// isso aqui é só pra ela CONFERIR o resultado sem o modal no caminho), e
+// deixa um botãozinho flutuante pra voltar pras configurações depois.
+if (previewThemeBtn) {
+  previewThemeBtn.addEventListener('click', () => {
+    closeSettingsModal();
+    if (themePreviewReturn) themePreviewReturn.hidden = false;
+  });
+}
+if (themePreviewReturnBtn) {
+  themePreviewReturnBtn.addEventListener('click', () => {
+    if (themePreviewReturn) themePreviewReturn.hidden = true;
+    openSettingsModal('appearance');
   });
 }
 
