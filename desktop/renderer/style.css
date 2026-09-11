@@ -2069,24 +2069,32 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
   z-index: 200;
+  animation: modal-overlay-in 0.15s ease;
 }
+@keyframes modal-overlay-in { from { opacity: 0; } to { opacity: 1; } }
 .modal {
   background: var(--panel);
   /* bem maior que antes -- igual Discord, as configurações ocupam quase a
      janela inteira, não uma caixinha pequena no meio */
   width: min(1040px, 94vw);
   height: min(720px, 90vh);
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  animation: modal-card-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modal-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .modal-tabs {
   width: 220px;
@@ -2112,15 +2120,32 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   color: var(--muted);
 }
 .modal-tab {
+  position: relative;
   text-align: left;
   background: transparent;
   border: none;
   color: var(--muted);
-  padding: 9px 10px;
+  padding: 9px 10px 9px 14px;
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
+/* tracinho de destaque colado na aba ativa, igual Discord -- só aparece
+   crescendo suavemente em vez de aparecer/sumir seco */
+.modal-tab::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--text);
+  transform: translateY(-50%);
+  transition: height 0.15s ease;
+}
+.modal-tab.active::before { height: 60%; }
 .modal-tab-danger {
   margin-top: auto;
   text-align: left;
@@ -2167,30 +2192,28 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   font-size: 14px;
 }
 .modal-hint { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
-/* botão de fechar SOLTO ao lado do modal (não mais dentro dele), igual
-   Discord: um "X" circular flutuando no fundo escuro com "ESC" embaixo. */
-.modal-close-standalone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
+/* botão de fechar agora DENTRO do modal (canto superior direito), em vez de
+   solto no fundo escuro ao lado -- fica mais integrado à própria tela de
+   configurações. O atalho ESC continua funcionando, só virou dica no title. */
 .modal-close-btn {
-  width: 40px;
-  height: 40px;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 2px solid var(--muted);
+  border: none;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  z-index: 5;
 }
-.modal-close-btn svg { width: 18px; height: 18px; }
-.modal-close-btn:hover { border-color: var(--text); color: var(--text); }
-.modal-close-hint { font-size: 12px; font-weight: 700; color: var(--muted); }
+.modal-close-btn svg { width: 17px; height: 17px; }
+.modal-close-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
 
 .keybind-row {
   display: flex;
