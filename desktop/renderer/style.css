@@ -144,7 +144,12 @@ body.cinema-mode #app-titlebar,
 body.cinema-mode .server-rail,
 body.cinema-mode .channel-sidebar,
 body.cinema-mode .resize-handle,
-body.cinema-mode .room-header {
+body.cinema-mode .room-header,
+/* .user-panel não é mais filho de .channel-sidebar (agora flutua por cima
+   dela e da barra de servidor -- ver comentário na regra .user-panel),
+   então precisa entrar aqui também, senão ficava flutuando sozinho por
+   cima da transmissão em tela cheia. */
+body.cinema-mode .user-panel {
   display: none !important;
 }
 body.cinema-mode .grid.has-expanded { padding: 0; }
@@ -418,6 +423,11 @@ body.cinema-mode .screen-share-controls { display: none !important; }
   display: flex;
   flex-direction: row;
   align-items: stretch;
+  /* pro rodapé do usuário (.user-panel) flutuar ancorado AQUI -- ele
+     precisa se espalhar por cima dos ÍCONES DE SERVIDOR (.server-rail)
+     também, não só da lista de canais, por isso mora como irmão dos dois
+     em vez de dentro de .channel-sidebar (ver index.html). */
+  position: relative;
 }
 
 /* Quando o tema ativo (colorido pronto ou "Tema Personalizado" com mais de
@@ -585,13 +595,14 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   flex-direction: column;
   overflow: hidden;
   transition: width 0.15s ease;
-  /* pro rodapé do usuário (.user-panel) flutuar sobreposto por cima da
-     lista de canais -- ver comentário lá embaixo -- ancorado NESTA caixa,
-     não na janela inteira. */
-  position: relative;
 }
 .channel-sidebar.no-transition { transition: none; }
 .channel-sidebar.collapsed > * { visibility: hidden; }
+/* .user-panel não é mais filho de .channel-sidebar (ver comentário na
+   regra .user-panel mais abaixo), então precisa da própria classe
+   .collapsed pra sumir junto quando a barra lateral é recolhida (ver
+   setSidebarCollapsed no app.js). */
+.user-panel.collapsed { visibility: hidden; }
 .server-header {
   height: 48px;
   flex-shrink: 0;
@@ -818,14 +829,21 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
 
 /* Igual o Discord: o rodapé do usuário não fica preso/encaixado embaixo da
    lista de canais (empurrando ela) -- ele FLUTUA por cima, sobrepondo o
-   final da lista, com cantos arredondados nos 4 lados + sombra, meio
-   "solto" da borda da barra lateral (ver .channel-sidebar {position:
-   relative} e .channel-list {padding-bottom} logo acima). */
+   final dos ÍCONES DE SERVIDOR (.server-rail) E da lista de canais, com
+   cantos arredondados nos 4 lados + sombra, meio "solto" das bordas.
+   Por isso mora fora de .channel-sidebar no HTML (irmão de .server-rail e
+   .channel-sidebar, dentro de .discord-shell -- que por sua vez virou
+   `position: relative` só pra ancorar ele aqui). A largura cobre os 72px
+   fixos da barra de servidor + a largura (variável, --sidebar-w) da barra
+   de canais, então acompanha sozinho quando a pessoa arrasta pra
+   redimensionar a barra lateral. z-index garante que fica por cima da
+   lista de canais rolando e dos ícones de servidor por trás. */
 .user-panel {
   position: absolute;
   left: 8px;
-  right: 8px;
+  width: calc(72px + var(--sidebar-w, 240px) - 16px);
   bottom: 8px;
+  z-index: 3;
   padding: 8px;
   background: var(--surface-raised);
   border: 1px solid var(--border);

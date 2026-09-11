@@ -179,6 +179,11 @@ const selfAvatar = document.getElementById('self-avatar');
 const selfName = document.getElementById('self-name');
 const selfNameBtn = document.getElementById('self-name-btn');
 const channelSidebar = document.querySelector('.channel-sidebar');
+// .user-panel não mora mais DENTRO de .channel-sidebar (agora flutua por
+// cima dela E da barra de ícones de servidor, ver style.css) -- por isso
+// setSidebarCollapsed() precisa escondê-lo à parte, via classe própria, em
+// vez de contar com o ".channel-sidebar.collapsed > *" de antes.
+const userPanel = document.querySelector('.user-panel');
 const memberList = document.querySelector('.member-list');
 const resizeLeft = document.getElementById('resize-left');
 const toggleMembersBtn = document.getElementById('toggle-members-btn');
@@ -2325,6 +2330,7 @@ applyMemberListWidth(MEMBERLIST_DEFAULT);
 function setSidebarCollapsed(collapsed) {
   sidebarCollapsed = collapsed;
   channelSidebar.classList.toggle('collapsed', collapsed);
+  if (userPanel) userPanel.classList.toggle('collapsed', collapsed);
   resizeLeft.classList.toggle('collapsed', collapsed);
   if (collapsed) {
     if (sidebarWidth > 20) lastSidebarWidth = sidebarWidth;
