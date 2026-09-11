@@ -632,6 +632,7 @@ const leaveSound = new Audio('assets/sound-leave.wav');
 const muteSound = new Audio('assets/sound-mute.wav');
 const unmuteSound = new Audio('assets/sound-unmute.wav');
 const messageSound = new Audio('assets/sound-message.wav');
+const sharingSound = new Audio('assets/sound-sharing.wav');
 function playSound(el) {
   try {
     el.currentTime = 0;
@@ -2253,13 +2254,29 @@ async function joinVoiceChannel(channelId) {
   });
   vr.on(RoomEvent.TrackUnmuted, (publication, participant) => {
     if (publication.source === Track.Source.Microphone) setVoiceMemberStatus(participant.identity, { muted: false });
-    else if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: true });
+    else if (publication.source === Track.Source.Camera) {
+      setVoiceMemberStatus(participant.identity, { camera: true });
+      // 2ª vez em diante ligando a câmera não republica o track (só
+      // desmuta a mesma publicação -- ver comentário acima), então é
+      // aqui, e não em TrackPublished, que precisa avisar com som.
+      if (!isMyIdentity(participant.identity)) playSound(sharingSound);
+    }
   });
-  const handleTrackPublishedChange = (isPublished) => (publication, participant) => {
+  const handleTrackPublishedChange = (isPublished, opts = {}) => (publication, participant) => {
     if (publication.source === Track.Source.Camera) setVoiceMemberStatus(participant.identity, { camera: isPublished });
     else if (publication.source === Track.Source.ScreenShare) setVoiceMemberStatus(participant.identity, { screenShare: isPublished });
+    // Avisa com um barulhinho quando ALGUÉM (nunca eu mesmo, eu já sei que
+    // cliquei) começa a compartilhar tela ou liga a câmera pela primeira
+    // vez na chamada -- ajuda a notar sem precisar ficar de olho na tela.
+    if (
+      opts.playSoundForRemote &&
+      isPublished &&
+      (publication.source === Track.Source.Camera || publication.source === Track.Source.ScreenShare)
+    ) {
+      playSound(sharingSound);
+    }
   };
-  vr.on(RoomEvent.TrackPublished, handleTrackPublishedChange(true));
+  vr.on(RoomEvent.TrackPublished, handleTrackPublishedChange(true, { playSoundForRemote: true }));
   vr.on(RoomEvent.TrackUnpublished, handleTrackPublishedChange(false));
   vr.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
     handleTrackPublishedChange(true)(publication, participant);
