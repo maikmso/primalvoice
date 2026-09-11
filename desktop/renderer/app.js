@@ -293,6 +293,7 @@ const profileBannerInput = document.getElementById('profile-banner-input');
 const profileDisplaynameInput = document.getElementById('profile-displayname-input');
 const profileIdentityTag = document.getElementById('profile-identity-tag');
 const profileStatusInput = document.getElementById('profile-status-input');
+const profileBioInput = document.getElementById('profile-bio-input');
 const profileSaveBtn = document.getElementById('profile-save-btn');
 
 const cropOverlay = document.getElementById('crop-overlay');
@@ -487,11 +488,12 @@ const unreadCounts = new Map();
 const mentionedChannels = new Set();
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
-const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName }
+const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName, bio }
 let myAvatarDataUrl = '';
 let myBannerDataUrl = '';
 let myStatusText = '';
 let myDisplayName = '';
+let myBioText = '';
 let pendingProfileAvatar = null; // enquanto o modal de perfil está aberto
 let pendingProfileBanner = null;
 
@@ -669,6 +671,7 @@ async function fetchServerState() {
       myBannerDataUrl = profile.banner || '';
       myStatusText = profile.status || '';
       myDisplayName = profile.displayName || '';
+      myBioText = profile.bio || '';
     } else {
       memberProfiles.set(identity, profile);
     }
@@ -731,6 +734,7 @@ function broadcastProfile() {
     banner: myBannerDataUrl,
     status: myStatusText,
     displayName: myDisplayName,
+    bio: myBioText,
   };
   lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
 }
@@ -800,11 +804,18 @@ function loadProfileFromConfig(cfg) {
   myBannerDataUrl = p.banner || '';
   myStatusText = p.status || '';
   myDisplayName = p.displayName || '';
+  myBioText = p.bio || '';
 }
 
 async function saveProfileToConfig() {
   const cfg = (await window.vortex.getConfig()) || {};
-  cfg.profile = { avatar: myAvatarDataUrl, banner: myBannerDataUrl, status: myStatusText, displayName: myDisplayName };
+  cfg.profile = {
+    avatar: myAvatarDataUrl,
+    banner: myBannerDataUrl,
+    status: myStatusText,
+    displayName: myDisplayName,
+    bio: myBioText,
+  };
   await window.vortex.setConfig(cfg);
 }
 
@@ -1026,6 +1037,7 @@ profileSaveBtn.addEventListener('click', async () => {
   if (pendingProfileBanner !== null) myBannerDataUrl = pendingProfileBanner;
   myStatusText = profileStatusInput.value.trim().slice(0, 60);
   myDisplayName = profileDisplaynameInput.value.trim().slice(0, 32);
+  myBioText = profileBioInput.value.trim().slice(0, 190);
   pendingProfileAvatar = null;
   pendingProfileBanner = null;
   await saveProfileToConfig();
@@ -1046,6 +1058,7 @@ profileSaveBtn.addEventListener('click', async () => {
       banner: myBannerDataUrl,
       status: myStatusText,
       displayName: myDisplayName,
+      bio: myBioText,
     }),
   }).catch((err) => {
     console.warn('Não consegui salvar o perfil no servidor (ficou salvo só neste PC por enquanto):', err);
@@ -1057,6 +1070,7 @@ function openProfilePane() {
   pendingProfileBanner = null;
   profileStatusInput.value = myStatusText;
   profileDisplaynameInput.value = myDisplayName;
+  profileBioInput.value = myBioText;
   profileIdentityTag.textContent = myIdentity;
   if (myAvatarDataUrl) {
     profileAvatarPreview.style.backgroundImage = `url(${myAvatarDataUrl})`;
@@ -4769,13 +4783,23 @@ async function playSoundboardClip(sound) {
   }
 }
 
+// Em qual canal de voz essa identity está conectada agora, se algum --
+// voicePresence é channelId -> Map(identity -> name), então é só procurar
+// em qual mapa ela aparece. Usado pra mostrar "Em voz" no cartão de perfil.
+function voiceChannelIdFor(identity) {
+  for (const [channelId, members] of voicePresence) {
+    if (members.has(identity)) return channelId;
+  }
+  return null;
+}
+
 // ---------- cartão de perfil (clique com botão esquerdo) ----------
 function openProfileCard(x, y, identity) {
   closeContextMenu();
   if (!identity) return;
   const isSelf = identity === myIdentity;
   const profile = isSelf
-    ? { avatar: myAvatarDataUrl, banner: myBannerDataUrl, status: myStatusText }
+    ? { avatar: myAvatarDataUrl, banner: myBannerDataUrl, status: myStatusText, bio: myBioText }
     : memberProfiles.get(identity) || {};
 
   const card = document.createElement('div');
@@ -4805,10 +4829,24 @@ function openProfileCard(x, y, identity) {
   const body = document.createElement('div');
   body.className = 'profile-card-body';
 
+  const nameRow = document.createElement('div');
+  nameRow.className = 'profile-card-name-row';
+
+  // Coroa de dono da sala, igual a que já aparece do lado do nome na lista
+  // de membros da aba Cargos (mesmo ícone/cor, ver renderRoleMembers).
+  if (identity === serverState.ownerIdentity) {
+    const crown = document.createElement('span');
+    crown.className = 'owner-crown';
+    crown.title = 'Dono da sala';
+    crown.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 19h18l-1.4-9.2-4.6 4-3-6.8-3 6.8-4.6-4z"/></svg>';
+    nameRow.appendChild(crown);
+  }
+
   const nameEl = document.createElement('div');
   nameEl.className = 'profile-card-name';
   nameEl.textContent = displayNameFor(identity);
-  body.appendChild(nameEl);
+  nameRow.appendChild(nameEl);
+  body.appendChild(nameRow);
 
   const tagEl = document.createElement('div');
   tagEl.className = 'profile-card-tag';
@@ -4820,6 +4858,20 @@ function openProfileCard(x, y, identity) {
     statusEl.className = 'profile-card-status';
     statusEl.textContent = profile.status;
     body.appendChild(statusEl);
+  }
+
+  // "Sobre mim" -- texto livre que a pessoa escreve no perfil dela (ver
+  // profile-bio-input no modal de configurações), igual o Discord.
+  if (profile.bio) {
+    const bioTitle = document.createElement('div');
+    bioTitle.className = 'profile-card-section-title';
+    bioTitle.textContent = 'Sobre mim';
+    body.appendChild(bioTitle);
+
+    const bioEl = document.createElement('div');
+    bioEl.className = 'profile-card-bio';
+    bioEl.textContent = profile.bio;
+    body.appendChild(bioEl);
   }
 
   // cargos do servidor que essa pessoa tem — igual Discord, mostra os
@@ -4849,6 +4901,28 @@ function openProfileCard(x, y, identity) {
     body.appendChild(rolesWrap);
   }
 
+  // "Em voz" -- se a pessoa estiver conectada AGORA num canal de voz,
+  // mostra qual e dá um jeito de entrar direto na chamada, igual o Discord.
+  const currentVoiceChannelId = voiceChannelIdFor(identity);
+  const currentVoiceChannel = currentVoiceChannelId
+    ? serverState.channels?.voice?.find((c) => c.id === currentVoiceChannelId)
+    : null;
+  if (currentVoiceChannel) {
+    const voiceTitle = document.createElement('div');
+    voiceTitle.className = 'profile-card-section-title';
+    voiceTitle.textContent = 'Em voz';
+    body.appendChild(voiceTitle);
+
+    const voiceWrap = document.createElement('div');
+    voiceWrap.className = 'profile-card-voice';
+    voiceWrap.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+    const voiceName = document.createElement('span');
+    voiceName.textContent = currentVoiceChannel.name;
+    voiceWrap.appendChild(voiceName);
+    body.appendChild(voiceWrap);
+  }
+
   // desde quando a pessoa usa o PrimalVoice (data de criação da conta) —
   // vem junto do perfil público que o servidor manda em /api/state
   const joinDate = formatJoinDate(serverState.profiles?.[identity]?.createdAt);
@@ -4863,6 +4937,17 @@ function openProfileCard(x, y, identity) {
 
   const actions = document.createElement('div');
   actions.className = 'profile-card-actions';
+  if (currentVoiceChannel) {
+    const joinCallBtn = document.createElement('button');
+    joinCallBtn.type = 'button';
+    joinCallBtn.className = 'secondary-btn';
+    joinCallBtn.textContent = 'Abrir chamada de voz';
+    joinCallBtn.addEventListener('click', () => {
+      closeContextMenu();
+      enterVoiceChannel(currentVoiceChannelId);
+    });
+    actions.appendChild(joinCallBtn);
+  }
   if (isSelf) {
     const actionBtn = document.createElement('button');
     actionBtn.type = 'button';
@@ -5519,6 +5604,7 @@ async function completeConnect(token, identity, st) {
         banner: msg.banner || '',
         status: msg.status || '',
         displayName: msg.displayName || '',
+        bio: msg.bio || '',
       });
       applyProfileEverywhere(msg.identity);
       renderMemberSidebar();

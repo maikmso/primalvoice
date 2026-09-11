@@ -202,7 +202,7 @@ app.post('/api/token', async (req, res) => {
     store.mutate((state) => {
       state.ownerIdentity = OWNER_NAME;
     });
-    // O dono também ganha um registro de perfil (foto/banner/nome/status),
+    // O dono também ganha um registro de perfil (foto/banner/nome/status/bio),
     // só que sem senha própria — o login do dono sempre passa pelo
     // OWNER_PASSWORD do .env, nunca pela senha guardada aqui.
     if (!store.findUser(OWNER_NAME)) store.createUser(OWNER_NAME, crypto.randomBytes(24).toString('hex'));
@@ -287,7 +287,7 @@ app.post('/api/voice-token', requireAuth, async (req, res) => {
 });
 
 // Estado do servidor: canais, cargos, quem tem qual cargo, minhas permissões
-// e o perfil (foto/banner/nome/status) de todo mundo que já tem conta — assim
+// e o perfil (foto/banner/nome/status/bio) de todo mundo que já tem conta — assim
 // dá pra ver o perfil de alguém mesmo que a pessoa não esteja online agora.
 app.get('/api/state', requireAuth, (req, res) => {
   const s = store.getState();
@@ -344,25 +344,27 @@ app.get('/api/profile', requireAuth, (req, res) => {
     avatar: user.avatar || '',
     banner: user.banner || '',
     status: user.status || '',
+    bio: user.bio || '',
     createdAt: user.createdAt || null,
   });
 });
 
 app.patch('/api/profile', requireAuth, (req, res) => {
-  const { displayName, status, avatar, banner } = req.body || {};
+  const { displayName, status, bio, avatar, banner } = req.body || {};
   if (typeof avatar === 'string' && avatar.length > store.MAX_IMAGE_LEN) {
     return res.status(400).json({ error: 'Foto de perfil grande demais.' });
   }
   if (typeof banner === 'string' && banner.length > store.MAX_IMAGE_LEN) {
     return res.status(400).json({ error: 'Banner grande demais.' });
   }
-  const updated = store.updateUserProfile(req.identity, { displayName, status, avatar, banner });
+  const updated = store.updateUserProfile(req.identity, { displayName, status, bio, avatar, banner });
   if (!updated) return res.status(404).json({ error: 'Conta não encontrada (o dono do servidor não guarda perfil aqui).' });
   res.json({
     displayName: updated.displayName || '',
     avatar: updated.avatar || '',
     banner: updated.banner || '',
     status: updated.status || '',
+    bio: updated.bio || '',
   });
 });
 

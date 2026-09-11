@@ -204,6 +204,7 @@ function createUser(identity, password, displayName) {
     avatar: '',
     banner: '',
     status: '',
+    bio: '',
     createdAt: Date.now(),
   };
   mutate((s) => {
@@ -229,6 +230,7 @@ function updateUserProfile(identity, patch) {
     if (!user) return;
     if (typeof patch.displayName === 'string') user.displayName = patch.displayName.trim().slice(0, 32);
     if (typeof patch.status === 'string') user.status = patch.status.trim().slice(0, 60);
+    if (typeof patch.bio === 'string') user.bio = patch.bio.trim().slice(0, 190);
     if (typeof patch.avatar === 'string' && patch.avatar.length <= MAX_IMAGE_LEN) user.avatar = patch.avatar;
     if (typeof patch.banner === 'string' && patch.banner.length <= MAX_IMAGE_LEN) user.banner = patch.banner;
     updated = user;
@@ -245,6 +247,7 @@ function getPublicProfiles() {
       avatar: user.avatar || '',
       banner: user.banner || '',
       status: user.status || '',
+      bio: user.bio || '',
       displayName: user.displayName || '',
       // desde quando a conta existe — usado pra mostrar "Entrou em ..." no
       // cartão de perfil, igual ao "membro desde" do Discord
