@@ -2153,6 +2153,20 @@ function updateRailBadges() {
     serverUnreadBadge.hidden = serverUnread <= 0;
     serverUnreadBadge.textContent = badgeText(serverUnread, serverHasMention);
   }
+
+  updateTaskbarUnreadBadge();
+}
+
+// Reflete o total de mensagens não lidas (todas as conversas e canais de
+// texto somados) na bolinha do ícone da barra de tarefas do Windows -- assim
+// dá pra notar que tem mensagem nova mesmo com o PrimalVoice minimizado, sem
+// precisar abrir o app pra ver.
+function updateTaskbarUnreadBadge() {
+  let total = 0;
+  unreadCounts.forEach((count) => {
+    total += count;
+  });
+  window.vortex?.setUnreadBadge?.(total);
 }
 
 async function joinVoiceChannel(channelId) {

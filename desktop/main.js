@@ -501,6 +501,30 @@ ipcMain.handle('window:focus', () => {
   return true;
 });
 
+// Bolinha vermelha com o número de mensagens não lidas por cima do ícone do
+// PrimalVoice na barra de tarefas do Windows -- igual o Discord faz. Só tem
+// suporte nativo no Windows (setOverlayIcon não existe/não faz nada em
+// outros sistemas). count <= 0 tira a bolinha; de 1 a 9 mostra o número
+// certinho, e acima disso sempre "9+" (os ícones já vêm prontos, um PNG por
+// número, pra não precisar desenhar nada na hora).
+ipcMain.handle('badge:set', (_event, count) => {
+  if (!mainWindow || process.platform !== 'win32') return false;
+  try {
+    if (!count || count <= 0) {
+      mainWindow.setOverlayIcon(null, '');
+      return true;
+    }
+    const n = Math.min(Math.max(Math.floor(count), 1), 9);
+    const fileName = count > 9 ? 'badge-9plus.png' : `badge-${n}.png`;
+    const badgeImage = nativeImage.createFromPath(path.join(__dirname, 'build', 'badges', fileName));
+    mainWindow.setOverlayIcon(badgeImage, `${count} mensagem(ns) não lida(s)`);
+    return true;
+  } catch (err) {
+    console.error('[primalvoice] não consegui atualizar a bolinha de não lidas:', err);
+    return false;
+  }
+});
+
 // Tela cheia de verdade (a janela inteira, sem moldura/barra de título) pro
 // "cinema mode" de assistir compartilhamento de tela — ver enterCinemaFullscreen
 // no renderer. Não usa a Fullscreen API do elemento <video> (que mostra um
