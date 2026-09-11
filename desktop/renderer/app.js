@@ -1230,13 +1230,13 @@ if (accentColorGrid) {
     upgradeTooltip(btn, { dir: 'top' });
     btn.addEventListener('click', async () => {
       const hex = btn.dataset.accent || '';
-      // "Cor de destaque" mexe só nos botões -- se um "tema colorido"
-      // estava pintando o fundo/painéis, desliga ele aqui.
-      applyColorTheme('');
+      // "Cor de destaque" mexe só nos botões -- NÃO desliga um "tema
+      // colorido" que já esteja pintando o fundo/painéis. Assim dá pra
+      // usar o fundo de um Tema colorido (ex: Azul-petróleo) com os
+      // botões em outra cor (ex: Amarelo), do jeito que pediram.
       applyAccent(hex);
       const cfg = (await window.vortex.getConfig()) || {};
       cfg.accentColor = hex;
-      cfg.colorTheme = '';
       await window.vortex.setConfig(cfg);
     });
   });
@@ -1245,11 +1245,9 @@ if (accentColorCustomInput) {
   upgradeTooltip(accentColorCustomInput.closest('.accent-color-custom'), { dir: 'top' });
   accentColorCustomInput.addEventListener('input', async () => {
     const hex = accentColorCustomInput.value;
-    applyColorTheme('');
     applyAccent(hex);
     const cfg = (await window.vortex.getConfig()) || {};
     cfg.accentColor = hex;
-    cfg.colorTheme = '';
     await window.vortex.setConfig(cfg);
   });
 }
@@ -1258,12 +1256,20 @@ if (accentColorCustomInput) {
 // Igual o "Temas coloridos" do Discord: uma grade bem maior de cores pra
 // escolher, incluindo algumas em degradê -- cada uma com um nome que
 // aparece no balãozinho ao passar o mouse. Diferente da "Cor de destaque"
-// de cima (que só troca a cor dos botões), aqui a cor escolhida REPINTA O
+// de cima (que só troca a cor dos botões), clicar aqui REPINTA O
 // PRIMALVOICE INTEIRO: fundo, painéis, bordas etc. também ganham um tom
-// combinando com a cor, além dos botões/links (a "accent"). Quando a opção
-// é um degradê, o quadradinho da grade mostra o degradê inteiro, mas quem
-// vira de fato a cor de botões/fundo é a "accent" (uma das duas pontas),
-// já que o resto da interface usa cor sólida, não degradê.
+// combinando com a cor, além do botão/accent (que fica igual à "accent" do
+// tema, escolhida por padrão). Quando a opção é um degradê, o quadradinho
+// da grade mostra o degradê inteiro, mas quem vira de fato a cor de
+// botões/fundo é a "accent" (uma das duas pontas), já que o resto da
+// interface usa cor sólida, não degradê.
+//
+// O fundo/painéis (esta grade) e a cor dos botões ("Cor de destaque" logo
+// acima) são independentes: depois de escolher um tema colorido aqui,
+// ainda dá pra ir em "Cor de destaque" e trocar só a cor dos botões, sem
+// perder o fundo escolhido -- pediram exatamente isso (ex: fundo Azul-
+// petróleo com botões Amarelo). Só clicar de novo num tema colorido (aqui
+// ou o mesmo de novo) volta a igualar tudo à "accent" dele.
 const COLOR_THEMES = [
   { key: 'verde-menta', name: 'Verde-menta', css: '#8fe3b0', accent: '#4fbd85' },
   { key: 'pessego', name: 'Pêssego', css: '#f5c894', accent: '#e0a460' },
