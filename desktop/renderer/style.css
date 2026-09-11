@@ -2525,6 +2525,219 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .theme-preview-exit-btn:hover { background: var(--hover-strong); }
 .theme-preview-exit-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
 
+/* Quadradinho de "Tema Personalizado" (ícone de paleta) -- primeiro item
+   da grade de Temas coloridos, igual o Discord. Em vez de aplicar uma cor
+   na hora feito os outros, clicar aqui abre o painel de personalização. */
+.color-theme-swatch-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tile-bg);
+  border: 2px dashed var(--border);
+  color: var(--muted);
+}
+.color-theme-swatch-custom:hover { color: var(--text); border-color: var(--muted); }
+.color-theme-swatch-custom.active { border-style: solid; color: var(--text); }
+.color-theme-swatch-custom svg { width: 24px; height: 24px; }
+
+/* ---------- aparência (criar tema personalizado) ---------- */
+/* Painel "Personalize o seu tema" -- reaproveita o mesmo shell fixo do
+   lado direito do painel de "Pré-visualizar tema" (.theme-preview-panel),
+   só com um conteúdo próprio: caixa de saturação/brilho + barra de matiz
+   pra montar uma cor (ou várias, formando um degradê) na mão. */
+.custom-theme-panel { gap: 0; }
+.custom-theme-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.custom-theme-panel-header h3 { margin: 0; font-size: 16px; }
+.custom-theme-close-btn { position: static; }
+.custom-theme-subheading {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 16px 0 8px;
+}
+.custom-theme-mode-toggle { display: flex; gap: 8px; }
+.custom-theme-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.custom-theme-mode-btn svg { width: 18px; height: 18px; }
+.custom-theme-mode-btn:hover { color: var(--text); }
+.custom-theme-mode-btn.active { border-color: var(--text); color: var(--text); background: var(--hover-strong); }
+
+/* Caixa de saturação (eixo x) / brilho (eixo y) -- o matiz escolhido na
+   barra abaixo entra como --edit-hue, e o resto é feito com dois
+   gradientes sobrepostos (branco->transparente da esquerda, preto->
+   transparente de baixo pra cima), técnica clássica de color picker HSV. */
+.custom-theme-sv-box {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: 8px;
+  margin-top: 8px;
+  cursor: crosshair;
+  background-color: hsl(var(--edit-hue, 235), 100%, 50%);
+  background-image:
+    linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+    linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+  user-select: none;
+}
+.custom-theme-sv-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.custom-theme-hue-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  margin-top: 12px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+}
+.custom-theme-hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.custom-theme-hue-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.custom-theme-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.custom-theme-hex-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.custom-theme-hex-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: Consolas, 'Cascadia Code', monospace;
+}
+.custom-theme-eyedrop-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.custom-theme-eyedrop-btn:hover { color: var(--text); }
+.custom-theme-eyedrop-btn svg { width: 16px; height: 16px; }
+.custom-theme-add-color-btn { width: 100%; margin-top: 12px; }
+.custom-theme-color-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.custom-theme-color-chip {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.custom-theme-color-chip.active { border-color: var(--text); }
+.custom-theme-color-chip-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--danger, #ed4245);
+  color: #fff;
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  cursor: pointer;
+}
+.custom-theme-intensity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+.custom-theme-intensity-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  margin-top: 8px;
+  background: var(--border);
+  cursor: pointer;
+}
+.custom-theme-intensity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+}
+.custom-theme-intensity-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  cursor: pointer;
+}
+.custom-theme-action-row { display: flex; gap: 8px; margin-top: 16px; }
+.custom-theme-action-row .secondary-btn { flex: 1; }
+
 /* ---------- aparência (fonte) ---------- */
 .font-option-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .font-option {

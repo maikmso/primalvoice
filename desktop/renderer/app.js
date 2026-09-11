@@ -313,6 +313,23 @@ const themePreviewPanel = document.getElementById('theme-preview-panel');
 const themePreviewPanelGrid = document.getElementById('theme-preview-panel-grid');
 const themePreviewPanelActiveName = document.getElementById('theme-preview-panel-active-name');
 const themePreviewExitBtn = document.getElementById('theme-preview-exit-btn');
+const customThemePanel = document.getElementById('custom-theme-panel');
+const customThemeCloseBtn = document.getElementById('custom-theme-close-btn');
+const customThemeBackBtn = document.getElementById('custom-theme-back-btn');
+const customThemeModeBtns = document.querySelectorAll('.custom-theme-mode-btn');
+const customThemeSvBox = document.getElementById('custom-theme-sv-box');
+const customThemeSvHandle = document.getElementById('custom-theme-sv-handle');
+const customThemeHueInput = document.getElementById('custom-theme-hue-input');
+const customThemeHexInput = document.getElementById('custom-theme-hex-input');
+const customThemeHexSwatch = document.getElementById('custom-theme-hex-swatch');
+const customThemeNativePicker = document.getElementById('custom-theme-native-picker');
+const customThemeEyedropBtn = document.getElementById('custom-theme-eyedrop-btn');
+const customThemeAddColorBtn = document.getElementById('custom-theme-add-color-btn');
+const customThemeColorChips = document.getElementById('custom-theme-color-chips');
+const customThemeIntensityInput = document.getElementById('custom-theme-intensity-input');
+const customThemeIntensityValueEl = document.getElementById('custom-theme-intensity-value');
+const customThemeSurpriseBtn = document.getElementById('custom-theme-surprise-btn');
+const customThemeResetBtn = document.getElementById('custom-theme-reset-btn');
 const fontOptionList = document.getElementById('font-option-list');
 
 const dmListEl = document.getElementById('dm-list');
@@ -1304,11 +1321,16 @@ const COLOR_THEMES = [
 
 // Variáveis de CSS que um "tema colorido" repinta por cima do tema padrão
 // (Escuro/Meia-noite/Clássico) -- tudo que dá "corpo" à interface, fora o
-// texto (--text/--muted ficam como estão, sempre legíveis em qualquer tom).
+// texto. O texto (--text/--muted) fica como está pros temas prontos
+// (sempre legíveis em qualquer tom, já que eles são todos escuros), mas o
+// "Tema Personalizado" (ver mais abaixo) pode ser "Claro" -- nesse caso
+// essas duas entram em jogo também, pra não deixar texto claro sobre fundo
+// claro.
 const COLOR_THEME_PALETTE_VARS = [
   '--bg', '--panel', '--tile-bg', '--border', '--hover-strong',
   '--surface-deep', '--surface-raised', '--quality-dim', '--on-accent',
 ];
+const CUSTOM_THEME_TEXT_VARS = ['--text', '--muted'];
 
 function hexToHsl(hex) {
   const { r, g, b } = hexToRgb(hex);
@@ -1344,11 +1366,26 @@ function getOnAccentColor(hex) {
 }
 
 // A partir de uma única cor (a "accent" do tema), gera um fundo/painéis
-// escuros e tingidos com o mesmo tom -- é isso que faz o PrimalVoice
-// inteiro mudar de cara, não só os botões.
-function deriveThemePalette(accentHex) {
+// tingidos com o mesmo tom -- é isso que faz o PrimalVoice inteiro mudar de
+// cara, não só os botões. `sat` é o quanto de saturação entra nesse tom
+// (0-100, os temas prontos sempre usam 32); `mode` escolhe se o fundo
+// gerado é escuro (padrão, como o resto do PrimalVoice) ou claro (só o
+// "Tema Personalizado" oferece isso).
+function deriveThemePalette(accentHex, { sat = 32, mode = 'escuro' } = {}) {
   const { h } = hexToHsl(accentHex);
-  const sat = 32;
+  if (mode === 'claro') {
+    return {
+      bg: hslToCss(h, sat, 94),
+      panel: hslToCss(h, sat, 89),
+      tileBg: hslToCss(h, sat, 98),
+      border: hslToCss(h, sat, 78),
+      hoverStrong: hslToCss(h, sat, 82),
+      surfaceDeep: hslToCss(h, sat, 97),
+      surfaceRaised: hslToCss(h, sat, 85),
+      qualityDim: hslToCss(h, Math.max(sat - 14, 18), 45),
+      onAccent: getOnAccentColor(accentHex),
+    };
+  }
   return {
     bg: hslToCss(h, sat, 10),
     panel: hslToCss(h, sat, 15),
@@ -1362,13 +1399,37 @@ function deriveThemePalette(accentHex) {
   };
 }
 
+// Estado do "Tema Personalizado" -- ver a seção "criar tema personalizado"
+// mais abaixo pra tudo que edita isso (grade de cor, degradê de matiz,
+// campo hex, intensidade, claro/escuro, etc). Fica aqui em cima porque
+// applyColorTheme() precisa ler o estado atual quando key === 'custom'.
+let customThemeColors = ['#5865f2'];
+let customThemeMode = 'escuro';
+let customThemeIntensity = 32;
+
 function applyColorTheme(key) {
   const root = document.documentElement;
-  const theme = key ? COLOR_THEMES.find((t) => t.key === key) : null;
-  if (!theme) {
+  const activeKey = key || '';
+  let theme = null;
+  let paletteAccent = null;
+  let paletteOpts = { sat: 32, mode: 'escuro' };
+  let displayName = null;
+  if (activeKey === 'custom') {
+    paletteAccent = customThemeColors[0] || '#5865f2';
+    paletteOpts = { sat: customThemeIntensity, mode: customThemeMode };
+    displayName = 'Tema Personalizado';
+  } else if (activeKey) {
+    theme = COLOR_THEMES.find((t) => t.key === activeKey) || null;
+    if (theme) {
+      paletteAccent = theme.accent;
+      displayName = theme.name;
+    }
+  }
+  if (!paletteAccent) {
     COLOR_THEME_PALETTE_VARS.forEach((v) => root.style.removeProperty(v));
+    CUSTOM_THEME_TEXT_VARS.forEach((v) => root.style.removeProperty(v));
   } else {
-    const palette = deriveThemePalette(theme.accent);
+    const palette = deriveThemePalette(paletteAccent, paletteOpts);
     root.style.setProperty('--bg', palette.bg);
     root.style.setProperty('--panel', palette.panel);
     root.style.setProperty('--tile-bg', palette.tileBg);
@@ -1378,16 +1439,32 @@ function applyColorTheme(key) {
     root.style.setProperty('--surface-raised', palette.surfaceRaised);
     root.style.setProperty('--quality-dim', palette.qualityDim);
     root.style.setProperty('--on-accent', palette.onAccent);
+    // Só o "Tema Personalizado" no modo "Claro" mexe no texto -- os temas
+    // prontos são todos pensados pra continuar em cima de texto claro.
+    if (activeKey === 'custom' && customThemeMode === 'claro') {
+      root.style.setProperty('--text', '#1b1c1f');
+      root.style.setProperty('--muted', '#5b5d63');
+    } else {
+      CUSTOM_THEME_TEXT_VARS.forEach((v) => root.style.removeProperty(v));
+    }
   }
   document.querySelectorAll('.color-theme-swatch').forEach((btn) => {
-    btn.classList.toggle('active', !!theme && btn.dataset.themeKey === theme.key);
+    btn.classList.toggle('active', !!paletteAccent && btn.dataset.themeKey === activeKey);
   });
   if (themePreviewPanelActiveName) {
-    themePreviewPanelActiveName.textContent = theme ? `Tema atual: ${theme.name}` : 'Tema atual: Padrão';
+    themePreviewPanelActiveName.textContent = displayName ? `Tema atual: ${displayName}` : 'Tema atual: Padrão';
   }
 }
 
 async function loadColorThemeFromConfig(cfg) {
+  if (cfg.customTheme) {
+    customThemeColors = Array.isArray(cfg.customTheme.colors) && cfg.customTheme.colors.length
+      ? cfg.customTheme.colors.slice()
+      : ['#5865f2'];
+    customThemeMode = cfg.customTheme.mode === 'claro' ? 'claro' : 'escuro';
+    customThemeIntensity = Number.isFinite(cfg.customTheme.intensity) ? cfg.customTheme.intensity : 32;
+    if (typeof renderCustomThemeChips === 'function') renderCustomThemeChips();
+  }
   applyColorTheme(cfg.colorTheme || '');
 }
 
@@ -1396,12 +1473,14 @@ async function loadColorThemeFromConfig(cfg) {
 // que mora no painel de prévia lateral (ver mais abaixo). As duas grades
 // ficam sempre sincronizadas "de graça": applyColorTheme() marca/desmarca
 // `.active` em TODOS os `.color-theme-swatch` da página, não só numa grade.
+// O quadradinho de "Tema Personalizado" (com o ícone de paleta) já vem no
+// HTML, fora dessa função -- ela só entra com os temas prontos, DEPOIS dele.
 function buildColorThemeSwatches(container) {
-  if (!container || container.childElementCount > 0) return;
+  if (!container || container.querySelector('.color-theme-swatch-preset')) return;
   COLOR_THEMES.forEach((theme) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'color-theme-swatch';
+    btn.className = 'color-theme-swatch color-theme-swatch-preset';
     btn.dataset.accent = theme.accent;
     btn.dataset.themeKey = theme.key;
     btn.style.background = theme.css;
@@ -1438,6 +1517,303 @@ function renderColorThemeGrid() {
 }
 renderColorThemeGrid();
 
+// ---------- aparência (criar tema personalizado) ----------
+// Igual o "Personalize o seu tema" do Discord: em vez de só escolher entre
+// os temas prontos, a pessoa monta o próprio -- arrasta na caixa de
+// saturação/brilho + na barra de matiz (ou digita o hex, ou usa o
+// conta-gotas do seletor nativo do Windows) pra escolher uma cor, pode
+// empilhar mais de uma com "Adicionar cor" pra virar um degradê, escolhe se
+// o fundo gerado fica Escuro ou Claro, e controla "Intensidade de cor"
+// (quanto de saturação entra no fundo). Tudo se aplica ao vivo -- o painel
+// abre do lado, igual o de "Pré-visualizar tema" logo abaixo.
+function hexToHsv(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const rN = r / 255, gN = g / 255, bN = b / 255;
+  const max = Math.max(rN, gN, bN), min = Math.min(rN, gN, bN);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    switch (max) {
+      case rN: h = ((gN - bN) / d) % 6; break;
+      case gN: h = (bN - rN) / d + 2; break;
+      default: h = (rN - gN) / d + 4; break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return { h, s: s * 100, v: max * 100 };
+}
+
+function hsvToHex(h, s, v) {
+  const sN = s / 100, vN = v / 100;
+  const c = vN * sN;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = vN - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  const toHex = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+let customThemeEditHue = 235;
+let customThemeEditSat = 55;
+let customThemeEditVal = 95;
+let customThemeActiveChip = 0; // índice em customThemeColors sendo editado agora
+
+// Salva o estado atual (cores, modo, intensidade) no config e reaplica o
+// tema personalizado na tela -- chamada a cada mudancinha (arrastar a
+// caixa, mexer no matiz, digitar hex, add/remover cor, trocar claro/
+// escuro, mexer na intensidade), pra tudo ficar sempre ao vivo, igual os
+// temas prontos.
+async function commitCustomTheme() {
+  const cfg = (await window.vortex.getConfig()) || {};
+  if (!cfg.accentColor) {
+    applyAccent(customThemeColors[0]);
+    cfg.accentColor = customThemeColors[0];
+  }
+  applyColorTheme('custom');
+  cfg.colorTheme = 'custom';
+  cfg.customTheme = {
+    colors: customThemeColors.slice(),
+    mode: customThemeMode,
+    intensity: customThemeIntensity,
+  };
+  await window.vortex.setConfig(cfg);
+}
+
+function renderCustomThemeSvBoxUI() {
+  if (customThemeSvBox) customThemeSvBox.style.setProperty('--edit-hue', customThemeEditHue);
+  if (customThemeSvHandle) {
+    customThemeSvHandle.style.left = `${customThemeEditSat}%`;
+    customThemeSvHandle.style.top = `${100 - customThemeEditVal}%`;
+  }
+  if (customThemeHueInput) customThemeHueInput.value = customThemeEditHue;
+}
+
+function renderCustomThemeHexUI(hex) {
+  if (customThemeHexInput) customThemeHexInput.value = hex;
+  if (customThemeHexSwatch) customThemeHexSwatch.style.background = hex;
+}
+
+// Monta os "chips" (bolinhas pequenas) de cada cor já adicionada ao
+// degradê -- clicar numa carrega ela de volta na caixa pra editar, clicar
+// no X remove (menos a última: sempre sobra pelo menos uma cor).
+function renderCustomThemeChips() {
+  if (!customThemeColorChips) return;
+  customThemeColorChips.innerHTML = '';
+  customThemeColors.forEach((hex, i) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'custom-theme-color-chip';
+    chip.style.background = hex;
+    chip.classList.toggle('active', i === customThemeActiveChip);
+    chip.title = hex;
+    chip.addEventListener('click', () => {
+      customThemeActiveChip = i;
+      const hsv = hexToHsv(customThemeColors[i]);
+      customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+      renderCustomThemeSvBoxUI();
+      renderCustomThemeHexUI(customThemeColors[i]);
+      renderCustomThemeChips();
+    });
+    if (customThemeColors.length > 1) {
+      const removeBtn = document.createElement('span');
+      removeBtn.className = 'custom-theme-color-chip-remove';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        customThemeColors.splice(i, 1);
+        if (customThemeActiveChip >= customThemeColors.length) customThemeActiveChip = customThemeColors.length - 1;
+        const hsv = hexToHsv(customThemeColors[customThemeActiveChip]);
+        customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+        renderCustomThemeSvBoxUI();
+        renderCustomThemeHexUI(customThemeColors[customThemeActiveChip]);
+        renderCustomThemeChips();
+        commitCustomTheme();
+      });
+      chip.appendChild(removeBtn);
+    }
+    customThemeColorChips.appendChild(chip);
+  });
+}
+
+// A cor sendo editada agora na caixa/matiz/hex sempre vira a cor do chip
+// ativo, e já aplica na tela ao vivo.
+function updateActiveChipColor(hex) {
+  customThemeColors[customThemeActiveChip] = hex;
+  renderCustomThemeChips();
+  commitCustomTheme();
+}
+
+function handleCustomThemeSvPointer(clientX, clientY) {
+  if (!customThemeSvBox) return;
+  const rect = customThemeSvBox.getBoundingClientRect();
+  const width = rect.width || 1;
+  const height = rect.height || 1;
+  const x = Math.min(1, Math.max(0, (clientX - rect.left) / width));
+  const y = Math.min(1, Math.max(0, (clientY - rect.top) / height));
+  customThemeEditSat = x * 100;
+  customThemeEditVal = (1 - y) * 100;
+  const hex = hsvToHex(customThemeEditHue, customThemeEditSat, customThemeEditVal);
+  renderCustomThemeSvBoxUI();
+  renderCustomThemeHexUI(hex);
+  updateActiveChipColor(hex);
+}
+
+if (customThemeSvBox) {
+  let draggingSv = false;
+  customThemeSvBox.addEventListener('mousedown', (e) => {
+    draggingSv = true;
+    handleCustomThemeSvPointer(e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (draggingSv) handleCustomThemeSvPointer(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', () => { draggingSv = false; });
+}
+
+if (customThemeHueInput) {
+  customThemeHueInput.addEventListener('input', () => {
+    customThemeEditHue = Number(customThemeHueInput.value);
+    const hex = hsvToHex(customThemeEditHue, customThemeEditSat, customThemeEditVal);
+    renderCustomThemeSvBoxUI();
+    renderCustomThemeHexUI(hex);
+    updateActiveChipColor(hex);
+  });
+}
+
+if (customThemeHexInput) {
+  customThemeHexInput.addEventListener('change', () => {
+    const raw = customThemeHexInput.value.trim();
+    const hex = /^#?[0-9a-f]{6}$/i.test(raw) ? (raw.startsWith('#') ? raw : `#${raw}`) : null;
+    if (!hex) { renderCustomThemeHexUI(customThemeColors[customThemeActiveChip]); return; }
+    const hsv = hexToHsv(hex);
+    customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+    renderCustomThemeSvBoxUI();
+    renderCustomThemeHexUI(hex);
+    updateActiveChipColor(hex);
+  });
+}
+
+if (customThemeEyedropBtn && customThemeNativePicker) {
+  customThemeEyedropBtn.addEventListener('click', () => customThemeNativePicker.click());
+  customThemeNativePicker.addEventListener('input', () => {
+    const hex = customThemeNativePicker.value;
+    const hsv = hexToHsv(hex);
+    customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+    renderCustomThemeSvBoxUI();
+    renderCustomThemeHexUI(hex);
+    updateActiveChipColor(hex);
+  });
+}
+
+if (customThemeAddColorBtn) {
+  customThemeAddColorBtn.addEventListener('click', () => {
+    if (customThemeColors.length >= 5) return;
+    customThemeColors.push(customThemeColors[customThemeActiveChip]);
+    customThemeActiveChip = customThemeColors.length - 1;
+    renderCustomThemeChips();
+    commitCustomTheme();
+  });
+}
+
+if (customThemeIntensityInput) {
+  customThemeIntensityInput.addEventListener('input', () => {
+    customThemeIntensity = Number(customThemeIntensityInput.value);
+    if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = `${customThemeIntensity}%`;
+    commitCustomTheme();
+  });
+}
+
+customThemeModeBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    customThemeMode = btn.dataset.mode === 'claro' ? 'claro' : 'escuro';
+    customThemeModeBtns.forEach((b) => b.classList.toggle('active', b === btn));
+    commitCustomTheme();
+  });
+});
+
+// "Surpreenda-me!": sorteia de 1 a 3 cores, uma intensidade e um modo
+// (a maioria das vezes Escuro, já que o resto do PrimalVoice é escuro).
+if (customThemeSurpriseBtn) {
+  customThemeSurpriseBtn.addEventListener('click', () => {
+    const count = 1 + Math.floor(Math.random() * 3);
+    customThemeColors = [];
+    for (let i = 0; i < count; i++) {
+      const h = Math.floor(Math.random() * 360);
+      const s = 45 + Math.floor(Math.random() * 45);
+      const v = 55 + Math.floor(Math.random() * 40);
+      customThemeColors.push(hsvToHex(h, s, v));
+    }
+    customThemeActiveChip = 0;
+    customThemeIntensity = 20 + Math.floor(Math.random() * 45);
+    customThemeMode = Math.random() < 0.7 ? 'escuro' : 'claro';
+    const hsv = hexToHsv(customThemeColors[0]);
+    customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+    renderCustomThemeSvBoxUI();
+    renderCustomThemeHexUI(customThemeColors[0]);
+    renderCustomThemeChips();
+    if (customThemeIntensityInput) customThemeIntensityInput.value = customThemeIntensity;
+    if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = `${customThemeIntensity}%`;
+    customThemeModeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === customThemeMode));
+    commitCustomTheme();
+  });
+}
+
+if (customThemeResetBtn) {
+  customThemeResetBtn.addEventListener('click', () => {
+    customThemeColors = ['#5865f2'];
+    customThemeActiveChip = 0;
+    customThemeIntensity = 32;
+    customThemeMode = 'escuro';
+    const hsv = hexToHsv('#5865f2');
+    customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+    renderCustomThemeSvBoxUI();
+    renderCustomThemeHexUI('#5865f2');
+    renderCustomThemeChips();
+    if (customThemeIntensityInput) customThemeIntensityInput.value = customThemeIntensity;
+    if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = '32%';
+    customThemeModeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === 'escuro'));
+    commitCustomTheme();
+  });
+}
+
+function openCustomThemePanel() {
+  closeSettingsModal();
+  if (themePreviewPanel) themePreviewPanel.hidden = true;
+  if (customThemePanel) customThemePanel.hidden = false;
+  const hsv = hexToHsv(customThemeColors[customThemeActiveChip] || '#5865f2');
+  customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
+  renderCustomThemeSvBoxUI();
+  renderCustomThemeHexUI(customThemeColors[customThemeActiveChip] || '#5865f2');
+  renderCustomThemeChips();
+  if (customThemeIntensityInput) customThemeIntensityInput.value = customThemeIntensity;
+  if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = `${customThemeIntensity}%`;
+  customThemeModeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === customThemeMode));
+}
+
+function closeCustomThemePanel() {
+  if (customThemePanel) customThemePanel.hidden = true;
+  openSettingsModal('appearance');
+}
+
+document.querySelectorAll('.color-theme-swatch-custom').forEach((btn) => {
+  upgradeTooltip(btn, { text: 'Tema Personalizado', dir: 'top' });
+  btn.addEventListener('click', () => {
+    customThemeActiveChip = 0;
+    openCustomThemePanel();
+  });
+});
+
+if (customThemeCloseBtn) customThemeCloseBtn.addEventListener('click', closeCustomThemePanel);
+if (customThemeBackBtn) customThemeBackBtn.addEventListener('click', closeCustomThemePanel);
+
 // "Pré-visualizar tema": igual o Discord faz -- fecha as configurações pra
 // mostrar a conversa ou o servidor de verdade por trás (a cor já foi
 // aplicada e salva assim que a pessoa clicou nela, então não tem passo de
@@ -1448,6 +1824,7 @@ renderColorThemeGrid();
 if (previewThemeBtn) {
   previewThemeBtn.addEventListener('click', () => {
     closeSettingsModal();
+    if (customThemePanel) customThemePanel.hidden = true;
     if (themePreviewPanel) themePreviewPanel.hidden = false;
   });
 }

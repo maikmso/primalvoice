@@ -389,8 +389,12 @@
           </div>
 
           <h3 class="modal-subheading">Temas coloridos</h3>
-          <p class="modal-hint">Mais opções de cor, incluindo degradês. Clique pra escolher, ou pré-visualize antes.</p>
-          <div class="color-theme-grid" id="color-theme-grid"></div>
+          <p class="modal-hint">Mais opções de cor, incluindo degradês. Clique pra escolher, monte o seu próprio, ou pré-visualize antes.</p>
+          <div class="color-theme-grid" id="color-theme-grid">
+            <button type="button" class="color-theme-swatch color-theme-swatch-custom" data-theme-key="custom">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 2.5 2.5 0 0 0 1.8-4.2 1.8 1.8 0 0 1 1.3-3 3 3 0 0 0 3-3A10 10 0 0 0 12 2z"></path><circle cx="7.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="12" cy="7" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="16.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+            </button>
+          </div>
           <button type="button" class="secondary-btn color-theme-preview-btn" id="preview-theme-btn">Pré-visualizar tema</button>
 
           <h3 class="modal-subheading">Fonte</h3>
@@ -482,10 +486,70 @@
       <p class="modal-hint">Escolha um tema e veja o PrimalVoice mudando na hora, por trás deste painel.</p>
       <p class="theme-preview-panel-active" id="theme-preview-panel-active-name">Tema atual: Padrão</p>
     </div>
-    <div class="color-theme-grid theme-preview-panel-grid" id="theme-preview-panel-grid"></div>
+    <div class="color-theme-grid theme-preview-panel-grid" id="theme-preview-panel-grid">
+      <button type="button" class="color-theme-swatch color-theme-swatch-custom" data-theme-key="custom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 2.5 2.5 0 0 0 1.8-4.2 1.8 1.8 0 0 1 1.3-3 3 3 0 0 0 3-3A10 10 0 0 0 12 2z"></path><circle cx="7.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="12" cy="7" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="16.5" cy="10.5" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+      </button>
+    </div>
     <button type="button" id="theme-preview-exit-btn" class="theme-preview-exit-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
       Sair da prévia
+    </button>
+  </div>
+
+  <!-- "Personalize o seu tema" -- igual o Discord: montar uma cor (ou um
+       degradê com várias) na mão em vez de escolher um tema pronto. Abre
+       do lado igual o painel de prévia acima, com o app de verdade visível
+       atrás, já mudando ao vivo enquanto a pessoa mexe. -->
+  <div id="custom-theme-panel" class="theme-preview-panel custom-theme-panel" hidden>
+    <div class="custom-theme-panel-header">
+      <h3>Personalize o seu tema</h3>
+      <button type="button" class="modal-close-btn custom-theme-close-btn" id="custom-theme-close-btn" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <h4 class="custom-theme-subheading">Aparência</h4>
+    <div class="custom-theme-mode-toggle">
+      <button type="button" class="custom-theme-mode-btn active" data-mode="escuro" title="Escuro">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+      </button>
+      <button type="button" class="custom-theme-mode-btn" data-mode="claro" title="Claro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"></circle><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"></path></svg>
+      </button>
+    </div>
+
+    <h4 class="custom-theme-subheading">Cores</h4>
+    <div class="custom-theme-sv-box" id="custom-theme-sv-box">
+      <div class="custom-theme-sv-handle" id="custom-theme-sv-handle"></div>
+    </div>
+    <input type="range" class="custom-theme-hue-slider" id="custom-theme-hue-input" min="0" max="360" value="235" />
+    <div class="custom-theme-hex-row">
+      <span class="custom-theme-hex-swatch" id="custom-theme-hex-swatch"></span>
+      <input type="text" id="custom-theme-hex-input" class="custom-theme-hex-input" maxlength="7" value="#5865f2" />
+      <button type="button" id="custom-theme-eyedrop-btn" class="custom-theme-eyedrop-btn" title="Conta-gotas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-4 9.5-9.5"></path><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L18 9l-3-3z"></path><path d="m15 6-9.5 9.5-4 1 1-4L12 3z"></path></svg>
+      </button>
+      <input type="color" id="custom-theme-native-picker" hidden />
+    </div>
+    <button type="button" class="secondary-btn custom-theme-add-color-btn" id="custom-theme-add-color-btn">+ Adicionar cor</button>
+    <div class="custom-theme-color-chips" id="custom-theme-color-chips"></div>
+
+    <h4 class="custom-theme-subheading">Controles</h4>
+    <div class="custom-theme-intensity-row">
+      <span>Intensidade de cor</span>
+      <span id="custom-theme-intensity-value">32%</span>
+    </div>
+    <input type="range" class="custom-theme-intensity-slider" id="custom-theme-intensity-input" min="0" max="100" value="32" />
+
+    <div class="custom-theme-action-row">
+      <button type="button" class="secondary-btn" id="custom-theme-surprise-btn">🎲 Surpreenda-me!</button>
+      <button type="button" class="secondary-btn" id="custom-theme-reset-btn">Redefinir</button>
+    </div>
+
+    <button type="button" class="theme-preview-exit-btn" id="custom-theme-back-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+      Voltar a Configurações
     </button>
   </div>
 
