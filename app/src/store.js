@@ -30,7 +30,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   );
 }
 
-const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'muteMembers', 'deafenMembers', 'manageNicknames'];
+const PERMISSION_KEYS = ['manageChannels', 'manageRoles', 'kickMembers', 'moveMembers', 'banMembers', 'muteMembers', 'deafenMembers', 'manageNicknames'];
 
 // Tamanho máximo (em caracteres da data URL) pra foto/banner de perfil —
 // fica salvo dentro do state.json, então não pode deixar crescer sem limite.
@@ -65,6 +65,10 @@ function defaultState() {
     // chave = id do canal de texto, ou "dm:identityA|identityB" (ordenado)
     // pra conversa privada; valor = array de mensagens, mais recente por último
     messages: {},
+    // nomes de usuário (minúsculo, igual chave de `users`) banidos do
+    // servidor -- ao contrário do "expulsar" (kick), isso é permanente:
+    // barra login/registro de novo até alguém desbanir.
+    bannedIdentities: [],
   };
 }
 
@@ -91,6 +95,7 @@ function normalizeState(parsed) {
     nicknames: parsed.nicknames && typeof parsed.nicknames === 'object' ? parsed.nicknames : {},
     users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
     messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
+    bannedIdentities: Array.isArray(parsed.bannedIdentities) ? parsed.bannedIdentities : [],
   };
 }
 
@@ -379,6 +384,48 @@ function getVoicePresenceSnapshot() {
   return out;
 }
 
+// Em qual canal de voz essa identity está agora, segundo o retrato ao vivo
+// guardado no servidor -- usado pra saber de qual sala do LiveKit tirar
+// alguém na hora de "mover" (não dá pra confiar só no que o cliente que
+// pediu a ação alega que é o canal atual da pessoa).
+function voiceChannelIdFor(identity) {
+  if (!identity) return null;
+  for (const [channelId, members] of voicePresence) {
+    if (members.has(identity)) return channelId;
+  }
+  return null;
+}
+
+// ---------- banimento de servidor ----------
+// Diferente do "expulsar" (kick, em cima) -- isso é permanente: fica na
+// lista até alguém desbanir, e barra tanto criar conta quanto logar de novo
+// (ver isBanned() chamado em /api/register, /api/token e requireAuth).
+function isBanned(identity) {
+  if (!identity) return false;
+  return state.bannedIdentities.includes(identity.toLowerCase().trim());
+}
+
+function banIdentity(identity) {
+  const key = (identity || '').toLowerCase().trim();
+  if (!key) return state.bannedIdentities;
+  mutate((s) => {
+    if (!s.bannedIdentities.includes(key)) s.bannedIdentities.push(key);
+  });
+  return state.bannedIdentities;
+}
+
+function unbanIdentity(identity) {
+  const key = (identity || '').toLowerCase().trim();
+  mutate((s) => {
+    s.bannedIdentities = s.bannedIdentities.filter((b) => b !== key);
+  });
+  return state.bannedIdentities;
+}
+
+function getBannedIdentities() {
+  return state.bannedIdentities.slice();
+}
+
 module.exports = {
   init,
   getState,
@@ -402,4 +449,9 @@ module.exports = {
   setVoicePresence,
   clearVoicePresence,
   getVoicePresenceSnapshot,
+  voiceChannelIdFor,
+  isBanned,
+  banIdentity,
+  unbanIdentity,
+  getBannedIdentities,
 };

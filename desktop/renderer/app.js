@@ -286,6 +286,8 @@ const roleEditorEl = document.getElementById('role-editor');
 const rolesMembersListEl = document.getElementById('roles-members-list');
 const rolesSearchInput = document.getElementById('roles-search-input');
 const rolesCountLabel = document.getElementById('roles-count-label');
+const bansListEl = document.getElementById('bans-list');
+const bansEmptyHint = document.getElementById('bans-empty-hint');
 
 const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileAvatarChangeBtn = document.getElementById('profile-avatar-change-btn');
@@ -370,6 +372,8 @@ const PERMISSION_LABELS = {
   manageChannels: 'Gerenciar canais (criar/apagar)',
   manageRoles: 'Gerenciar cargos e atribuir a membros',
   kickMembers: 'Expulsar membros da chamada',
+  moveMembers: 'Mover membros entre canais de voz',
+  banMembers: 'Banir membros do servidor',
   muteMembers: 'Silenciar membros (pede pro app deles mutar)',
   deafenMembers: 'Ensurdecer membros (pede pro app deles parar de ouvir)',
   manageNicknames: 'Alterar apelido de outros membros',
@@ -6010,6 +6014,11 @@ function openContextMenu(x, y, participant, opts = {}) {
   if (opts.isOffline) {
     appendSocialSection(menu, identity, x, y);
     appendRolesSection(menu, identity);
+    // silenciar/vídeo/expulsar da chamada/mover não fazem sentido pra quem
+    // nem está conectada -- mas banir do servidor sim (não depende disso),
+    // por isso appendModerationSection continua sendo chamado aqui também;
+    // ela mesma decide sozinha, por dentro, o que mostra ou não.
+    appendModerationSection(menu, identity);
 
     document.body.appendChild(menu);
     contextMenuEl = menu;
@@ -6133,32 +6142,8 @@ function openContextMenu(x, y, participant, opts = {}) {
     menu.appendChild(stopWatchItem);
   }
 
-  if (opts.allowKick && myPermissions.kickMembers && activeVoiceChannelId) {
-    menu.appendChild(dividerEl());
-    const kickItem = document.createElement('div');
-    kickItem.className = 'context-menu-item';
-    const kickLabel = document.createElement('span');
-    kickLabel.className = 'label';
-    kickLabel.style.color = 'var(--danger)';
-    kickLabel.textContent = 'Expulsar da chamada';
-    kickItem.appendChild(kickLabel);
-    kickItem.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      closeContextMenu();
-      if (!confirm(`Expulsar ${participant.name || identity} da chamada?`)) return;
-      try {
-        await apiFetch('/api/moderation/kick', {
-          method: 'POST',
-          body: JSON.stringify({ identity, channelId: activeVoiceChannelId }),
-        });
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-    menu.appendChild(kickItem);
-  }
-
   appendRolesSection(menu, identity);
+  appendModerationSection(menu, identity);
 
   document.body.appendChild(menu);
   contextMenuEl = menu;
@@ -6381,6 +6366,133 @@ function appendRolesSection(menu, identity) {
   });
 }
 
+// Manda um avisinho direcionado SÓ pra identity (destinationIdentities),
+// pelo canal de dados sempre ativo (lobbyRoom) -- é assim que a gente
+// consegue fazer o APP DELA reagir a uma ação de moderação tomada por
+// outra pessoa (entrar sozinha num canal de voz novo depois de ser movida,
+// ou limpar a UI de chamada depois de ser expulsa/banida), já que o
+// servidor sabe mexer no LiveKit mas não tem como "clicar" em nada dentro
+// do app de quem foi afetado.
+function notifyModeration(identity, payload) {
+  if (!lobbyRoom || !identity) return;
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify({ ...payload, to: identity })), {
+    reliable: true,
+    destinationIdentities: [identity],
+  });
+}
+
+// Seção de moderação (Expulsar da chamada / Mover pra outro canal de voz /
+// Banir do servidor) -- reaproveitada tanto no menu de gente online quanto
+// no de gente offline (banir não depende de estar conectada; expulsar/mover
+// simplesmente não aparecem se ela não estiver em nenhum canal de voz
+// agora, o que já resolve sozinho o caso offline sem precisar de mais
+// nenhuma checagem). Cada ação aparece só pra quem tem a permissão dela.
+function appendModerationSection(menu, identity) {
+  const targetVoiceChannelId = voiceChannelIdFor(identity);
+  const canKick = myPermissions.kickMembers && targetVoiceChannelId;
+  const otherVoiceChannels = (serverState.channels?.voice || []).filter((c) => c.id !== targetVoiceChannelId);
+  const canMove = myPermissions.moveMembers && targetVoiceChannelId && otherVoiceChannels.length > 0;
+  const canBan = myPermissions.banMembers;
+  if (!canKick && !canMove && !canBan) return;
+
+  menu.appendChild(dividerEl());
+
+  if (canKick) {
+    const kickItem = document.createElement('div');
+    kickItem.className = 'context-menu-item';
+    const kickLabel = document.createElement('span');
+    kickLabel.className = 'label';
+    kickLabel.style.color = 'var(--danger)';
+    kickLabel.textContent = 'Expulsar da chamada';
+    kickItem.appendChild(kickLabel);
+    kickItem.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      if (!confirm(`Expulsar ${displayNameFor(identity)} da chamada?`)) return;
+      try {
+        await apiFetch('/api/moderation/kick', {
+          method: 'POST',
+          body: JSON.stringify({ identity, channelId: targetVoiceChannelId }),
+        });
+        notifyModeration(identity, { type: 'moderation-kicked', channelId: targetVoiceChannelId });
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    menu.appendChild(kickItem);
+  }
+
+  if (canMove) {
+    const moveToggleItem = document.createElement('div');
+    moveToggleItem.className = 'context-menu-item';
+    const moveLabel = document.createElement('span');
+    moveLabel.className = 'label';
+    moveLabel.textContent = 'Mover para';
+    moveToggleItem.appendChild(moveLabel);
+    const chevron = document.createElement('span');
+    chevron.className = 'context-menu-chevron';
+    chevron.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+    moveToggleItem.appendChild(chevron);
+    menu.appendChild(moveToggleItem);
+
+    const moveSubmenu = document.createElement('div');
+    moveSubmenu.className = 'context-menu-submenu';
+    moveSubmenu.hidden = true;
+    otherVoiceChannels.forEach((channel) => {
+      const channelItem = document.createElement('div');
+      channelItem.className = 'context-menu-item';
+      const channelLabel = document.createElement('span');
+      channelLabel.className = 'label';
+      channelLabel.textContent = channel.name;
+      channelItem.appendChild(channelLabel);
+      channelItem.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        try {
+          await apiFetch('/api/moderation/move', {
+            method: 'POST',
+            body: JSON.stringify({ identity, toChannelId: channel.id }),
+          });
+          notifyModeration(identity, { type: 'moderation-move', channelId: channel.id });
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      moveSubmenu.appendChild(channelItem);
+    });
+    menu.appendChild(moveSubmenu);
+
+    moveToggleItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moveSubmenu.hidden = !moveSubmenu.hidden;
+      chevron.classList.toggle('open', !moveSubmenu.hidden);
+    });
+  }
+
+  if (canBan) {
+    const banItem = document.createElement('div');
+    banItem.className = 'context-menu-item';
+    const banLabel = document.createElement('span');
+    banLabel.className = 'label';
+    banLabel.style.color = 'var(--danger)';
+    banLabel.textContent = 'Banir do servidor';
+    banItem.appendChild(banLabel);
+    banItem.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      if (!confirm(`Banir ${displayNameFor(identity)} do servidor? Ela não vai conseguir entrar de novo até alguém desbanir.`)) return;
+      try {
+        await apiFetch('/api/moderation/ban', { method: 'POST', body: JSON.stringify({ identity }) });
+        notifyModeration(identity, { type: 'moderation-banned' });
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    menu.appendChild(banItem);
+  }
+}
+
 memberListItems.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.member-row');
   if (!row || !row.dataset.identity) return;
@@ -6454,7 +6566,7 @@ grid.addEventListener('contextmenu', (e) => {
   // dela), o menu ganha também um controle de volume DA TRANSMISSÃO —
   // ver isso em openContextMenu
   const isScreenShareTile = watchingScreenShare.has(tile.dataset.identity);
-  openContextMenu(e.clientX, e.clientY, participantFromRow(tile), { allowKick: true, showStreamVolume: isScreenShareTile });
+  openContextMenu(e.clientX, e.clientY, participantFromRow(tile), { showStreamVolume: isScreenShareTile });
 });
 
 // ---------- entrar/sair do app ----------
@@ -6620,6 +6732,32 @@ async function completeConnect(token, identity, st) {
       if (!channelId || !msg.id) return;
       if (msg.type === 'message-edited') applyMessageEdited(channelId, msg.id, msg.text);
       else applyMessageDeleted(channelId, msg.id);
+    } else if (msg.type === 'moderation-move') {
+      // avisado (por quem tem permissão) que fui movido pra outro canal de
+      // voz -- igual checagem de privacidade da DM acima, só age se o
+      // aviso for mesmo endereçado a mim (destinationIdentities já filtra
+      // a entrega, isso aqui é reforço extra). joinVoiceChannel já cuida
+      // sozinho de sair do canal atual antes de entrar no novo.
+      if (msg.to !== myIdentity || !msg.channelId) return;
+      joinVoiceChannel(msg.channelId);
+    } else if (msg.type === 'moderation-kicked') {
+      // fui expulso de um canal de voz específico -- o servidor já derrubou
+      // minha conexão do LADO do LiveKit (removeParticipant), mas essa sala
+      // de voz não tem listener de Disconnected próprio (só a lobbyRoom
+      // tem), então sem isso minha UI de chamada ficaria "presa" mostrando
+      // que eu ainda estou conectado. Só limpa se for de fato o canal em
+      // que eu estava (evita fechar uma chamada nova caso as mensagens
+      // cheguem fora de ordem).
+      if (msg.to !== myIdentity) return;
+      if (msg.channelId && msg.channelId !== activeVoiceChannelId) return;
+      if (activeVoiceChannelId) leaveVoiceChannel();
+    } else if (msg.type === 'moderation-banned') {
+      // fui banido do servidor -- o servidor já está me removendo da sala
+      // principal (lobbyRoom), o que por si só dispara handleFullDisconnect
+      // via RoomEvent.Disconnected (ver acima); isso aqui é só o aviso do
+      // motivo, pra não parecer uma queda de conexão sem explicação.
+      if (msg.to !== myIdentity) return;
+      alert('Você foi banido deste servidor.');
     }
   });
 
@@ -7397,7 +7535,43 @@ function openSettingsModal(defaultTab) {
   openProfilePane();
   if (myPermissions.manageChannels) renderManageChannels();
   if (myPermissions.manageRoles) renderRolesTab();
+  if (myPermissions.banMembers) renderBansTab();
   switchModalTab(defaultTab || 'voice');
+}
+
+// ---------- aba "Banidos" (dentro do modal) ----------
+async function renderBansTab() {
+  if (!bansListEl) return;
+  let bannedIdentities = [];
+  try {
+    const data = await apiFetch('/api/moderation/bans');
+    bannedIdentities = data.bannedIdentities || [];
+  } catch {
+    return; // sem permissão ou servidor fora do ar -- deixa a aba vazia
+  }
+  bansListEl.innerHTML = '';
+  if (bansEmptyHint) bansEmptyHint.hidden = bannedIdentities.length > 0;
+  bannedIdentities.forEach((identity) => {
+    const row = document.createElement('div');
+    row.className = 'ban-row';
+    const name = document.createElement('span');
+    name.className = 'ban-row-name';
+    name.textContent = identity;
+    row.appendChild(name);
+    const unbanBtn = document.createElement('button');
+    unbanBtn.type = 'button';
+    unbanBtn.textContent = 'Desbanir';
+    unbanBtn.addEventListener('click', async () => {
+      try {
+        await apiFetch('/api/moderation/unban', { method: 'POST', body: JSON.stringify({ identity }) });
+        renderBansTab();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    row.appendChild(unbanBtn);
+    bansListEl.appendChild(row);
+  });
 }
 function closeSettingsModal() {
   settingsModalOverlay.hidden = true;

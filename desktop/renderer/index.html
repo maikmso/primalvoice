@@ -291,6 +291,7 @@
           <div class="modal-tabs-label">Sala da galera</div>
           <button class="modal-tab" data-tab="channels" data-perm="manageChannels" hidden>Canais</button>
           <button class="modal-tab" data-tab="roles" data-perm="manageRoles" hidden>Cargos</button>
+          <button class="modal-tab" data-tab="bans" data-perm="banMembers" hidden>Banidos</button>
         </div>
         <button id="exit-app-btn" class="modal-tab-danger" title="Voltar pra tela de login">Sair do PrimalVoice</button>
         <div class="modal-version" id="modal-version"></div>
@@ -476,6 +477,13 @@
           </div>
           <h3 class="roles-members-title">Membros e seus cargos</h3>
           <div id="roles-members-list"></div>
+        </section>
+
+        <section class="modal-pane" data-pane="bans">
+          <h2>Banidos</h2>
+          <p class="modal-hint">Quem estiver nessa lista não consegue logar nem criar conta de novo neste servidor, até alguém desbanir.</p>
+          <div id="bans-list"></div>
+          <p class="modal-hint" id="bans-empty-hint">Ninguém banido por aqui.</p>
         </section>
       </div>
       <button id="settings-modal-close" class="modal-close-btn" title="Fechar (ESC)">

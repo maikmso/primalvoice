@@ -118,6 +118,13 @@ function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   const identity = token && verifySessionToken(token);
   if (!identity) return res.status(401).json({ error: 'Sessão inválida. Entre de novo.' });
+  // Corta na hora o acesso de quem foi banido depois de já ter um
+  // sessionToken válido guardado -- sem isso, o banimento só valeria a
+  // partir do próximo login (e ela continuaria com a sessão atual até sair
+  // e entrar de novo sozinha, o que pode nunca acontecer).
+  if (store.isBanned(identity)) {
+    return res.status(403).json({ error: 'Você foi banido deste servidor.' });
+  }
   req.identity = identity;
   next();
 }
@@ -167,6 +174,9 @@ app.post('/api/register', async (req, res) => {
   if (OWNER_NAME && cleanName.toLowerCase() === OWNER_NAME.toLowerCase()) {
     return res.status(400).json({ error: 'Esse nome já é reservado pro dono do servidor.' });
   }
+  if (store.isBanned(cleanName)) {
+    return res.status(403).json({ error: 'Você foi banido deste servidor.' });
+  }
   if (store.findUser(cleanName)) {
     return res.status(409).json({ error: 'Esse nome de usuário já existe. Escolha outro ou faça login.' });
   }
@@ -192,6 +202,9 @@ app.post('/api/token', async (req, res) => {
   }
 
   const cleanName = name.trim();
+  if (store.isBanned(cleanName)) {
+    return res.status(403).json({ error: 'Você foi banido deste servidor.' });
+  }
   const isOwnerLogin =
     OWNER_PASSWORD &&
     OWNER_NAME &&
@@ -530,6 +543,9 @@ app.post('/api/moderation/kick', requireAuth, requirePermission('kickMembers'), 
   if (!identity || typeof identity !== 'string') {
     return res.status(400).json({ error: 'Identidade obrigatória.' });
   }
+  if (store.getState().ownerIdentity && identity === store.getState().ownerIdentity) {
+    return res.status(403).json({ error: 'Não dá pra expulsar o dono do servidor.' });
+  }
   const targetRoom = channelId ? `${ROOM_NAME}--voice--${channelId}` : ROOM_NAME;
   try {
     await roomService.removeParticipant(targetRoom, identity);
@@ -538,6 +554,91 @@ app.post('/api/moderation/kick', requireAuth, requirePermission('kickMembers'), 
     console.error('Erro ao expulsar participante:', err);
     res.status(500).json({ error: 'Não consegui expulsar essa pessoa (talvez ela já tenha saído).' });
   }
+});
+
+// Move alguém de um canal de voz pra outro à força. O LiveKit não tem um
+// jeito de "transferir" uma conexão de sala pra sala -- então tira a pessoa
+// da sala de voz atual dela (removeParticipant, igual o kick) e devolve
+// qual era o canal de origem/destino; quem chamou essa rota (o app de quem
+// pediu a ação) é responsável por avisar o app da pessoa movida, por um
+// canal de dados do LiveKit, pra ela entrar sozinha no canal novo (ver
+// 'moderation-move' no app.js) -- o servidor só sabe mexer no LiveKit, não
+// tem como mandar a pessoa "entrar" em nada por conta própria.
+app.post('/api/moderation/move', requireAuth, requirePermission('moveMembers'), async (req, res) => {
+  const { identity, toChannelId } = req.body || {};
+  if (!identity || typeof identity !== 'string') {
+    return res.status(400).json({ error: 'Identidade obrigatória.' });
+  }
+  if (!toChannelId || typeof toChannelId !== 'string') {
+    return res.status(400).json({ error: 'Canal de destino obrigatório.' });
+  }
+  if (store.getState().ownerIdentity && identity === store.getState().ownerIdentity) {
+    return res.status(403).json({ error: 'Não dá pra mover o dono do servidor.' });
+  }
+  const state = store.getState();
+  if (!state.channels.voice.some((c) => c.id === toChannelId)) {
+    return res.status(400).json({ error: 'Canal de voz inválido.' });
+  }
+  const fromChannelId = store.voiceChannelIdFor(identity);
+  if (!fromChannelId) {
+    return res.status(400).json({ error: 'Essa pessoa não está em nenhuma chamada agora.' });
+  }
+  if (fromChannelId === toChannelId) {
+    return res.status(400).json({ error: 'Ela já está nesse canal.' });
+  }
+  try {
+    await roomService.removeParticipant(`${ROOM_NAME}--voice--${fromChannelId}`, identity);
+    res.json({ ok: true, fromChannelId, toChannelId });
+  } catch (err) {
+    console.error('Erro ao mover participante:', err);
+    res.status(500).json({ error: 'Não consegui mover essa pessoa (talvez ela já tenha saído).' });
+  }
+});
+
+// Banimento de servidor -- ao contrário do kick, é permanente: além de
+// tirar a pessoa na hora de qualquer canal de voz e da sala principal
+// (chat/presença), guarda o nome dela numa lista que barra login/criação de
+// conta de novo (ver store.isBanned, checado em /api/register, /api/token
+// e requireAuth).
+app.post('/api/moderation/ban', requireAuth, requirePermission('banMembers'), async (req, res) => {
+  const { identity } = req.body || {};
+  if (!identity || typeof identity !== 'string') {
+    return res.status(400).json({ error: 'Identidade obrigatória.' });
+  }
+  if (identity === req.identity) {
+    return res.status(400).json({ error: 'Você não pode banir a si mesmo.' });
+  }
+  if (store.getState().ownerIdentity && identity === store.getState().ownerIdentity) {
+    return res.status(403).json({ error: 'Não dá pra banir o dono do servidor.' });
+  }
+  store.banIdentity(identity);
+  // tira ela de qualquer canal de voz e da sala principal agora mesmo --
+  // não precisa saber em qual canal de voz ela está: removeParticipant na
+  // sala principal já derruba a conexão "sempre ativa" (chat/presença), e
+  // se ela também estiver numa chamada, essa conexão de voz cai sozinha
+  // (o app dela detecta e limpa a UI, ver 'moderation-kicked' no app.js).
+  const voiceChannelId = store.voiceChannelIdFor(identity);
+  try {
+    if (voiceChannelId) {
+      await roomService.removeParticipant(`${ROOM_NAME}--voice--${voiceChannelId}`, identity).catch(() => {});
+    }
+    await roomService.removeParticipant(ROOM_NAME, identity).catch(() => {});
+  } catch {
+    // já pode ter caído sozinha -- não é motivo pra dar erro no banimento
+  }
+  res.json({ ok: true, bannedIdentities: store.getBannedIdentities() });
+});
+
+app.get('/api/moderation/bans', requireAuth, requirePermission('banMembers'), (req, res) => {
+  res.json({ bannedIdentities: store.getBannedIdentities() });
+});
+
+app.post('/api/moderation/unban', requireAuth, requirePermission('banMembers'), (req, res) => {
+  const { identity } = req.body || {};
+  if (!identity || typeof identity !== 'string') {
+    return res.status(400).json({ error: 'Identidade obrigatória.' });
+  }
+  res.json({ ok: true, bannedIdentities: store.unbanIdentity(identity) });
 });
 
 // Recebe uma imagem/vídeo do chat de texto e devolve a URL pra ser mandada

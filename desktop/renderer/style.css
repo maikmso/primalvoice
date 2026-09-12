@@ -3324,6 +3324,27 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
    fica com a cor de destaque normal, senão parece que "Salvar" também apaga */
 .manage-channels-group .manage-channel-row button:not(.secondary-btn):hover { color: var(--danger); border-color: var(--danger); }
 .manage-channels-group .manage-channel-row button.secondary-btn:hover { color: var(--text); border-color: var(--accent); }
+
+.ban-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ban-row .ban-row-name { flex: 1; min-width: 0; color: var(--text); }
+.ban-row button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.ban-row button:hover { color: var(--text); border-color: var(--accent); }
 .create-channel-row {
   display: flex;
   gap: 8px;
