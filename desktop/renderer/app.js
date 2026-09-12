@@ -399,6 +399,11 @@ const chatAttachmentBtn = document.getElementById('chat-attachment-btn');
 const chatAttachmentInput = document.getElementById('chat-attachment-input');
 const chatAttachmentPreview = document.getElementById('chat-attachment-preview');
 
+const chatReplyPreview = document.getElementById('chat-reply-preview');
+const chatReplyPreviewName = document.getElementById('chat-reply-preview-name');
+const chatReplyPreviewSnippet = document.getElementById('chat-reply-preview-snippet');
+const chatReplyPreviewCancelBtn = document.getElementById('chat-reply-preview-cancel');
+
 const sharepickOverlay = document.getElementById('sharepick-overlay');
 const sharepickGrid = document.getElementById('sharepick-grid');
 const sharepickTabs = document.querySelectorAll('.sharepick-tab');
@@ -599,6 +604,9 @@ let pendingProfileBanner = null;
 // fica guardado numa chave exclusiva das duas pessoas (não vaza pra mais
 // ninguém que entrar na sala depois).
 const dmPeers = new Set(); // identities com quem já trocou DM -- persistido no config local (ver loadDmPeersFromConfig/saveDmPeersToConfig), então sobrevive a fechar o app
+// ids de mensagens escondidas só pra mim ("Excluir (para mim)") -- também
+// persistido no config local (ver loadLocallyHiddenFromConfig/saveLocallyHiddenToConfig)
+const locallyHiddenMessageIds = new Set();
 let activeDmPeer = null; // identity da conversa privada aberta, ou null
 
 // Identidades que já vimos entrar na sala (ou de quem já recebemos o perfil)
@@ -974,6 +982,23 @@ function loadDmPeersFromConfig(cfg) {
 async function saveDmPeersToConfig() {
   const cfg = (await window.vortex.getConfig()) || {};
   cfg.dmPeers = Array.from(dmPeers);
+  await window.vortex.setConfig(cfg);
+}
+
+// "Excluir mensagem (para mim)" -- só esconde a mensagem NA SUA TELA, sem
+// mandar nada pros outros nem apagar de verdade no servidor (diferente do
+// "Apagar", que é só pra mensagem própria e some pra todo mundo). Salva os
+// ids escondidos no config local (mesma ideia do dmPeers acima) pra
+// continuar escondida depois de fechar e abrir o app de novo.
+function loadLocallyHiddenFromConfig(cfg) {
+  (cfg.locallyHiddenMessageIds || []).forEach((id) => {
+    if (id) locallyHiddenMessageIds.add(id);
+  });
+}
+
+async function saveLocallyHiddenToConfig() {
+  const cfg = (await window.vortex.getConfig()) || {};
+  cfg.locallyHiddenMessageIds = Array.from(locallyHiddenMessageIds);
   await window.vortex.setConfig(cfg);
 }
 
@@ -2353,6 +2378,7 @@ async function init() {
   loadProfileFromConfig(cfg);
   loadDmPeersFromConfig(cfg);
   renderDmList();
+  loadLocallyHiddenFromConfig(cfg);
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
   await loadAccentFromConfig(cfg);
@@ -2893,6 +2919,9 @@ serverIconBtn?.addEventListener('contextmenu', (e) => {
 });
 
 function switchTextChannel(channelId) {
+  // Trocar de conversa cancela uma resposta pendente -- "Responder" citando
+  // uma mensagem de OUTRO canal/DM não faz sentido nenhum.
+  clearReplyingTo();
   // Sair da conversa em que estava antes consome de vez a linha "NOVO" dela
   // -- reabrir depois não deve mais mostrar a mesma linha (ver
   // channelUnreadMarker lá em cima).
@@ -2927,6 +2956,7 @@ function switchTextChannel(channelId) {
 // ninguém que entrar na sala depois.
 function switchToDm(peerIdentity) {
   if (!peerIdentity) return;
+  clearReplyingTo();
   if (activeTextChannelId) channelUnreadMarker.delete(activeTextChannelId);
   const isNewPeer = !dmPeers.has(peerIdentity);
   dmPeers.add(peerIdentity);
@@ -3603,6 +3633,17 @@ const DELETE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
 const EYE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+const REPLY_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
+const REACTION_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>';
+const HIDE_FOR_ME_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+// Emojis fixos pro seletor rápido de reação (ver openReactionPicker) --
+// conjunto pequeno e curado (mesma ideia do soundboard: não precisa de um
+// seletor de emoji completo igual Discord pra cobrir o pedido "adicionar
+// reação").
+const QUICK_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👎'];
 const PERSON_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
 const KEBAB_ICON_SVG =
@@ -3751,7 +3792,11 @@ function resolveAttachmentUrl(url) {
   return /^https?:\/\//.test(url) ? url : `${serverUrl}${url}`;
 }
 
-function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt }) {
+function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts, editedAt, replyTo, reactions }) {
+  // mensagem que a própria pessoa escondeu com "Excluir (para mim)" --
+  // nunca desenha (nem entra na lista, nem conta como "vazia"/etc.)
+  if (id && locallyHiddenMessageIds.has(id)) return;
+
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
@@ -3762,12 +3807,15 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
   // em cima (.chat-message-hover-time, ver CSS). Como cada mensagem entra
   // sempre em ORDEM (histórico carregado em sequência, mensagens ao vivo
   // chegando depois), o ":last-child" no momento de montar esta linha é
-  // sempre a mensagem imediatamente anterior de verdade.
+  // sempre a mensagem imediatamente anterior de verdade. Uma mensagem que
+  // é RESPOSTA a outra nunca agrupa -- ela precisa do próprio cabeçalho
+  // (avatar/nome) pra a citação acima fazer sentido visualmente.
   const GROUP_WINDOW_MS = 5 * 60 * 1000;
   const effectiveTs = ts || Date.now();
   const prevRow = chatMessages.querySelector('.chat-message:last-child');
   const prevTs = prevRow ? Number(prevRow.dataset.ts) : NaN;
   const isGrouped = !!(
+    !replyTo &&
     prevRow &&
     identity &&
     prevRow.dataset.identity === identity &&
@@ -3783,17 +3831,55 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
   if (id) row.dataset.messageId = id;
   row.dataset.ts = String(effectiveTs);
 
+  // Citação de "respondendo a" -- igual Discord: uma linha fininha em cima
+  // do resto da mensagem, com o mini-avatar/nome de quem foi respondido e
+  // um pedaço do texto original. Clicar nela pula pra mensagem original,
+  // SE ela ainda estiver carregada na tela (não busca no servidor).
+  if (replyTo && replyTo.id) {
+    const replyRef = document.createElement('div');
+    replyRef.className = 'chat-reply-reference';
+    const connector = document.createElement('span');
+    connector.className = 'chat-reply-reference-connector';
+    replyRef.appendChild(connector);
+    const replyAvatar = document.createElement('span');
+    replyAvatar.className = 'avatar chat-reply-reference-avatar';
+    replyAvatar.textContent = (replyTo.name || '?').charAt(0).toUpperCase();
+    if (replyTo.identity) applyAvatarToEl(replyAvatar, replyTo.identity);
+    replyRef.appendChild(replyAvatar);
+    const replyName = document.createElement('span');
+    replyName.className = 'chat-reply-reference-name';
+    replyName.textContent = `@${replyTo.name || 'Alguém'}`;
+    replyRef.appendChild(replyName);
+    const replyText = document.createElement('span');
+    replyText.className = 'chat-reply-reference-text';
+    replyText.textContent = replyTo.text || '📎 Anexo';
+    replyRef.appendChild(replyText);
+    replyRef.addEventListener('click', () => {
+      const target = chatMessages.querySelector(`.chat-message[data-message-id="${cssEscape(replyTo.id)}"]`);
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    row.appendChild(replyRef);
+  }
+
+  // Tudo que era filho direto de .chat-message antes (avatar + corpo) agora
+  // mora dentro dessa linha própria -- é o que permite a citação de resposta
+  // acima ficar numa linha inteira separada por cima, sem empurrar o layout
+  // avatar/corpo pro lado errado.
+  const mainRow = document.createElement('div');
+  mainRow.className = 'chat-message-main';
+  row.appendChild(mainRow);
+
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
   avatar.textContent = (name || '?').charAt(0).toUpperCase();
   if (identity) applyAvatarToEl(avatar, identity);
-  row.appendChild(avatar);
+  mainRow.appendChild(avatar);
 
   if (isGrouped) {
     const hoverTime = document.createElement('span');
     hoverTime.className = 'chat-message-hover-time';
     hoverTime.textContent = new Date(effectiveTs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    row.appendChild(hoverTime);
+    mainRow.appendChild(hoverTime);
   }
 
   const body = document.createElement('div');
@@ -3845,61 +3931,6 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
     }
   }
 
-  // só a própria pessoa pode editar/apagar a própria mensagem -- aparece
-  // igual tenha texto, anexo, ou os dois (uma mensagem só com foto também
-  // pode ser editada pra ganhar uma legenda, ou apagada, igual Discord)
-  if (isSelf && id) {
-    const hasImageAttachment = attachment && attachment.url && attachment.type === 'image';
-    const actions = document.createElement('div');
-    actions.className = 'chat-message-actions';
-
-    if (hasImageAttachment) {
-      const viewBtn = document.createElement('button');
-      viewBtn.type = 'button';
-      viewBtn.className = 'chat-message-action-btn';
-      upgradeTooltip(viewBtn, { text: 'Ver imagem', dir: 'top' });
-      viewBtn.innerHTML = EYE_ICON_SVG;
-      viewBtn.addEventListener('click', () => {
-        openImageLightbox(resolveAttachmentUrl(attachment.url), attachment.name || 'imagem');
-      });
-      actions.appendChild(viewBtn);
-    }
-
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'chat-message-action-btn';
-    upgradeTooltip(editBtn, { text: 'Editar', dir: 'top' });
-    editBtn.innerHTML = EDIT_ICON_SVG;
-    editBtn.addEventListener('click', () => {
-      // mensagem só tinha anexo, sem legenda nenhuma -- cria o campinho de
-      // texto na hora (editável), logo depois do cabeçalho autor/hora
-      if (!textEl) {
-        textEl = document.createElement('div');
-        textEl.className = 'text';
-        body.insertBefore(textEl, meta.nextSibling);
-      }
-      // busca o texto ATUAL no histórico (não o "text" capturado quando a
-      // linha foi desenhada) — senão, editar a mesma mensagem duas vezes e
-      // cancelar com Esc na segunda vez voltava pro texto original de
-      // antes da primeira edição, perdendo a edição já salva
-      const current = findMessageInHistory(activeTextChannelId, id);
-      startInlineMessageEdit(textEl, activeTextChannelId, id, current ? current.text || '' : text || '');
-    });
-    actions.appendChild(editBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'chat-message-action-btn';
-    upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
-    deleteBtn.innerHTML = DELETE_ICON_SVG;
-    deleteBtn.addEventListener('click', async () => {
-      if (await confirmDialog('Apagar essa mensagem?', { confirmLabel: 'Apagar' })) deleteChatMessage(activeTextChannelId, id);
-    });
-    actions.appendChild(deleteBtn);
-
-    row.appendChild(actions);
-  }
-
   if (attachment && attachment.url) {
     const wrap = document.createElement('div');
     wrap.className = 'attachment';
@@ -3925,7 +3956,103 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
     body.appendChild(wrap);
   }
 
-  row.appendChild(body);
+  // reações (emoji) embaixo do texto/anexo, igual Discord
+  renderMessageReactions(body, reactions, activeTextChannelId, id);
+
+  // Barrinha de ações no hover -- igual Discord: reagir/responder/esconder
+  // pra mim aparecem em QUALQUER mensagem (própria ou de outra pessoa);
+  // editar/apagar de verdade só na própria.
+  if (id) {
+    const hasImageAttachment = isSelf && attachment && attachment.url && attachment.type === 'image';
+    const actions = document.createElement('div');
+    actions.className = 'chat-message-actions';
+
+    if (hasImageAttachment) {
+      const viewBtn = document.createElement('button');
+      viewBtn.type = 'button';
+      viewBtn.className = 'chat-message-action-btn';
+      upgradeTooltip(viewBtn, { text: 'Ver imagem', dir: 'top' });
+      viewBtn.innerHTML = EYE_ICON_SVG;
+      viewBtn.addEventListener('click', () => {
+        openImageLightbox(resolveAttachmentUrl(attachment.url), attachment.name || 'imagem');
+      });
+      actions.appendChild(viewBtn);
+    }
+
+    const reactBtn = document.createElement('button');
+    reactBtn.type = 'button';
+    reactBtn.className = 'chat-message-action-btn';
+    upgradeTooltip(reactBtn, { text: 'Adicionar reação', dir: 'top' });
+    reactBtn.innerHTML = REACTION_ICON_SVG;
+    reactBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openReactionPicker(reactBtn, activeTextChannelId, id);
+    });
+    actions.appendChild(reactBtn);
+
+    const replyBtn = document.createElement('button');
+    replyBtn.type = 'button';
+    replyBtn.className = 'chat-message-action-btn';
+    upgradeTooltip(replyBtn, { text: 'Responder', dir: 'top' });
+    replyBtn.innerHTML = REPLY_ICON_SVG;
+    replyBtn.addEventListener('click', () => {
+      setReplyingTo({ id, name: name || 'Alguém', text: text || '' });
+    });
+    actions.appendChild(replyBtn);
+
+    // só a própria pessoa pode editar/apagar a própria mensagem -- aparece
+    // igual tenha texto, anexo, ou os dois (uma mensagem só com foto também
+    // pode ser editada pra ganhar uma legenda, ou apagada, igual Discord)
+    if (isSelf) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'chat-message-action-btn';
+      upgradeTooltip(editBtn, { text: 'Editar', dir: 'top' });
+      editBtn.innerHTML = EDIT_ICON_SVG;
+      editBtn.addEventListener('click', () => {
+        // mensagem só tinha anexo, sem legenda nenhuma -- cria o campinho de
+        // texto na hora (editável), logo depois do cabeçalho autor/hora
+        if (!textEl) {
+          textEl = document.createElement('div');
+          textEl.className = 'text';
+          body.insertBefore(textEl, meta.nextSibling);
+        }
+        // busca o texto ATUAL no histórico (não o "text" capturado quando a
+        // linha foi desenhada) — senão, editar a mesma mensagem duas vezes e
+        // cancelar com Esc na segunda vez voltava pro texto original de
+        // antes da primeira edição, perdendo a edição já salva
+        const current = findMessageInHistory(activeTextChannelId, id);
+        startInlineMessageEdit(textEl, activeTextChannelId, id, current ? current.text || '' : text || '');
+      });
+      actions.appendChild(editBtn);
+    }
+
+    const hideBtn = document.createElement('button');
+    hideBtn.type = 'button';
+    hideBtn.className = 'chat-message-action-btn';
+    upgradeTooltip(hideBtn, { text: 'Excluir (para mim)', dir: 'top' });
+    hideBtn.innerHTML = HIDE_FOR_ME_ICON_SVG;
+    hideBtn.addEventListener('click', () => {
+      hideMessageForMe(id);
+    });
+    actions.appendChild(hideBtn);
+
+    if (isSelf) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'chat-message-action-btn';
+      upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
+      deleteBtn.innerHTML = DELETE_ICON_SVG;
+      deleteBtn.addEventListener('click', async () => {
+        if (await confirmDialog('Apagar essa mensagem?', { confirmLabel: 'Apagar' })) deleteChatMessage(activeTextChannelId, id);
+      });
+      actions.appendChild(deleteBtn);
+    }
+
+    row.appendChild(actions);
+  }
+
+  mainRow.appendChild(body);
   chatMessages.appendChild(row);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -3978,6 +4105,8 @@ async function ensureChannelHistoryLoaded(channelId) {
         identity: m.identity,
         attachment: m.attachment || null,
         editedAt: m.editedAt || null,
+        replyTo: m.replyTo || null,
+        reactions: m.reactions || {},
       }));
     chatHistoryByChannel.set(channelId, [...fromServer, ...existing]);
     if (channelId === activeTextChannelId) renderChatForActiveChannel();
@@ -3991,7 +4120,7 @@ async function ensureChannelHistoryLoaded(channelId) {
 // envio nem mostrar alerta se falhar — a entrega ao vivo pros outros já
 // aconteceu pelo canal de dados do LiveKit; isso aqui é só a parte que
 // garante que a conversa continua lá quando alguém reconectar depois).
-function persistChatMessage(channelId, { id, text, attachment }) {
+function persistChatMessage(channelId, { id, text, attachment, replyTo }) {
   const path = isDmChannelId(channelId)
     ? `/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages`
     : `/api/messages/${encodeURIComponent(channelId)}`;
@@ -3999,7 +4128,7 @@ function persistChatMessage(channelId, { id, text, attachment }) {
   // inventar um novo, senão a mensagem "ao vivo" (que já foi desenhada com
   // esse id) e a copia salva no servidor (recarregada depois) ficariam
   // com ids diferentes, e editar/apagar não acharia a mensagem certa.
-  apiFetch(path, { method: 'POST', body: JSON.stringify({ id, text, attachment: attachment || null }) }).catch((err) => {
+  apiFetch(path, { method: 'POST', body: JSON.stringify({ id, text, attachment: attachment || null, replyTo: replyTo || null }) }).catch((err) => {
     console.warn('Não consegui salvar a mensagem no servidor:', err);
   });
 }
@@ -4038,6 +4167,40 @@ let pendingAttachment = null; // { file, previewUrl } ou null
 // está preenchido e mandava a mesma mensagem de novo, duplicada. Essa
 // flag garante que só existe um envio em andamento por vez.
 let isSendingMessage = false;
+
+// "Respondendo a" -- igual Discord: clicar em "Responder" numa mensagem
+// (ver o botão na barrinha de ações que aparece no hover, em
+// appendChatMessageEl) guarda aqui só o essencial (id/nome/trecho do
+// texto) e mostra a prévia acima do campo de digitar; enviar a mensagem
+// manda esse "replyTo" junto, e limpa isso de novo (sem ficar "preso"
+// respondendo pra sempre).
+let replyingTo = null; // { id, name, text } ou null
+
+function setReplyingTo(msg) {
+  if (!msg || !msg.id) return;
+  replyingTo = { id: msg.id, name: msg.name || 'Alguém', text: msg.text || '' };
+  renderReplyPreview();
+  chatInput.focus();
+}
+
+function clearReplyingTo() {
+  if (!replyingTo) return;
+  replyingTo = null;
+  renderReplyPreview();
+}
+
+function renderReplyPreview() {
+  if (!chatReplyPreview) return;
+  if (!replyingTo) {
+    chatReplyPreview.hidden = true;
+    return;
+  }
+  chatReplyPreviewName.textContent = replyingTo.name;
+  chatReplyPreviewSnippet.textContent = replyingTo.text || '📎 Anexo';
+  chatReplyPreview.hidden = false;
+}
+
+chatReplyPreviewCancelBtn?.addEventListener('click', () => clearReplyingTo());
 
 function clearPendingAttachment() {
   if (pendingAttachment && pendingAttachment.previewUrl) {
@@ -4113,6 +4276,10 @@ async function sendComposedMessage() {
     let attachment = null;
     if (file) attachment = await uploadChatAttachment(file);
 
+    // captura o replyTo ANTES de limpar (clearReplyingTo lá embaixo já
+    // zera "replyingTo" pra próxima mensagem não vir respondendo à toa)
+    const replyTo = replyingTo ? { id: replyingTo.id, name: replyingTo.name, text: replyingTo.text } : null;
+
     chatInput.value = '';
     renderChatInputHighlight();
     clearPendingAttachment();
@@ -4121,21 +4288,23 @@ async function sendComposedMessage() {
       const to = dmPeerFromChannelId(activeTextChannelId);
       const ts = Date.now();
       const id = crypto.randomUUID();
-      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id };
+      const payload = { type: 'dm', to, from: myIdentity, name: myDisplayName || myName, text, ts, attachment, id, replyTo };
       lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), {
         reliable: true,
         destinationIdentities: [to],
       });
-      pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-      persistChatMessage(activeTextChannelId, { id, text, attachment });
+      pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment, replyTo, reactions: {} });
+      persistChatMessage(activeTextChannelId, { id, text, attachment, replyTo });
+      clearReplyingTo();
       return;
     }
     const ts = Date.now();
     const id = crypto.randomUUID();
-    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment, id };
+    const payload = { type: 'chat', channelId: activeTextChannelId, name: myDisplayName || myName, text, ts, attachment, id, replyTo };
     lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), { reliable: true });
-    pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment });
-    persistChatMessage(activeTextChannelId, { id, text, attachment });
+    pushChatMessage(activeTextChannelId, { id, name: myDisplayName || myName, text, ts, isSelf: true, identity: myIdentity, attachment, replyTo, reactions: {} });
+    persistChatMessage(activeTextChannelId, { id, text, attachment, replyTo });
+    clearReplyingTo();
   } catch (err) {
     alert(err.message || 'Não consegui enviar a mensagem.');
   } finally {
@@ -4380,6 +4549,137 @@ function deleteChatMessage(channelId, id) {
   apiFetch(chatMessageServerPath(channelId, id), { method: 'DELETE' }).catch((err) => {
     console.warn('Não consegui apagar a mensagem no servidor:', err);
   });
+}
+
+// ---------- reações (emoji) nas mensagens ----------
+// Mesmo esquema de editChatMessage/deleteChatMessage acima: atualiza local
+// na hora (otimista), avisa quem mais está na conversa/canal pelo canal de
+// dados do LiveKit, e salva no servidor em segundo plano (sem travar nem
+// mostrar erro se falhar -- a reação já apareceu na tela de quem reagiu e
+// de quem recebeu ao vivo de qualquer forma).
+function chatMessageReactionsPath(channelId, id) {
+  return isDmChannelId(channelId)
+    ? `/api/dm/${encodeURIComponent(dmPeerFromChannelId(channelId))}/messages/${encodeURIComponent(id)}/reactions`
+    : `/api/messages/${encodeURIComponent(channelId)}/${encodeURIComponent(id)}/reactions`;
+}
+
+// Aplica um objeto de reações (já pronto, { emoji: [identities] }) na
+// mensagem em memória e, se ela estiver na tela agora, redesenha só os
+// "pills" de reação dela (sem redesenhar a mensagem inteira).
+function applyMessageReaction(channelId, id, reactions) {
+  const msg = findMessageInHistory(channelId, id);
+  if (msg) msg.reactions = reactions;
+  if (channelId === activeTextChannelId && !textView.hidden) {
+    const row = chatMessages.querySelector(`.chat-message[data-message-id="${cssEscape(id)}"]`);
+    const body = row?.querySelector('.body');
+    if (body) {
+      body.querySelector('.chat-message-reactions')?.remove();
+      renderMessageReactions(body, reactions, channelId, id);
+    }
+  }
+}
+
+// Alterna a reação de emoji da PRÓPRIA pessoa numa mensagem (adiciona se
+// ainda não tinha reagido com esse emoji, remove se já tinha).
+function toggleMessageReaction(channelId, id, emoji) {
+  if (!lobbyRoom || !myIdentity || !channelId || !id) return;
+  const msg = findMessageInHistory(channelId, id);
+  const current = (msg && msg.reactions) || {};
+  const people = current[emoji] || [];
+  const nextReactions = { ...current };
+  const idx = people.indexOf(myIdentity);
+  if (idx === -1) {
+    nextReactions[emoji] = [...people, myIdentity];
+  } else {
+    const rest = people.filter((i) => i !== myIdentity);
+    if (rest.length > 0) nextReactions[emoji] = rest;
+    else delete nextReactions[emoji];
+  }
+  applyMessageReaction(channelId, id, nextReactions);
+
+  const isDm = isDmChannelId(channelId);
+  const payload = isDm
+    ? { type: 'message-reaction', dm: true, to: dmPeerFromChannelId(channelId), from: myIdentity, id, reactions: nextReactions }
+    : { type: 'message-reaction', channelId, from: myIdentity, id, reactions: nextReactions };
+  const options = isDm
+    ? { reliable: true, destinationIdentities: [dmPeerFromChannelId(channelId)] }
+    : { reliable: true };
+  lobbyRoom.localParticipant.publishData(chatEncoder.encode(JSON.stringify(payload)), options);
+
+  apiFetch(chatMessageReactionsPath(channelId, id), { method: 'POST', body: JSON.stringify({ emoji }) }).catch((err) => {
+    console.warn('Não consegui salvar a reação no servidor:', err);
+  });
+}
+
+// Desenha os "pills" de reação (emoji + contagem) embaixo do texto/anexo da
+// mensagem, igual Discord -- clicar num pill já existente alterna a SUA
+// reação com aquele emoji (não precisa reabrir o seletor).
+function renderMessageReactions(body, reactions, channelId, id) {
+  const entries = Object.entries(reactions || {}).filter(([, people]) => Array.isArray(people) && people.length > 0);
+  if (entries.length === 0) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-message-reactions';
+  entries.forEach(([emoji, people]) => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'chat-reaction-pill';
+    if (myIdentity && people.includes(myIdentity)) pill.classList.add('mine');
+    const emojiEl = document.createElement('span');
+    emojiEl.className = 'chat-reaction-emoji';
+    emojiEl.textContent = emoji;
+    pill.appendChild(emojiEl);
+    const countEl = document.createElement('span');
+    countEl.className = 'chat-reaction-count';
+    countEl.textContent = String(people.length);
+    pill.appendChild(countEl);
+    const names = people.map((i) => displayNameFor(i)).filter(Boolean);
+    if (names.length) upgradeTooltip(pill, { text: names.join(', '), dir: 'top' });
+    pill.addEventListener('click', () => toggleMessageReaction(channelId, id, emoji));
+    wrap.appendChild(pill);
+  });
+  body.appendChild(wrap);
+}
+
+// Seletor rápido de reação -- reaproveita a mesma infraestrutura do menu de
+// botão direito (contextMenuEl/positionContextMenu/fechar ao clicar fora ou
+// Esc, já feita lá embaixo) em vez de duplicar tudo isso de novo.
+function openReactionPicker(anchorEl, channelId, id) {
+  closeContextMenu();
+  const picker = document.createElement('div');
+  picker.className = 'context-menu reaction-picker';
+  QUICK_REACTION_EMOJIS.forEach((emoji) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'reaction-picker-emoji';
+    btn.textContent = emoji;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMessageReaction(channelId, id, emoji);
+      closeContextMenu();
+    });
+    picker.appendChild(btn);
+  });
+  document.body.appendChild(picker);
+  contextMenuEl = picker;
+  const rect = anchorEl.getBoundingClientRect();
+  positionContextMenu(rect.left, rect.bottom + 6, picker);
+}
+
+// ---------- "Excluir (para mim)" -- esconde só na sua tela ----------
+// Diferente de "Apagar" (deleteChatMessage, só pra mensagem própria, some
+// pra todo mundo): isso aqui NUNCA avisa os outros nem mexe no servidor --
+// só entra numa listinha local (persistida, ver loadLocallyHiddenFromConfig/
+// saveLocallyHiddenToConfig lá em cima) que appendChatMessageEl confere
+// antes de desenhar qualquer mensagem.
+function hideMessageForMe(id) {
+  if (!id || locallyHiddenMessageIds.has(id)) return;
+  locallyHiddenMessageIds.add(id);
+  saveLocallyHiddenToConfig().catch(() => {});
+  const row = chatMessages.querySelector(`.chat-message[data-message-id="${cssEscape(id)}"]`);
+  row?.remove();
+  if (!chatMessages.querySelector('.chat-message')) {
+    chatMessages.innerHTML = '<p class="chat-empty">Nenhuma mensagem ainda. Comece a conversa.</p>';
+  }
 }
 
 // ---------- anexos no chat (imagem/vídeo) ----------
@@ -6852,6 +7152,8 @@ async function completeConnect(token, identity, st) {
         isSelf: false,
         identity: participant?.identity,
         attachment: msg.attachment || null,
+        replyTo: msg.replyTo || null,
+        reactions: {},
       });
     } else if (msg.type === 'voice-presence') {
       if (!voicePresence.has(msg.channelId)) voicePresence.set(msg.channelId, new Map());
@@ -6907,6 +7209,8 @@ async function completeConnect(token, identity, st) {
         isSelf: msg.from === myIdentity,
         identity: msg.from,
         attachment: msg.attachment || null,
+        replyTo: msg.replyTo || null,
+        reactions: {},
       });
       if (msg.from !== myIdentity) {
         notifyNewMessage(peer, msg.name || displayNameFor(peer), msg.text);
@@ -6919,6 +7223,14 @@ async function completeConnect(token, identity, st) {
       if (!channelId || !msg.id) return;
       if (msg.type === 'message-edited') applyMessageEdited(channelId, msg.id, msg.text);
       else applyMessageDeleted(channelId, msg.id);
+    } else if (msg.type === 'message-reaction') {
+      // mesma checagem de privacidade do 'dm' acima -- e nunca recebe a
+      // PRÓPRIA reação de volta (publishData não ecoa pro remetente), só as
+      // reações de quem mais está na conversa/canal
+      if (msg.dm && msg.from !== myIdentity && msg.to !== myIdentity) return;
+      const channelId = msg.dm ? dmChannelKey(msg.from === myIdentity ? msg.to : msg.from) : msg.channelId;
+      if (!channelId || !msg.id) return;
+      applyMessageReaction(channelId, msg.id, msg.reactions || {});
     } else if (msg.type === 'moderation-move') {
       // avisado (por quem tem permissão) que fui movido pra outro canal de
       // voz -- igual checagem de privacidade da DM acima, só age se o

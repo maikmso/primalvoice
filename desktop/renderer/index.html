@@ -213,6 +213,15 @@
 
       <div id="text-view" class="text-view">
         <div id="chat-messages" class="chat-messages"></div>
+        <div id="chat-reply-preview" class="chat-reply-preview" hidden>
+          <span class="chat-reply-preview-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+          </span>
+          <span class="chat-reply-preview-text">Respondendo a <strong id="chat-reply-preview-name"></strong>: <span id="chat-reply-preview-snippet"></span></span>
+          <button type="button" id="chat-reply-preview-cancel" class="chat-reply-preview-cancel" title="Cancelar resposta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
         <div id="chat-attachment-preview" class="chat-attachment-preview" hidden></div>
         <form id="chat-form" class="chat-form">
           <button type="button" id="chat-attachment-btn" class="chat-attachment-btn" title="Enviar arquivo">

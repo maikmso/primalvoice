@@ -1004,6 +1004,16 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
 .chat-message {
   position: relative;
   display: flex;
+  /* antes era "display:flex" numa linha só (avatar + corpo lado a lado).
+     Agora vira coluna porque a citação de "respondendo a" (.chat-reply-
+     reference, quando a mensagem é uma resposta) precisa vir numa linha
+     INTEIRA por cima, e só o resto (avatar + corpo) fica lado a lado
+     dentro do .chat-message-main logo abaixo. */
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-message-main {
+  display: flex;
   gap: 14px;
   align-items: flex-start;
 }
@@ -1106,6 +1116,147 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   pointer-events: none;
 }
 .chat-message.grouped:hover .chat-message-hover-time { opacity: 1; }
+
+/* Citação de "respondendo a" em cima da mensagem, igual Discord: uma
+   linha fininha com uma "conexão" em L até o mini-avatar de quem foi
+   respondido, o @nome dela, e um pedaço do texto original (acinzentado,
+   corta com "..." se for muito grande). Clicável -- pula pra mensagem
+   original se ela ainda estiver na tela (ver appendChatMessageEl). */
+.chat-reply-reference {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 20px;
+  padding-left: 20px;
+  cursor: pointer;
+  min-width: 0;
+}
+.chat-reply-reference-connector {
+  flex-shrink: 0;
+  width: 20px;
+  height: 12px;
+  margin-left: -20px;
+  border-left: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-top-left-radius: 6px;
+}
+.chat-reply-reference-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.chat-reply-reference-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--link-color);
+  flex-shrink: 0;
+}
+.chat-reply-reference-text {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.chat-reply-reference:hover .chat-reply-reference-text { color: var(--text); }
+
+/* Prévia "Respondendo a ..." acima do campo de digitar (composer), igual
+   Discord -- some/aparece conforme setReplyingTo/clearReplyingTo (ver
+   app.js) mexem no "hidden" dela. */
+.chat-reply-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface-raised);
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.chat-reply-preview-icon {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.chat-reply-preview-icon svg { width: 14px; height: 14px; }
+.chat-reply-preview-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-reply-preview-text strong { color: var(--text); }
+.chat-reply-preview-cancel {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chat-reply-preview-cancel svg { width: 14px; height: 14px; }
+.chat-reply-preview-cancel:hover { background: var(--hover-strong); color: var(--text); }
+
+/* "Pills" de reação (emoji + contagem) embaixo da mensagem, igual Discord
+   -- o "mine" (você já reagiu com esse emoji) fica com contorno destacado. */
+.chat-message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.chat-reaction-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-reaction-pill:hover { background: var(--hover-strong); }
+.chat-reaction-pill.mine {
+  border-color: var(--accent);
+  background: var(--link-soft);
+}
+.chat-reaction-emoji { font-size: 13px; line-height: 1; }
+.chat-reaction-count { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+/* Seletor rápido de reação (abre ao clicar em "Adicionar reação" na
+   barrinha de ações) -- reaproveita o fundo/borda já definidos pra
+   .context-menu, só organiza os emojis numa gradinha. */
+.reaction-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px;
+  max-width: 176px;
+}
+.reaction-picker-emoji {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.reaction-picker-emoji:hover { background: var(--hover-strong); }
 
 /* cartãozinho de prévia de link do YouTube, igual o Discord: fundo mais
    claro que o chat, barrinha vermelha na esquerda, nome do canal em

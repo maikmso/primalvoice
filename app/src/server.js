@@ -698,7 +698,7 @@ app.get('/api/messages/:channelId', requireAuth, (req, res) => {
 
 app.post('/api/messages/:channelId', requireAuth, (req, res) => {
   const { channelId } = req.params;
-  const { id, text, attachment } = req.body || {};
+  const { id, text, attachment, replyTo } = req.body || {};
   const s = store.getState();
   const exists = s.channels.text.some((c) => c.id === channelId);
   if (!exists) return res.status(404).json({ error: 'Canal de texto não encontrado.' });
@@ -711,8 +711,22 @@ app.post('/api/messages/:channelId', requireAuth, (req, res) => {
     name: resolveDisplayName(req.identity),
     text,
     attachment,
+    replyTo,
   });
   res.json({ message: msg });
+});
+
+// Alternar reação (emoji) numa mensagem -- qualquer pessoa autenticada pode
+// reagir a qualquer mensagem do canal, igual Discord (não precisa ser dona
+// da mensagem nem ter permissão especial nenhuma).
+app.post('/api/messages/:channelId/:messageId/reactions', requireAuth, (req, res) => {
+  const { emoji } = req.body || {};
+  if (!emoji || typeof emoji !== 'string' || emoji.length > 8) {
+    return res.status(400).json({ error: 'Emoji inválido.' });
+  }
+  const reactions = store.toggleReaction(req.params.channelId, req.params.messageId, req.identity, emoji);
+  if (!reactions) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  res.json({ reactions });
 });
 
 // Editar/apagar a própria mensagem — store.editMessage/deleteMessage já
@@ -740,7 +754,7 @@ app.get('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
 });
 
 app.post('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
-  const { id, text, attachment } = req.body || {};
+  const { id, text, attachment, replyTo } = req.body || {};
   if ((!text || !String(text).trim()) && !attachment) {
     return res.status(400).json({ error: 'Mensagem vazia.' });
   }
@@ -751,8 +765,20 @@ app.post('/api/dm/:peerIdentity/messages', requireAuth, (req, res) => {
     name: resolveDisplayName(req.identity),
     text,
     attachment,
+    replyTo,
   });
   res.json({ message: msg });
+});
+
+app.post('/api/dm/:peerIdentity/messages/:messageId/reactions', requireAuth, (req, res) => {
+  const { emoji } = req.body || {};
+  if (!emoji || typeof emoji !== 'string' || emoji.length > 8) {
+    return res.status(400).json({ error: 'Emoji inválido.' });
+  }
+  const key = store.dmKey(req.identity, req.params.peerIdentity);
+  const reactions = store.toggleReaction(key, req.params.messageId, req.identity, emoji);
+  if (!reactions) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  res.json({ reactions });
 });
 
 app.patch('/api/dm/:peerIdentity/messages/:messageId', requireAuth, (req, res) => {

@@ -292,7 +292,23 @@ function getMessages(channelKey) {
   return state.messages[channelKey] || [];
 }
 
-function addMessage(channelKey, { id, identity, name, text, attachment }) {
+// Referência de "respondendo a" -- só guarda um resuminho (id/nome/trecho do
+// texto original), NUNCA o objeto da mensagem inteira: se o original for
+// editado ou apagado depois, essa citação continua mostrando o que dizia no
+// momento da resposta (igual Discord faz), e nunca vaza um anexo/attachment
+// nem coisa nenhuma que não seja só a citação em si.
+function sanitizeReplyTo(replyTo) {
+  if (!replyTo || typeof replyTo !== 'object') return null;
+  const id = typeof replyTo.id === 'string' ? replyTo.id : '';
+  if (!id) return null;
+  return {
+    id,
+    name: typeof replyTo.name === 'string' ? replyTo.name.slice(0, 80) : '',
+    text: typeof replyTo.text === 'string' ? replyTo.text.slice(0, 200) : '',
+  };
+}
+
+function addMessage(channelKey, { id, identity, name, text, attachment, replyTo }) {
   const msg = {
     // O cliente já manda um id gerado na hora de enviar (crypto.randomUUID
     // no app) — usamos ESSE em vez de gerar um novo, senão a mensagem "ao
@@ -307,6 +323,9 @@ function addMessage(channelKey, { id, identity, name, text, attachment }) {
     ts: Date.now(),
     attachment: attachment || null,
     editedAt: null,
+    replyTo: sanitizeReplyTo(replyTo),
+    // emoji -> lista de identities que reagiram com ele (ver toggleReaction)
+    reactions: {},
   };
   mutate((s) => {
     if (!s.messages[channelKey]) s.messages[channelKey] = [];
@@ -316,6 +335,34 @@ function addMessage(channelKey, { id, identity, name, text, attachment }) {
     }
   });
   return msg;
+}
+
+// Alterna a reação de UMA pessoa numa mensagem -- clicou de novo no mesmo
+// emoji que já tinha reagido, tira; clicou num emoji novo, adiciona (sem
+// limite de quantos emojis diferentes por pessoa, igual Discord). Uma
+// pessoa só aparece 1x na lista de cada emoji (sem duplicar se clicar
+// várias vezes rápido). Devolve o objeto de reactions inteiro já atualizado,
+// ou null se a mensagem não existir (apagada, id errado, etc.).
+function toggleReaction(channelKey, messageId, identity, emoji) {
+  let result = null;
+  mutate((s) => {
+    const list = s.messages[channelKey];
+    if (!list) return;
+    const msg = list.find((m) => m.id === messageId);
+    if (!msg) return;
+    if (!msg.reactions) msg.reactions = {};
+    const current = msg.reactions[emoji] || [];
+    const idx = current.indexOf(identity);
+    if (idx === -1) {
+      msg.reactions[emoji] = [...current, identity];
+    } else {
+      const next = current.filter((i) => i !== identity);
+      if (next.length > 0) msg.reactions[emoji] = next;
+      else delete msg.reactions[emoji];
+    }
+    result = msg.reactions;
+  });
+  return result;
 }
 
 // Só quem mandou a mensagem pode editar/apagar ela — quem chama (as rotas
@@ -446,6 +493,7 @@ module.exports = {
   addMessage,
   editMessage,
   deleteMessage,
+  toggleReaction,
   setVoicePresence,
   clearVoicePresence,
   getVoicePresenceSnapshot,
