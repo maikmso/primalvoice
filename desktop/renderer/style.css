@@ -851,14 +851,14 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 .user-panel-controls { display: flex; flex-direction: column; gap: 8px; }
-.user-panel-controls.voice-disabled .ctrl-icon {
-  opacity: 0.35;
-  pointer-events: none;
-}
-/* fora de uma chamada, mic/fone não têm "estado mudo" de verdade — mostra
-   neutro (cinza) em vez de vermelho, que só faz sentido durante a chamada */
-.user-panel-controls.voice-disabled .ctrl-icon.off {
-  color: var(--muted);
+/* Igual Discord: fora de uma chamada só aparecem perfil/mic/fone/config --
+   os botões de câmera/tela/efeitos (só fazem sentido DURANTE uma chamada)
+   somem de vez (não só ficam apagados). Mic e fone continuam totalmente
+   ativos e clicáveis mesmo sem estar conectado (dá pra se pré-mutar antes
+   de entrar, ver os cliques em app.js) -- por isso não tem mais nenhum
+   opacity/pointer-events:none aqui. */
+.user-panel-controls.voice-disabled .voice-feature-row {
+  display: none;
 }
 
 /* conteúdo principal (cabeçalho do canal + grade de vídeo) */
@@ -1920,12 +1920,6 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .ctrl-icon.feature-btn.off { color: var(--muted); }
 .ctrl-icon.leave { color: var(--danger); }
 .ctrl-icon.leave:hover { background: var(--danger); color: white; }
-/* botão de configurações no rodapé: continua clicável mesmo fora de uma
-   chamada de voz (diferente do mic/câmera/tela) */
-.user-panel-controls.voice-disabled .ctrl-icon.always-enabled {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 /* barra verde "Voz conectada", só aparece durante uma chamada de voz */
 .voice-status-bar {
@@ -2145,9 +2139,9 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 .ctrl-icon.voice-hangup-btn svg { width: 14px; height: 14px; transform: rotate(135deg); }
 .ctrl-icon.voice-hangup-btn:hover { background: #c73437; }
 
-/* câmera / compartilhar tela: botões maiores lado a lado, só fazem
-   sentido durante uma chamada (ficam apagados fora dela, junto com o
-   resto do .user-panel-controls.voice-disabled) */
+/* câmera / compartilhar tela / efeitos: botões maiores lado a lado, só
+   fazem sentido durante uma chamada -- somem de vez fora dela (ver
+   .user-panel-controls.voice-disabled .voice-feature-row lá em cima). */
 .voice-feature-row { display: flex; gap: 6px; }
 .ctrl-icon.feature-btn {
   flex: 1;

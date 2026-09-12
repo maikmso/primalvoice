@@ -3118,10 +3118,14 @@ async function joinVoiceChannel(channelId) {
 
   await setOutputDeviceForRoom();
   ensureTile(vr.localParticipant);
-  await vr.localParticipant.setMicrophoneEnabled(true);
+  // respeita o estado de mic/fone que a pessoa já tinha escolhido ANTES de
+  // clicar no canal (pré-mudo, igual Discord) -- só entra com o mic ligado
+  // de fato se ela não tinha se mutado nem se ensurdecido antes.
+  const startMicOn = micBtn.dataset.on === 'true' && !isDeafened;
+  await vr.localParticipant.setMicrophoneEnabled(startMicOn);
 
-  micBtn.dataset.on = 'true';
-  micBtn.classList.remove('off');
+  micBtn.dataset.on = String(startMicOn);
+  micBtn.classList.toggle('off', !startMicOn);
   micBtn.dataset.tooltip = 'Microfone';
   userPanelControls.classList.remove('voice-disabled');
   voiceStatusTitle.textContent = 'Conectado';
@@ -3179,7 +3183,7 @@ async function leaveVoiceChannel(opts = {}) {
   // reavaliava se ela deveria continuar visível.
   updateFloatingBarVisibility();
   resetAudioState();
-  resetVoiceControlsUI();
+  resetVoiceControlsUI({ keepMicState: true });
   playSound(leaveSound);
 
   if (!opts.silent) {
@@ -3190,10 +3194,13 @@ async function leaveVoiceChannel(opts = {}) {
   renderChannelLists();
 }
 
-function resetVoiceControlsUI() {
-  micBtn.dataset.on = 'false';
-  micBtn.classList.add('off');
-  micBtn.dataset.tooltip = 'Microfone (clique num canal de voz pra entrar)';
+// opts.keepMicState: true quando chamado ao SAIR de uma chamada (ver
+// leaveVoiceChannel) -- igual Discord, o estado de mic/fone (mutado ou não)
+// continua o mesmo de antes de sair, em vez de sempre voltar mudo. Só NÃO
+// preserva no primeiro carregamento do app (login/registro, antes de
+// qualquer chamada), onde não existe estado anterior de verdade.
+function resetVoiceControlsUI(opts = {}) {
+  micBtn.dataset.tooltip = 'Microfone';
   camBtn.dataset.on = 'false';
   camBtn.classList.add('off');
   shareBtn.dataset.on = 'false';
@@ -3208,8 +3215,16 @@ function resetVoiceControlsUI() {
   // isso tem que ser desligado sempre que a chamada acaba, não só quando
   // a pessoa clica pra parar de compartilhar.
   window.vortex.hideShareOverlay?.();
-  setDeafened(false, { silent: true });
-  micMutedBeforeDeafen = false;
+  if (!opts.keepMicState) {
+    setDeafened(false, { silent: true });
+    micMutedBeforeDeafen = false;
+    // igual Discord: por padrão (primeira vez, sem nenhuma escolha prévia)
+    // o microfone começa LIGADO -- a pessoa que preferir entrar mutada
+    // desliga antes mesmo de entrar num canal, e essa escolha é respeitada
+    // na hora de conectar de fato (ver completeConnect).
+    micBtn.dataset.on = 'true';
+    micBtn.classList.remove('off');
+  }
   userPanelControls.classList.add('voice-disabled');
   voiceStatusBar.hidden = true;
   voiceStatusTitle.classList.remove('connecting');
@@ -6712,8 +6727,13 @@ joinForm.addEventListener('submit', async (e) => {
   }
 });
 
+// Igual Discord: dá pra mutar/desmutar (e ensurdecer) mesmo ANTES de entrar
+// numa chamada -- não é preciso estar conectado num canal de voz pra
+// mexer nesses botões. Só a chamada de verdade pro LiveKit
+// (setMicrophoneEnabled) é que fica condicionada a estar conectado
+// (voiceRoom); fora de uma chamada, é só um estado visual que fica
+// guardado pra quando a pessoa entrar de fato (ver completeConnect).
 micBtn.addEventListener('click', async () => {
-  if (!voiceRoom) return;
   // clicar no microfone enquanto está ensurdecido sempre desfaz o
   // ensurdecer (igual Discord) — a voz volta pro estado de antes de
   // ensurdecer, dentro do setDeafened
@@ -6722,7 +6742,7 @@ micBtn.addEventListener('click', async () => {
     return;
   }
   const newOn = micBtn.dataset.on !== 'true';
-  await voiceRoom.localParticipant.setMicrophoneEnabled(newOn);
+  if (voiceRoom) await voiceRoom.localParticipant.setMicrophoneEnabled(newOn);
   micBtn.dataset.on = String(newOn);
   micBtn.classList.toggle('off', !newOn);
   playSound(newOn ? unmuteSound : muteSound); // só toca pra quem clicou, não é avisado pros outros
@@ -6732,7 +6752,6 @@ micBtn.addEventListener('click', async () => {
 
 const deafenBtn = document.getElementById('deafen-btn');
 deafenBtn.addEventListener('click', () => {
-  if (!voiceRoom) return;
   setDeafened(!isDeafened);
 });
 
