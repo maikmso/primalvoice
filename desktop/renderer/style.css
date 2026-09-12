@@ -1049,6 +1049,12 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   padding: 0 2px;
   font-weight: 600;
 }
+/* só fica "clicável" de verdade quando dá pra identificar quem é (ver
+   identityForMentionName no app.js) -- uma @menção de alguém que o app não
+   conhece mais (ex.: já saiu do servidor) continua só destacada, sem abrir
+   nada, igual antes */
+.chat-mention[data-identity] { cursor: pointer; }
+.chat-mention[data-identity]:hover { background: var(--link-soft); filter: brightness(1.3); text-decoration: underline; }
 .chat-message.self .author { color: var(--accent-2); }
 .chat-message .attachment { margin-top: 6px; }
 .edited-marker { font-size: 11px; color: var(--muted); }
@@ -3526,6 +3532,32 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   cursor: pointer;
 }
 .danger-btn:hover { background: var(--danger); color: white; }
+
+/* Confirmação customizada (ver confirmDialog() no app.js) -- reaproveita o
+   fundo/blur de .modal-overlay, só que com uma caixinha pequena no lugar
+   do modal enorme de configurações. z-index mais alto que o .modal-overlay
+   normal (200) porque algumas confirmações (ex.: apagar cargo) acontecem
+   com o modal de configurações já aberto por baixo. */
+.confirm-dialog-overlay { z-index: 400; padding-top: 0; }
+.confirm-dialog {
+  background: var(--panel);
+  width: min(420px, 92vw);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  animation: modal-card-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.confirm-dialog-message {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 18px;
+  white-space: pre-line;
+}
+.confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-dialog-actions .secondary-btn,
+.confirm-dialog-actions .danger-btn { padding: 9px 16px; }
 
 .roles-members-title { margin-top: 24px; }
 .role-member-row {

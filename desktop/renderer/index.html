@@ -577,6 +577,20 @@
 
   <input type="file" id="server-icon-input" accept="image/*" hidden />
 
+  <!-- Confirmação customizada -- substitui o confirm() nativo do sistema
+       (janela branca fora do tema, título "vortex-desktop" solto) por um
+       diálogo com a cara do app, igual Discord faz nas ações de moderação
+       dele. Ver confirmDialog() no app.js. -->
+  <div id="confirm-dialog-overlay" class="modal-overlay confirm-dialog-overlay" hidden>
+    <div class="confirm-dialog">
+      <p class="confirm-dialog-message" id="confirm-dialog-message"></p>
+      <div class="confirm-dialog-actions">
+        <button type="button" class="secondary-btn" id="confirm-dialog-cancel-btn">Cancelar</button>
+        <button type="button" class="danger-btn" id="confirm-dialog-confirm-btn">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="crop-overlay" class="crop-overlay" hidden>
     <div class="crop-modal">
       <h2 id="crop-title">Ajustar imagem</h2>

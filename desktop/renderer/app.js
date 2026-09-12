@@ -303,6 +303,47 @@ const profileStatusInput = document.getElementById('profile-status-input');
 const profileBioInput = document.getElementById('profile-bio-input');
 const profileSaveBtn = document.getElementById('profile-save-btn');
 
+const confirmDialogOverlay = document.getElementById('confirm-dialog-overlay');
+const confirmDialogMessage = document.getElementById('confirm-dialog-message');
+const confirmDialogCancelBtn = document.getElementById('confirm-dialog-cancel-btn');
+const confirmDialogConfirmBtn = document.getElementById('confirm-dialog-confirm-btn');
+
+// Confirmação customizada -- substitui o confirm() nativo do sistema (janela
+// branca fora do tema escuro do app, título "vortex-desktop" solto) por um
+// diálogo com a cara do PrimalVoice, igual Discord faz nas ações de
+// moderação dele. Mesma ideia (resolve true/false), só que combinando com o
+// resto do visual. opts.confirmLabel deixa o botão de confirmar com um verbo
+// específico da ação ("Banir", "Expulsar", "Apagar"...) em vez de um
+// "Confirmar" genérico.
+function confirmDialog(message, opts = {}) {
+  return new Promise((resolve) => {
+    confirmDialogMessage.textContent = message;
+    confirmDialogConfirmBtn.textContent = opts.confirmLabel || 'Confirmar';
+    confirmDialogOverlay.hidden = false;
+
+    function cleanup(result) {
+      confirmDialogOverlay.hidden = true;
+      confirmDialogConfirmBtn.removeEventListener('click', onConfirm);
+      confirmDialogCancelBtn.removeEventListener('click', onCancel);
+      confirmDialogOverlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeydown);
+      resolve(result);
+    }
+    function onConfirm() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    function onOverlayClick(e) { if (e.target === confirmDialogOverlay) cleanup(false); }
+    function onKeydown(e) {
+      if (e.key === 'Escape') cleanup(false);
+      else if (e.key === 'Enter') cleanup(true);
+    }
+
+    confirmDialogConfirmBtn.addEventListener('click', onConfirm);
+    confirmDialogCancelBtn.addEventListener('click', onCancel);
+    confirmDialogOverlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeydown);
+  });
+}
+
 const cropOverlay = document.getElementById('crop-overlay');
 const cropTitle = document.getElementById('crop-title');
 const cropStage = document.getElementById('crop-stage');
@@ -541,7 +582,7 @@ let pendingProfileBanner = null;
 // é privacidade de interface. O histórico persistido no servidor, porém,
 // fica guardado numa chave exclusiva das duas pessoas (não vaza pra mais
 // ninguém que entrar na sala depois).
-const dmPeers = new Set(); // identities com quem já trocou DM nessa sessão
+const dmPeers = new Set(); // identities com quem já trocou DM -- persistido no config local (ver loadDmPeersFromConfig/saveDmPeersToConfig), então sobrevive a fechar o app
 let activeDmPeer = null; // identity da conversa privada aberta, ou null
 
 // Identidades que já vimos entrar na sala (ou de quem já recebemos o perfil)
@@ -586,6 +627,13 @@ function allKnownMemberIdentities() {
 
 function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Qual identity corresponde a um nome já reconhecido como "@Nome" dentro de
+// uma mensagem (ver appendTextWithMentions) -- usado pra saber o perfil de
+// quem abrir quando clicam em cima da menção, igual Discord.
+function identityForMentionName(name) {
+  return allKnownMemberIdentities().find((id) => displayNameFor(id) === name) || null;
 }
 
 // Regex que reconhece "@Nome" de qualquer um conhecido dentro de um texto —
@@ -893,6 +941,24 @@ function loadProfileFromConfig(cfg) {
   myStatusText = p.status || '';
   myDisplayName = p.displayName || '';
   myBioText = p.bio || '';
+}
+
+// Antes a lista de "Mensagens diretas" só guardava quem a pessoa conversou
+// NESSA sessão (dmPeers era um Set em memória, comentário antigo dizia isso
+// mesmo) -- fechar e abrir o app de novo esvaziava a lista, mesmo o
+// histórico de mensagens em si continuando salvo no servidor. Agora salva
+// as identidades no config local (por PC) pra lista sobreviver a reabrir o
+// app, igual o Discord lembra suas conversas.
+function loadDmPeersFromConfig(cfg) {
+  (cfg.dmPeers || []).forEach((identity) => {
+    if (identity) dmPeers.add(identity);
+  });
+}
+
+async function saveDmPeersToConfig() {
+  const cfg = (await window.vortex.getConfig()) || {};
+  cfg.dmPeers = Array.from(dmPeers);
+  await window.vortex.setConfig(cfg);
 }
 
 async function saveProfileToConfig() {
@@ -2269,6 +2335,8 @@ async function init() {
   loadMemberNotesFromConfig(cfg);
   loadMemberVolumesFromConfig(cfg);
   loadProfileFromConfig(cfg);
+  loadDmPeersFromConfig(cfg);
+  renderDmList();
   loadSoundboardFromConfig(cfg);
   await loadThemeFromConfig(cfg);
   await loadAccentFromConfig(cfg);
@@ -2527,7 +2595,7 @@ function buildChannelItemEl(channel, type) {
         alert('Precisa deixar pelo menos um canal desse tipo.');
         return;
       }
-      if (!confirm(`Apagar o canal "${channel.name}"?`)) return;
+      if (!(await confirmDialog(`Apagar o canal "${channel.name}"?`, { confirmLabel: 'Apagar' }))) return;
       try {
         const data = await apiFetch(`/api/channels/${type}/${channel.id}`, { method: 'DELETE' });
         serverState.channels = data.channels;
@@ -2836,7 +2904,9 @@ function switchTextChannel(channelId) {
 // ninguém que entrar na sala depois.
 function switchToDm(peerIdentity) {
   if (!peerIdentity) return;
+  const isNewPeer = !dmPeers.has(peerIdentity);
   dmPeers.add(peerIdentity);
+  if (isNewPeer) saveDmPeersToConfig().catch(() => {});
   activeDmPeer = peerIdentity;
   activeTextChannelId = dmChannelKey(peerIdentity);
   showDmsView();
@@ -3324,6 +3394,8 @@ function appendTextWithMentions(container, segment) {
     const span = document.createElement('span');
     span.className = 'chat-mention';
     span.textContent = m[0];
+    const mentionedIdentity = identityForMentionName(m[0].slice(1));
+    if (mentionedIdentity) span.dataset.identity = mentionedIdentity;
     container.appendChild(span);
     last = m.index + m[0].length;
   }
@@ -3739,8 +3811,8 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
     deleteBtn.className = 'chat-message-action-btn';
     upgradeTooltip(deleteBtn, { text: 'Apagar', dir: 'top' });
     deleteBtn.innerHTML = DELETE_ICON_SVG;
-    deleteBtn.addEventListener('click', () => {
-      if (confirm('Apagar essa mensagem?')) deleteChatMessage(activeTextChannelId, id);
+    deleteBtn.addEventListener('click', async () => {
+      if (await confirmDialog('Apagar essa mensagem?', { confirmLabel: 'Apagar' })) deleteChatMessage(activeTextChannelId, id);
     });
     actions.appendChild(deleteBtn);
 
@@ -6408,7 +6480,7 @@ function appendModerationSection(menu, identity) {
     kickItem.addEventListener('click', async (e) => {
       e.stopPropagation();
       closeContextMenu();
-      if (!confirm(`Expulsar ${displayNameFor(identity)} da chamada?`)) return;
+      if (!(await confirmDialog(`Expulsar ${displayNameFor(identity)} da chamada?`, { confirmLabel: 'Expulsar' }))) return;
       try {
         await apiFetch('/api/moderation/kick', {
           method: 'POST',
@@ -6481,7 +6553,7 @@ function appendModerationSection(menu, identity) {
     banItem.addEventListener('click', async (e) => {
       e.stopPropagation();
       closeContextMenu();
-      if (!confirm(`Banir ${displayNameFor(identity)} do servidor? Ela não vai conseguir entrar de novo até alguém desbanir.`)) return;
+      if (!(await confirmDialog(`Banir ${displayNameFor(identity)} do servidor? Ela não vai conseguir entrar de novo até alguém desbanir.`, { confirmLabel: 'Banir' }))) return;
       try {
         await apiFetch('/api/moderation/ban', { method: 'POST', body: JSON.stringify({ identity }) });
         notifyModeration(identity, { type: 'moderation-banned' });
@@ -6551,6 +6623,15 @@ voiceChannelsList.addEventListener('click', (e) => {
 // quem mandou abre o cartão de perfil, igual em qualquer outro lugar do app
 // (clicar no TEXTO da mensagem não abre nada, só na foto/nome, igual Discord)
 chatMessages.addEventListener('click', (e) => {
+  // clicar numa "@menção" dentro do texto abre o perfil de QUEM FOI
+  // MENCIONADO (não de quem mandou a mensagem) -- igual Discord. Só
+  // funciona quando dá pra identificar a pessoa (ver identityForMentionName).
+  const mentionEl = e.target.closest('.chat-mention');
+  if (mentionEl && mentionEl.dataset.identity) {
+    e.stopPropagation();
+    openProfileCard(e.clientX, e.clientY, mentionEl.dataset.identity);
+    return;
+  }
   const clickable = e.target.closest('.avatar, .author');
   const row = e.target.closest('.chat-message');
   if (!clickable || !row || !row.dataset.identity) return;
@@ -6710,7 +6791,9 @@ async function completeConnect(token, identity, st) {
       if (msg.from !== myIdentity && msg.to !== myIdentity) return;
       const peer = msg.from === myIdentity ? msg.to : msg.from;
       if (!peer) return;
+      const isNewPeer = !dmPeers.has(peer);
       dmPeers.add(peer);
+      if (isNewPeer) saveDmPeersToConfig().catch(() => {});
       renderDmList();
       pushChatMessage(dmChannelKey(peer), {
         id: msg.id,
@@ -7194,7 +7277,7 @@ hangupBtn.addEventListener('click', async () => {
 });
 
 exitAppBtn.addEventListener('click', async () => {
-  if (!confirm('Sair do PrimalVoice? Você volta pra tela de login.')) return;
+  if (!(await confirmDialog('Sair do PrimalVoice? Você volta pra tela de login.', { confirmLabel: 'Sair' }))) return;
   if (voiceRoom) await leaveVoiceChannel({ silent: true });
   if (lobbyRoom) await lobbyRoom.disconnect();
   sessionToken = '';
@@ -7617,7 +7700,7 @@ function buildManageChannelRow(channel, type) {
       alert('Precisa deixar pelo menos um canal desse tipo.');
       return;
     }
-    if (!confirm(`Apagar o canal "${channel.name}"?`)) return;
+    if (!(await confirmDialog(`Apagar o canal "${channel.name}"?`, { confirmLabel: 'Apagar' }))) return;
     try {
       const data = await apiFetch(`/api/channels/${type}/${channel.id}`, { method: 'DELETE' });
       serverState.channels = data.channels;
@@ -7842,7 +7925,7 @@ function openRoleKebabMenu(e, role) {
   delItem.addEventListener('click', async (ev) => {
     ev.stopPropagation();
     closeContextMenu();
-    if (!confirm(`Apagar o cargo "${role.name}"?`)) return;
+    if (!(await confirmDialog(`Apagar o cargo "${role.name}"?`, { confirmLabel: 'Apagar' }))) return;
     try {
       const data = await apiFetch(`/api/roles/${role.id}`, { method: 'DELETE' });
       serverState.roles = data.roles;
@@ -7951,7 +8034,7 @@ function renderRoleEditor() {
   delBtn.className = 'danger-btn';
   delBtn.textContent = 'Apagar cargo';
   delBtn.addEventListener('click', async () => {
-    if (!confirm(`Apagar o cargo "${role.name}"?`)) return;
+    if (!(await confirmDialog(`Apagar o cargo "${role.name}"?`, { confirmLabel: 'Apagar' }))) return;
     try {
       const data = await apiFetch(`/api/roles/${role.id}`, { method: 'DELETE' });
       serverState.roles = data.roles;
