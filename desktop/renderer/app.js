@@ -321,25 +321,33 @@ function confirmDialog(message, opts = {}) {
     confirmDialogConfirmBtn.textContent = opts.confirmLabel || 'Confirmar';
     confirmDialogOverlay.hidden = false;
 
+    // Esse diálogo não bloqueia o resto do app nem escurece o fundo (ver
+    // CSS de .confirm-dialog-overlay/.confirm-dialog) -- a pessoa pode
+    // clicar em qualquer outro lugar do app com ele ainda aberto. Por isso
+    // NÃO tem mais um atalho global de "Enter confirma" (isso ia confirmar
+    // a ação sem querer se a pessoa apertasse Enter pra mandar uma mensagem
+    // em outro canto do app enquanto o diálogo ainda estivesse aberto).
+    // Focar o botão "Cancelar" por padrão já cobre o caso de querer usar
+    // Enter/Espaço pelo teclado -- o próprio botão focado responde a isso
+    // nativamente (e cancelar é sempre o lado seguro pra ficar em foco).
+    // O Escape continua cancelando de qualquer lugar, sem essa restrição.
+    confirmDialogCancelBtn.focus();
+
     function cleanup(result) {
       confirmDialogOverlay.hidden = true;
       confirmDialogConfirmBtn.removeEventListener('click', onConfirm);
       confirmDialogCancelBtn.removeEventListener('click', onCancel);
-      confirmDialogOverlay.removeEventListener('click', onOverlayClick);
       document.removeEventListener('keydown', onKeydown);
       resolve(result);
     }
     function onConfirm() { cleanup(true); }
     function onCancel() { cleanup(false); }
-    function onOverlayClick(e) { if (e.target === confirmDialogOverlay) cleanup(false); }
     function onKeydown(e) {
       if (e.key === 'Escape') cleanup(false);
-      else if (e.key === 'Enter') cleanup(true);
     }
 
     confirmDialogConfirmBtn.addEventListener('click', onConfirm);
     confirmDialogCancelBtn.addEventListener('click', onCancel);
-    confirmDialogOverlay.addEventListener('click', onOverlayClick);
     document.addEventListener('keydown', onKeydown);
   });
 }

@@ -3538,7 +3538,23 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
    do modal enorme de configurações. z-index mais alto que o .modal-overlay
    normal (200) porque algumas confirmações (ex.: apagar cargo) acontecem
    com o modal de configurações já aberto por baixo. */
-.confirm-dialog-overlay { z-index: 400; padding-top: 0; }
+/* Ao contrário dos outros .modal-overlay (configurações, crop de imagem
+   etc.), este NÃO deve escurecer/desfocar o fundo nem travar o resto do
+   app -- é só uma confirmação rápida (apagar, expulsar, banir...), a
+   pessoa deve continuar podendo ver e mexer em tudo atrás dele. Por isso
+   zera o fundo/blur herdados de .modal-overlay e tira o pointer-events do
+   overlay em si (só o cartão do diálogo continua clicável) -- clicar fora
+   dele agora interage normalmente com o app, em vez de cancelar.
+   pointer-events:none aqui também é o motivo de onOverlayClick() no app.js
+   nunca mais disparar de verdade -- fica só como reforço caso o overlay
+   volte a cobrir clique algum dia. */
+.confirm-dialog-overlay {
+  z-index: 400;
+  padding-top: 0;
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+}
 .confirm-dialog {
   background: var(--panel);
   width: min(420px, 92vw);
@@ -3547,6 +3563,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   border: 1px solid var(--border);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
   animation: modal-card-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
 }
 .confirm-dialog-message {
   color: var(--text);
