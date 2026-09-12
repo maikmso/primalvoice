@@ -1305,28 +1305,34 @@ const COLOR_THEMES = [
   // as 4 cores (que numa janela bem mais larga que alta deixava vermelho
   // demais visível).
   { key: 'lua-carmesim', name: 'Lua Carmesim', badge: 'NOVO', css: 'linear-gradient(135deg, #c0293a 0%, #7a1220 22%, #350a12 48%, #0d0304 78%, #000000 100%)', accent: '#b91d3a' },
-  { key: 'verde-menta', name: 'Verde-menta', css: 'linear-gradient(135deg, #b9f2d4, #8fe3b0, #4fbd85)', accent: '#4fbd85' },
-  { key: 'pessego', name: 'Pêssego', css: 'linear-gradient(135deg, #fbe0b8, #f5c894, #e0a460)', accent: '#e0a460' },
-  { key: 'azul-lavanda', name: 'Azul-lavanda', css: 'linear-gradient(135deg, #d7e0fa, #b7c6f2, #7c8ee0)', accent: '#7c8ee0' },
-  { key: 'amarelo-claro', name: 'Amarelo-claro', css: '#eee7a8', accent: '#cfc357' },
-  { key: 'lilas', name: 'Lilás', css: 'linear-gradient(135deg, #f2ddfa, #e3c6f0, #b370d1)', accent: '#b370d1' },
-  { key: 'ciano-claro', name: 'Ciano-claro', css: '#b7ecec', accent: '#3fb8b8' },
-  { key: 'creme', name: 'Creme', css: '#f0ead0', accent: '#c9b96a' },
-  { key: 'roxo-azulado', name: 'Roxo-azulado', css: 'linear-gradient(135deg, #8a5cf6, #5b3df0, #2c1c7a)', accent: '#6a46f2' },
-  { key: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg, #3fe0b0, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
-  { key: 'vinho', name: 'Vinho', css: 'linear-gradient(135deg, #c23c46, #7a1d24, #24080a)', accent: '#a3282f' },
-  { key: 'ameixa', name: 'Ameixa', css: 'linear-gradient(135deg, #8a5cd6, #4b2a78, #1c0e30)', accent: '#6339a8' },
-  { key: 'terracota', name: 'Terracota', css: '#b06a55', accent: '#b06a55' },
-  { key: 'cinza-azulado', name: 'Cinza-azulado', css: '#8d93ab', accent: '#8d93ab' },
+  // Pediram pra escurecer todas as cores da grade (estavam "doendo a
+  // vista" -- muito claras/pastel) e deixar com mais tom escuro do que
+  // claro. Aplicado um teto de luminosidade (máx. 42% em HSL, mantendo
+  // matiz e saturação) em cada cor de cada tema: cores que já eram
+  // escuras ficam como estavam, só as claras/pastel são puxadas pra
+  // baixo.
+  { key: 'verde-menta', name: 'Verde-menta', css: 'linear-gradient(135deg, #22b567, #2bab5d, #3a9c6a)', accent: '#3a9c6a' },
+  { key: 'pessego', name: 'Pêssego', css: 'linear-gradient(135deg, #cb7e0b, #c47212, #b37023)', accent: '#b37023' },
+  { key: 'azul-lavanda', name: 'Azul-lavanda', css: 'linear-gradient(135deg, #1843be, #2147b5, #2941ad)', accent: '#2941ad' },
+  { key: 'amarelo-claro', name: 'Amarelo-claro', css: '#b3a523', accent: '#a79b30' },
+  { key: 'lilas', name: 'Lilás', css: 'linear-gradient(135deg, #8f1bbb, #832daa, #8034a2)', accent: '#8034a2' },
+  { key: 'ciano-claro', name: 'Ciano-claro', css: '#2da9a9', accent: '#37a0a0' },
+  { key: 'creme', name: 'Creme', css: '#a28e34', accent: '#9d8c39' },
+  { key: 'roxo-azulado', name: 'Roxo-azulado', css: 'linear-gradient(135deg, #440bcb, #2e0fc7, #2c1c7a)', accent: '#350ec8' },
+  { key: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg, #1eb88a, #1fb37a, #0c2a1e)', accent: '#1fb37a' },
+  { key: 'vinho', name: 'Vinho', css: 'linear-gradient(135deg, #a4333b, #7a1d24, #24080a)', accent: '#a3282f' },
+  { key: 'ameixa', name: 'Ameixa', css: 'linear-gradient(135deg, #5b2bab, #4b2a78, #1c0e30)', accent: '#5e36a0' },
+  { key: 'terracota', name: 'Terracota', css: '#925644', accent: '#925644' },
+  { key: 'cinza-azulado', name: 'Cinza-azulado', css: '#5b617b', accent: '#5b617b' },
   { key: 'verde-oliva', name: 'Verde-oliva', css: '#4f7a5e', accent: '#4f7a5e' },
-  { key: 'azul-petroleo', name: 'Azul-petróleo', css: 'linear-gradient(135deg, #3fa0c2, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
-  { key: 'berinjela', name: 'Berinjela', css: 'linear-gradient(135deg, #c247a0, #7a2160, #2b0c22)', accent: '#9a2c7a' },
-  { key: 'por-do-sol', name: 'Pôr do sol', css: 'linear-gradient(135deg, #f7d23c, #f0a63c, #d94f4f, #8a2f6b)', accent: '#e37a3f' },
-  { key: 'ceu-noturno', name: 'Céu noturno', css: 'linear-gradient(135deg, #7a3fd6, #4a5fe0, #274bd6, #101b5c)', accent: '#4a5fe0' },
-  { key: 'dourado', name: 'Dourado', css: '#8a7a3a', accent: '#a89042' },
-  { key: 'indigo-puro', name: 'Índigo puro', css: '#2b3ecb', accent: '#2b3ecb' },
-  { key: 'aurora-boreal', name: 'Aurora boreal', css: 'linear-gradient(135deg, #0fd8c4, #4a5fe0, #8a3fd6, #1c0e30)', accent: '#2f8fc4' },
-  { key: 'chama', name: 'Chama', css: 'linear-gradient(135deg, #ffd23c, #ff8a3c, #e0433f, #7a1d4a)', accent: '#e0663f' },
+  { key: 'azul-petroleo', name: 'Azul-petróleo', css: 'linear-gradient(135deg, #3486a3, #1f5f7a, #0c2530)', accent: '#1f5f7a' },
+  { key: 'berinjela', name: 'Berinjela', css: 'linear-gradient(135deg, #a13583, #7a2160, #2b0c22)', accent: '#9a2c7a' },
+  { key: 'por-do-sol', name: 'Pôr do sol', css: 'linear-gradient(135deg, #cea708, #c77b0f, #b02626, #8a2f6b)', accent: '#bb551b' },
+  { key: 'ceu-noturno', name: 'Céu noturno', css: 'linear-gradient(135deg, #5c26b1, #1f35b7, #213fb5, #101b5c)', accent: '#1f35b7' },
+  { key: 'dourado', name: 'Dourado', css: '#8a7a3a', accent: '#9a843c' },
+  { key: 'indigo-puro', name: 'Índigo puro', css: '#2536b1', accent: '#2536b1' },
+  { key: 'aurora-boreal', name: 'Aurora boreal', css: 'linear-gradient(135deg, #0ec8b6, #1f35b7, #6b26b1, #1c0e30)', accent: '#297ead' },
+  { key: 'chama', name: 'Chama', css: 'linear-gradient(135deg, #d6a500, #d65600, #b8221e, #7a1d4a)', accent: '#b8431e' },
 ];
 
 // Variáveis de CSS que um "tema colorido" repinta por cima do tema padrão
