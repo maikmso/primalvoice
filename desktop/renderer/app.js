@@ -3845,7 +3845,14 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
     const replyAvatar = document.createElement('span');
     replyAvatar.className = 'avatar chat-reply-reference-avatar';
     replyAvatar.textContent = (replyTo.name || '?').charAt(0).toUpperCase();
-    if (replyTo.identity) applyAvatarToEl(replyAvatar, replyTo.identity);
+    // O servidor nunca guarda "identity" dentro de replyTo (sanitizeReplyTo é
+    // de propósito só {id, name, text}, pra citação não ficar acoplada a uma
+    // pessoa "viva"). Mas se a mensagem original ainda estiver carregada
+    // nessa conversa (quase sempre está), dá pra achar ela pelo id e usar a
+    // identity de verdade dela -- mostra a foto real de quem foi respondido,
+    // igual Discord, em vez de sempre cair na letrinha de fallback.
+    const originalMsg = findMessageInHistory(activeTextChannelId, replyTo.id);
+    if (originalMsg && originalMsg.identity) applyAvatarToEl(replyAvatar, originalMsg.identity);
     replyRef.appendChild(replyAvatar);
     const replyName = document.createElement('span');
     replyName.className = 'chat-reply-reference-name';
