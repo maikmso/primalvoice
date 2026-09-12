@@ -3950,6 +3950,14 @@ function sendDirectMessage(peerIdentity, text) {
 // desistir (botão de remover na prévia) antes de apertar enviar.
 let pendingAttachment = null; // { file, previewUrl } ou null
 
+// Trava contra clique/Enter duplicado: com anexo, sendComposedMessage fica
+// um tempo "no ar" esperando o upload (uploadChatAttachment) antes de
+// limpar o campo e o anexo pendente -- se a pessoa apertar Enter de novo
+// (ou clicar em enviar de novo) NESSE meio-tempo, pendingAttachment ainda
+// está preenchido e mandava a mesma mensagem de novo, duplicada. Essa
+// flag garante que só existe um envio em andamento por vez.
+let isSendingMessage = false;
+
 function clearPendingAttachment() {
   if (pendingAttachment && pendingAttachment.previewUrl) {
     URL.revokeObjectURL(pendingAttachment.previewUrl);
@@ -4012,11 +4020,13 @@ function renderAttachmentPreview() {
 // se tiver um anexo) + o anexo em espera (se tiver um) numa mensagem só,
 // igual Discord manda foto+legenda juntos.
 async function sendComposedMessage() {
+  if (isSendingMessage) return;
   const text = chatInput.value.trim();
   const file = pendingAttachment ? pendingAttachment.file : null;
   if (!text && !file) return;
   if (!lobbyRoom || !activeTextChannelId) return;
 
+  isSendingMessage = true;
   chatAttachmentBtn.disabled = true;
   try {
     let attachment = null;
@@ -4049,6 +4059,7 @@ async function sendComposedMessage() {
     alert(err.message || 'Não consegui enviar a mensagem.');
   } finally {
     chatAttachmentBtn.disabled = false;
+    isSendingMessage = false;
   }
 }
 
