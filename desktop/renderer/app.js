@@ -2214,6 +2214,7 @@ function applySoundboardVolume() {
     const identity = el.dataset.soundboardIdentity;
     const blocked = isDeafened || (identity && mutedForMe.has(identity));
     el.volume = blocked ? 0 : vol;
+    el.muted = !!blocked;
   });
   soundboardLocalGains.forEach((gain) => { gain.gain.value = vol; });
 }
@@ -5047,6 +5048,7 @@ function attachTrack(track, participant, publication) {
       soundboardAudioEls.add(el);
       const blocked = isDeafened || mutedForMe.has(participant.identity);
       el.volume = blocked ? 0 : effectiveSoundboardVolume();
+      el.muted = blocked;
     } else if (isRemoteScreenShareAudio) {
       // som do jogo/desktop de quem compartilha tela: volume PRÓPRIO,
       // separado da voz dela (ver streamVolumes/registerStreamAudioEl)
@@ -5350,7 +5352,8 @@ function unregisterAudioEl(identity, el) {
 }
 
 function applyVolume(identity) {
-  const volume = mutedForMe.has(identity) || isDeafened ? 0 : getEffectiveVolume(identity) * masterOutputVolume;
+  const blocked = mutedForMe.has(identity) || isDeafened;
+  const volume = blocked ? 0 : getEffectiveVolume(identity) * masterOutputVolume;
   const gains = gainNodesByIdentity.get(identity);
   if (gains && gains.size) {
     gains.forEach((gainNode) => {
@@ -5362,6 +5365,14 @@ function applyVolume(identity) {
       el.volume = Math.min(volume, 1);
     });
   }
+  // Cinto de segurança: além do GainNode/volume, muta o <audio> DE VERDADE
+  // (a propriedade .muted nativa, que corta o som de vez, sem depender do
+  // Web Audio estar funcionando direito) -- reclamação de que ensurdecer
+  // (ou silenciar alguém) não cortava o áudio de verdade, continuava
+  // escutando a pessoa falando mesmo com o app mostrando "ensurdecido".
+  audioElsByIdentity.get(identity)?.forEach((el) => {
+    el.muted = blocked;
+  });
 }
 
 // Volume DA VOZ/microfone de alguém pra mim (menu de contexto, botão direito
@@ -5395,9 +5406,13 @@ function unregisterStreamAudioEl(identity, el) {
 }
 
 function applyStreamVolume(identity) {
-  const volume = mutedForMe.has(identity) || isDeafened ? 0 : (streamVolumes.get(identity) ?? 1) * masterOutputVolume;
+  const blocked = mutedForMe.has(identity) || isDeafened;
+  const volume = blocked ? 0 : (streamVolumes.get(identity) ?? 1) * masterOutputVolume;
   streamAudioElsByIdentity.get(identity)?.forEach((el) => {
     el.volume = volume;
+    // mesmo cinto de segurança do applyVolume acima -- corta o som do
+    // compartilhamento de tela/jogo de verdade, não só o volume
+    el.muted = blocked;
   });
   syncScreenVolumeBtnIcon(identity);
 }
