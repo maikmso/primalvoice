@@ -5997,6 +5997,18 @@ function openProfileCard(x, y, identity) {
     body.appendChild(voiceCard);
   }
 
+  // Se a pessoa clicada estiver AGORA compartilhando tela ou com a câmera
+  // ligada, clicar nela já leva direto pro canal de voz dela (mesma coisa
+  // que o botão "Juntar-se" do cartão acima faz) -- assim dá pra ver a
+  // transmissão sem precisar de mais um clique, além do cartão de perfil
+  // continuar abrindo normalmente.
+  if (currentVoiceChannelId && identity !== myIdentity) {
+    const liveStatus = ensureVoiceStatus(identity);
+    if (liveStatus.screenShare || liveStatus.camera) {
+      enterVoiceChannel(currentVoiceChannelId);
+    }
+  }
+
   // desde quando a pessoa usa o PrimalVoice (data de criação da conta) —
   // vem junto do perfil público que o servidor manda em /api/state
   const joinDate = formatJoinDate(serverState.profiles?.[identity]?.createdAt);
