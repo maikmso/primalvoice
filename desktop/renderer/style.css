@@ -1059,6 +1059,28 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
 .chat-message .attachment { margin-top: 6px; }
 .edited-marker { font-size: 11px; color: var(--muted); }
 
+/* Mensagens seguidas da MESMA pessoa, mandadas com pouco tempo de diferença
+   (menos de 5 minutos, ver isGrouped em appendChatMessageEl), ficam
+   "coladas" igual Discord agrupa: não repete avatar/nome/hora, só o texto
+   colado embaixo da mensagem anterior, mais junto verticalmente. */
+.chat-message.grouped { margin-top: -12px; }
+.chat-message.grouped .meta { display: none; }
+.chat-message.grouped .avatar { visibility: hidden; }
+/* A hora não some de vez -- passa o mouse em cima da mensagem agrupada que
+   ela aparece no lugar onde o avatar ficaria, igual Discord. */
+.chat-message-hover-time {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 42px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+}
+.chat-message.grouped:hover .chat-message-hover-time { opacity: 1; }
+
 /* cartãozinho de prévia de link do YouTube, igual o Discord: fundo mais
    claro que o chat, barrinha vermelha na esquerda, nome do canal em
    negrito, título em azul, miniatura com botão de play por cima */

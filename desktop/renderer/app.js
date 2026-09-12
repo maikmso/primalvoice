@@ -3712,16 +3712,46 @@ function appendChatMessageEl({ id, name, text, isSelf, identity, attachment, ts,
   const empty = chatMessages.querySelector('.chat-empty');
   if (empty) empty.remove();
 
+  // Agrupa com a mensagem imediatamente anterior na tela, igual Discord:
+  // se for da MESMA pessoa e tiver sido mandada há menos de 5 minutos da
+  // anterior, não repete avatar/nome/hora de novo -- só o texto, colado
+  // embaixo da mensagem anterior. A hora ainda dá pra ver passando o mouse
+  // em cima (.chat-message-hover-time, ver CSS). Como cada mensagem entra
+  // sempre em ORDEM (histórico carregado em sequência, mensagens ao vivo
+  // chegando depois), o ":last-child" no momento de montar esta linha é
+  // sempre a mensagem imediatamente anterior de verdade.
+  const GROUP_WINDOW_MS = 5 * 60 * 1000;
+  const effectiveTs = ts || Date.now();
+  const prevRow = chatMessages.querySelector('.chat-message:last-child');
+  const prevTs = prevRow ? Number(prevRow.dataset.ts) : NaN;
+  const isGrouped = !!(
+    prevRow &&
+    identity &&
+    prevRow.dataset.identity === identity &&
+    Number.isFinite(prevTs) &&
+    effectiveTs - prevTs >= 0 &&
+    effectiveTs - prevTs < GROUP_WINDOW_MS
+  );
+
   const row = document.createElement('div');
   row.className = isSelf ? 'chat-message self' : 'chat-message';
+  if (isGrouped) row.classList.add('grouped');
   if (identity) row.dataset.identity = identity;
   if (id) row.dataset.messageId = id;
+  row.dataset.ts = String(effectiveTs);
 
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
   avatar.textContent = (name || '?').charAt(0).toUpperCase();
   if (identity) applyAvatarToEl(avatar, identity);
   row.appendChild(avatar);
+
+  if (isGrouped) {
+    const hoverTime = document.createElement('span');
+    hoverTime.className = 'chat-message-hover-time';
+    hoverTime.textContent = new Date(effectiveTs).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    row.appendChild(hoverTime);
+  }
 
   const body = document.createElement('div');
   body.className = 'body';
