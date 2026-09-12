@@ -572,6 +572,14 @@ const unreadCounts = new Map();
 // messageMentionsMe/badgeText). Some junto com o unreadCounts, na mesma
 // hora (abrir a conversa == ler a menção também).
 const mentionedChannels = new Set();
+// Quantas mensagens estavam SEM LER no momento em que a pessoa abriu aquele
+// canal/DM (channelId -> quantidade) — é o que decide onde desenhar a
+// linha vermelha "NOVO" (igual Discord) no meio do histórico, marcando a
+// partir de onde são as mensagens que chegaram enquanto ela não estava
+// olhando. Fica só até a pessoa SAIR dessa conversa (ver switchTextChannel/
+// switchToDm) -- se sair e voltar depois, a linha já não aparece mais,
+// porque a essa altura não tem mensagem "não lida" nenhuma de novo.
+const channelUnreadMarker = new Map();
 const voicePresence = new Map(); // channelId -> Map(identity -> name)
 const voiceMemberStatus = new Map(); // identity -> { muted, deafened }
 const memberProfiles = new Map(); // identity -> { avatar, banner, status, displayName, bio }
@@ -2885,10 +2893,17 @@ serverIconBtn?.addEventListener('contextmenu', (e) => {
 });
 
 function switchTextChannel(channelId) {
+  // Sair da conversa em que estava antes consome de vez a linha "NOVO" dela
+  // -- reabrir depois não deve mais mostrar a mesma linha (ver
+  // channelUnreadMarker lá em cima).
+  if (activeTextChannelId) channelUnreadMarker.delete(activeTextChannelId);
   activeTextChannelId = channelId;
   activeDmPeer = null;
   lastServerTextChannelId = channelId;
   showServerView();
+  const unreadAtEntry = unreadCounts.get(channelId) || 0;
+  if (unreadAtEntry > 0) channelUnreadMarker.set(channelId, unreadAtEntry);
+  else channelUnreadMarker.delete(channelId);
   unreadCounts.delete(channelId);
   mentionedChannels.delete(channelId);
   const channel = serverState.channels.text.find((c) => c.id === channelId);
@@ -2912,12 +2927,16 @@ function switchTextChannel(channelId) {
 // ninguém que entrar na sala depois.
 function switchToDm(peerIdentity) {
   if (!peerIdentity) return;
+  if (activeTextChannelId) channelUnreadMarker.delete(activeTextChannelId);
   const isNewPeer = !dmPeers.has(peerIdentity);
   dmPeers.add(peerIdentity);
   if (isNewPeer) saveDmPeersToConfig().catch(() => {});
   activeDmPeer = peerIdentity;
   activeTextChannelId = dmChannelKey(peerIdentity);
   showDmsView();
+  const unreadAtEntry = unreadCounts.get(activeTextChannelId) || 0;
+  if (unreadAtEntry > 0) channelUnreadMarker.set(activeTextChannelId, unreadAtEntry);
+  else channelUnreadMarker.delete(activeTextChannelId);
   unreadCounts.delete(activeTextChannelId);
   mentionedChannels.delete(activeTextChannelId);
   channelHeaderIcon.innerHTML = DM_ICON_SVG;
@@ -3345,7 +3364,31 @@ function renderChatForActiveChannel() {
     chatMessages.innerHTML = '<p class="chat-empty">Nenhuma mensagem ainda. Comece a conversa.</p>';
     return;
   }
-  history.forEach((msg) => appendChatMessageEl(msg));
+  // Onde entra a linha vermelha "NOVO" (ver channelUnreadMarker): logo antes
+  // das últimas N mensagens do histórico, sendo N a quantidade que estava
+  // sem ler quando a pessoa abriu essa conversa agora.
+  const unreadMarkCount = channelUnreadMarker.get(activeTextChannelId) || 0;
+  const dividerBeforeIndex = unreadMarkCount > 0 ? Math.max(0, history.length - unreadMarkCount) : -1;
+  history.forEach((msg, index) => {
+    if (index === dividerBeforeIndex) appendNewMessagesDivider();
+    appendChatMessageEl(msg);
+  });
+}
+
+function appendNewMessagesDivider() {
+  const empty = chatMessages.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
+  const divider = document.createElement('div');
+  divider.className = 'new-messages-divider';
+  const line = document.createElement('span');
+  line.className = 'new-messages-divider-line';
+  divider.appendChild(line);
+  const label = document.createElement('span');
+  label.className = 'new-messages-divider-label';
+  label.textContent = 'NOVO';
+  divider.appendChild(label);
+  chatMessages.appendChild(divider);
 }
 
 // Deixa os links dentro do texto da mensagem clicáveis (abrem no navegador

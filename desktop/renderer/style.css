@@ -975,6 +975,32 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   margin: auto;
   text-align: center;
 }
+
+/* Linha vermelha "NOVO" (igual Discord), marcando a partir de onde são as
+   mensagens que chegaram enquanto a pessoa não estava olhando essa
+   conversa -- ver channelUnreadMarker/appendNewMessagesDivider no app.js.
+   Some sozinha se sair da conversa e voltar depois (não persiste). */
+.new-messages-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.new-messages-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--danger);
+}
+.new-messages-divider-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: white;
+  background: var(--danger);
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
 .chat-message {
   position: relative;
   display: flex;
