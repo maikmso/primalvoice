@@ -1025,7 +1025,13 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: var(--accent);
+  /* Era var(--accent) + branco -- em alguns temas o accent é um cinza claro
+     (#8a8f98/#9198a1), e letra branca em cima disso quase não aparece: foto
+     de perfil "vazia" ficava parecendo um círculo branco/apagado em vez de
+     mostrar a inicial do nome. tile-bg + text é a MESMA combinação que já
+     funciona bem em todo o resto do app pra avatar sem foto (lista de
+     membros, DM, etc.) -- contraste alto em qualquer tema. */
+  background: var(--tile-bg);
   /* sem isso, o "background" acima (que é atalho pra background-image/
      size/position/etc de uma vez) apaga o cover/center que .has-avatar
      define lá em cima no arquivo — a foto até carregava, só que do
@@ -1033,7 +1039,7 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
      parecia "sem foto nenhuma" */
   background-size: cover;
   background-position: center;
-  color: white;
+  color: var(--text);
   font-weight: 700;
   font-size: 13px;
   display: flex;
@@ -1140,7 +1146,14 @@ html.theme-gradient-active .ctrl-icon.feature-btn:not(.sharing):hover {
   border-top: 2px solid var(--border);
   border-top-left-radius: 6px;
 }
-.chat-reply-reference-avatar {
+/* Precisa ser ".chat-reply-reference .avatar" (não só ".chat-reply-reference-
+   avatar" sozinho) -- com só uma classe, essa regra tem MENOS especificidade
+   que ".chat-message .avatar" (que tem duas: .chat-message E .avatar), então
+   o tamanho de 42px "vencia" e o mini-avatar da citação aparecia enorme
+   (e, junto com o bug de contraste corrigido acima, mais ainda parecendo um
+   borrão sem nada dentro). Com duas classes aqui também, empata em
+   especificidade e essa regra (que vem depois no arquivo) é que vale. */
+.chat-reply-reference .avatar {
   width: 16px;
   height: 16px;
   font-size: 9px;
@@ -2618,8 +2631,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   height: 84px;
   border-radius: 50%;
   border: 4px solid var(--panel);
-  background-color: var(--accent);
-  color: white;
+  background-color: var(--tile-bg);
+  color: var(--text);
   font-weight: 700;
   font-size: 30px;
   display: flex;
@@ -3097,8 +3110,12 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   height: 64px;
   border-radius: 50%;
   border: 4px solid var(--panel);
-  background-color: var(--accent);
-  color: white;
+  /* mesmo motivo do .chat-message .avatar: var(--accent)+branco fica sem
+     contraste (cinza claro + letra branca) e parece uma foto "em branco"
+     pra quem nunca colocou avatar -- tile-bg+text é a combinação que
+     realmente aparece bem em qualquer tema. */
+  background-color: var(--tile-bg);
+  color: var(--text);
   font-weight: 700;
   font-size: 24px;
   display: flex;
@@ -3180,8 +3197,8 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
 }
 .profile-card-voice-avatars .avatar:first-child { margin-left: 0; }
 .profile-card-voice-avatar {
-  background-color: var(--accent);
-  color: white;
+  background-color: var(--tile-bg);
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
 }
