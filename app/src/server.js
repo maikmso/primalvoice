@@ -73,22 +73,24 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Tamanho máximo de anexo -- era 25MB, pequeno demais pra coisa tipo um mod
+// de GTA5 (zip com texturas/modelos fácil passa disso). 100MB dá espaço pra
+// isso sem pesar demais na memória do servidor (multer.memoryStorage segura
+// o arquivo inteiro em RAM antes de mandar pro Cloudinary) nem estourar o
+// limite de tamanho de arquivo do plano do Cloudinary.
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 // Upload de imagens/vídeos/documentos do chat de texto -- fica só um
 // instante na memória do processo (multer.memoryStorage) e vai direto pro
 // Cloudinary logo em seguida, sem tocar o disco do servidor.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    // imagem/vídeo, ou um documento comum (pdf, word, excel, powerpoint,
-    // texto, zip) — igual o Discord aceita basicamente qualquer anexo
-    const isMedia = /^image\/|^video\//.test(file.mimetype);
-    const isDocument = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.|application\/vnd\.ms-excel|application\/vnd\.ms-powerpoint|text\/plain|text\/csv|application\/zip|application\/x-rar-compressed|application\/x-zip-compressed)/.test(
-      file.mimetype
-    );
-    if (isMedia || isDocument) cb(null, true);
-    else cb(new Error('Esse tipo de arquivo não é permitido.'));
-  },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  // Sem fileFilter -- igual o Discord, deixa mandar QUALQUER tipo de
+  // arquivo (mod de jogo, .rar/.7z, .exe de instalador, o que for). Antes
+  // só liberava uma lista fixa de tipos, e um monte de arquivo legítimo
+  // (mod com extensão incomum, .rar que o navegador não reconhece direito)
+  // acabava caindo fora dessa lista e sendo recusado à toa.
 });
 
 // --- "Crachá" de sessão (não é login de verdade, só prova quem é quem nas
@@ -648,7 +650,7 @@ app.post('/api/upload', requireAuth, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
       const msg =
-        err.code === 'LIMIT_FILE_SIZE' ? 'Arquivo muito grande (máx. 25MB).' : err.message || 'Erro ao enviar arquivo.';
+        err.code === 'LIMIT_FILE_SIZE' ? 'Arquivo muito grande (máx. 100MB).' : err.message || 'Erro ao enviar arquivo.';
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });

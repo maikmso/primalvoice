@@ -4212,10 +4212,17 @@ function clearPendingAttachment() {
   chatAttachmentPreview.innerHTML = '';
 }
 
+// Era 25MB -- pequeno demais pra mandar coisa tipo um mod de GTA5 (zip com
+// textura/modelo passa fácil disso). 100MB acompanha o novo limite do
+// servidor (ver MAX_UPLOAD_BYTES em app/src/server.js) -- checar aqui
+// primeiro evita fazer a pessoa esperar o upload inteiro só pra descobrir
+// no final que o servidor ia recusar de qualquer jeito.
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+
 function stageAttachment(file) {
   if (!file) return;
-  if (file.size > 25 * 1024 * 1024) {
-    alert('Arquivo muito grande (máx. 25MB).');
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    alert('Arquivo muito grande (máx. 100MB).');
     return;
   }
   clearPendingAttachment();
