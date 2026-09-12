@@ -2787,6 +2787,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   text-align: center;
   cursor: pointer;
 }
+.custom-theme-angle-row,
 .custom-theme-intensity-row {
   display: flex;
   align-items: center;
@@ -2794,6 +2795,10 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   font-size: 13px;
   color: var(--muted);
 }
+.custom-theme-intensity-row {
+  margin-top: 16px;
+}
+.custom-theme-angle-slider,
 .custom-theme-intensity-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -2804,6 +2809,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   background: var(--border);
   cursor: pointer;
 }
+.custom-theme-angle-slider::-webkit-slider-thumb,
 .custom-theme-intensity-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 16px;
@@ -2812,6 +2818,7 @@ a.attachment-file-card:hover { border-color: var(--accent); background: var(--ho
   background: var(--text);
   cursor: pointer;
 }
+.custom-theme-angle-slider::-moz-range-thumb,
 .custom-theme-intensity-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;

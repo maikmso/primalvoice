@@ -331,6 +331,8 @@ const customThemeNativePicker = document.getElementById('custom-theme-native-pic
 const customThemeEyedropBtn = document.getElementById('custom-theme-eyedrop-btn');
 const customThemeAddColorBtn = document.getElementById('custom-theme-add-color-btn');
 const customThemeColorChips = document.getElementById('custom-theme-color-chips');
+const customThemeAngleInput = document.getElementById('custom-theme-angle-input');
+const customThemeAngleValueEl = document.getElementById('custom-theme-angle-value');
 const customThemeIntensityInput = document.getElementById('custom-theme-intensity-input');
 const customThemeIntensityValueEl = document.getElementById('custom-theme-intensity-value');
 const customThemeSurpriseBtn = document.getElementById('custom-theme-surprise-btn');
@@ -1466,6 +1468,7 @@ function deriveThemePaletteFromColors(colors, { sat = 32, mode = 'escuro' } = {}
 let customThemeColors = ['#5865f2'];
 let customThemeMode = 'escuro';
 let customThemeIntensity = 32;
+let customThemeAngle = 135;
 
 // Manda a cor de fundo (--bg) EFETIVA (já com o tema/tema colorido/tema
 // personalizado aplicado -- ou a de fábrica do tema padrão, se nenhum
@@ -1501,7 +1504,7 @@ function applyColorTheme(key) {
     paletteOpts = { sat: customThemeIntensity, mode: customThemeMode };
     displayName = 'Tema Personalizado';
     if (customThemeColors.length > 1) {
-      gradientCss = `linear-gradient(135deg, ${customThemeColors.join(', ')})`;
+      gradientCss = `linear-gradient(${customThemeAngle}deg, ${customThemeColors.join(', ')})`;
     }
   } else if (activeKey) {
     theme = COLOR_THEMES.find((t) => t.key === activeKey) || null;
@@ -1564,6 +1567,7 @@ async function loadColorThemeFromConfig(cfg) {
       : ['#5865f2'];
     customThemeMode = cfg.customTheme.mode === 'claro' ? 'claro' : 'escuro';
     customThemeIntensity = Number.isFinite(cfg.customTheme.intensity) ? cfg.customTheme.intensity : 32;
+    customThemeAngle = Number.isFinite(cfg.customTheme.angle) ? cfg.customTheme.angle : 135;
     if (typeof renderCustomThemeChips === 'function') renderCustomThemeChips();
   }
   applyColorTheme(cfg.colorTheme || '');
@@ -1684,6 +1688,7 @@ async function commitCustomTheme() {
     colors: customThemeColors.slice(),
     mode: customThemeMode,
     intensity: customThemeIntensity,
+    angle: customThemeAngle,
   };
   await window.vortex.setConfig(cfg);
 }
@@ -1824,6 +1829,14 @@ if (customThemeAddColorBtn) {
   });
 }
 
+if (customThemeAngleInput) {
+  customThemeAngleInput.addEventListener('input', () => {
+    customThemeAngle = Number(customThemeAngleInput.value);
+    if (customThemeAngleValueEl) customThemeAngleValueEl.textContent = `${customThemeAngle}°`;
+    commitCustomTheme();
+  });
+}
+
 if (customThemeIntensityInput) {
   customThemeIntensityInput.addEventListener('input', () => {
     customThemeIntensity = Number(customThemeIntensityInput.value);
@@ -1872,6 +1885,7 @@ if (customThemeResetBtn) {
     customThemeColors = ['#5865f2'];
     customThemeActiveChip = 0;
     customThemeIntensity = 32;
+    customThemeAngle = 135;
     customThemeMode = 'escuro';
     const hsv = hexToHsv('#5865f2');
     customThemeEditHue = hsv.h; customThemeEditSat = hsv.s; customThemeEditVal = hsv.v;
@@ -1880,6 +1894,8 @@ if (customThemeResetBtn) {
     renderCustomThemeChips();
     if (customThemeIntensityInput) customThemeIntensityInput.value = customThemeIntensity;
     if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = '32%';
+    if (customThemeAngleInput) customThemeAngleInput.value = customThemeAngle;
+    if (customThemeAngleValueEl) customThemeAngleValueEl.textContent = '135°';
     customThemeModeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === 'escuro'));
     commitCustomTheme();
   });
@@ -1896,6 +1912,8 @@ function openCustomThemePanel() {
   renderCustomThemeChips();
   if (customThemeIntensityInput) customThemeIntensityInput.value = customThemeIntensity;
   if (customThemeIntensityValueEl) customThemeIntensityValueEl.textContent = `${customThemeIntensity}%`;
+  if (customThemeAngleInput) customThemeAngleInput.value = customThemeAngle;
+  if (customThemeAngleValueEl) customThemeAngleValueEl.textContent = `${customThemeAngle}°`;
   customThemeModeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === customThemeMode));
 }
 
